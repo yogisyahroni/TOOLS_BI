@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Key, Bot, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { Settings, Key, Bot, Save, AlertCircle, CheckCircle, Search, Check, ChevronsUpDown } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,14 +12,113 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { useToast } from '@/hooks/use-toast';
 import type { AIConfig } from '@/types/data';
+import { cn } from '@/lib/utils';
 
-const aiProviders = [
-  { value: 'openai', label: 'OpenAI', models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
-  { value: 'anthropic', label: 'Anthropic', models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'] },
-  { value: 'google', label: 'Google AI', models: ['gemini-pro', 'gemini-pro-vision'] },
-  { value: 'openrouter', label: 'OpenRouter', models: ['openai/gpt-4-turbo', 'anthropic/claude-3-opus', 'google/gemini-pro', 'meta-llama/llama-3-70b-instruct', 'mistralai/mixtral-8x22b-instruct', 'qwen/qwen-2-72b-instruct'] },
+interface ModelOption {
+  value: string;
+  label: string;
+  free?: boolean;
+}
+
+const aiProviders: { value: AIConfig['provider']; label: string; models: ModelOption[] }[] = [
+  { 
+    value: 'openai', 
+    label: 'OpenAI', 
+    models: [
+      { value: 'gpt-4o', label: 'GPT-4o' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+      { value: 'gpt-4', label: 'GPT-4' },
+      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+    ] 
+  },
+  { 
+    value: 'anthropic', 
+    label: 'Anthropic', 
+    models: [
+      { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+      { value: 'claude-opus-4-1-20250805', label: 'Claude Opus 4.1' },
+      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
+    ] 
+  },
+  { 
+    value: 'google', 
+    label: 'Google AI', 
+    models: [
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+    ] 
+  },
+  { 
+    value: 'openrouter', 
+    label: 'OpenRouter', 
+    models: [
+      // Free Models
+      { value: 'google/gemma-3-27b-it:free', label: 'Google Gemma 3 27B', free: true },
+      { value: 'google/gemma-3-12b-it:free', label: 'Google Gemma 3 12B', free: true },
+      { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B', free: true },
+      { value: 'meta-llama/llama-3.2-11b-vision-instruct:free', label: 'Llama 3.2 11B Vision', free: true },
+      { value: 'meta-llama/llama-3.2-3b-instruct:free', label: 'Llama 3.2 3B', free: true },
+      { value: 'meta-llama/llama-3.2-1b-instruct:free', label: 'Llama 3.2 1B', free: true },
+      { value: 'meta-llama/llama-3.1-8b-instruct:free', label: 'Llama 3.1 8B', free: true },
+      { value: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B', free: true },
+      { value: 'qwen/qwen-2.5-coder-32b-instruct:free', label: 'Qwen 2.5 Coder 32B', free: true },
+      { value: 'qwen/qwen3-32b:free', label: 'Qwen 3 32B', free: true },
+      { value: 'qwen/qwen3-14b:free', label: 'Qwen 3 14B', free: true },
+      { value: 'qwen/qwen3-8b:free', label: 'Qwen 3 8B', free: true },
+      { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 24B', free: true },
+      { value: 'mistralai/mistral-nemo:free', label: 'Mistral Nemo', free: true },
+      { value: 'microsoft/phi-4:free', label: 'Microsoft Phi-4', free: true },
+      { value: 'microsoft/phi-3-medium-128k-instruct:free', label: 'Microsoft Phi-3 Medium', free: true },
+      { value: 'deepseek/deepseek-r1:free', label: 'DeepSeek R1', free: true },
+      { value: 'deepseek/deepseek-chat-v3-0324:free', label: 'DeepSeek Chat V3', free: true },
+      { value: 'nvidia/llama-3.1-nemotron-70b-instruct:free', label: 'Nvidia Nemotron 70B', free: true },
+      { value: 'openchat/openchat-7b:free', label: 'OpenChat 7B', free: true },
+      { value: 'huggingfaceh4/zephyr-7b-beta:free', label: 'Zephyr 7B', free: true },
+      { value: 'undi95/toppy-m-7b:free', label: 'Toppy M 7B', free: true },
+      { value: 'gryphe/mythomist-7b:free', label: 'MythoMist 7B', free: true },
+      
+      // Paid Premium Models
+      { value: 'openai/gpt-4o', label: 'OpenAI GPT-4o' },
+      { value: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
+      { value: 'openai/gpt-4-turbo', label: 'OpenAI GPT-4 Turbo' },
+      { value: 'openai/o1-preview', label: 'OpenAI O1 Preview' },
+      { value: 'openai/o1-mini', label: 'OpenAI O1 Mini' },
+      { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
+      { value: 'anthropic/claude-3-opus', label: 'Claude 3 Opus' },
+      { value: 'anthropic/claude-3-haiku', label: 'Claude 3 Haiku' },
+      { value: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash' },
+      { value: 'google/gemini-pro-1.5', label: 'Gemini Pro 1.5' },
+      { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B (Paid)' },
+      { value: 'meta-llama/llama-3.1-405b-instruct', label: 'Llama 3.1 405B' },
+      { value: 'mistralai/mistral-large-2411', label: 'Mistral Large' },
+      { value: 'mistralai/mixtral-8x22b-instruct', label: 'Mixtral 8x22B' },
+      { value: 'cohere/command-r-plus', label: 'Cohere Command R+' },
+      { value: 'cohere/command-r', label: 'Cohere Command R' },
+      { value: 'perplexity/sonar-pro', label: 'Perplexity Sonar Pro' },
+      { value: 'perplexity/sonar', label: 'Perplexity Sonar' },
+      { value: 'deepseek/deepseek-chat', label: 'DeepSeek Chat (Paid)' },
+      { value: 'deepseek/deepseek-coder', label: 'DeepSeek Coder' },
+      { value: 'x-ai/grok-2', label: 'xAI Grok 2' },
+      { value: 'x-ai/grok-beta', label: 'xAI Grok Beta' },
+    ] 
+  },
 ];
 
 export default function SettingsPage() {
@@ -27,16 +126,18 @@ export default function SettingsPage() {
   const { toast } = useToast();
   
   const [config, setConfig] = useState<Partial<AIConfig>>(aiConfig || {
-    provider: 'openai',
-    model: 'gpt-4',
+    provider: 'openrouter',
+    model: 'google/gemma-3-27b-it:free',
     apiKey: '',
     maxTokens: 4096,
     temperature: 0.7,
   });
 
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
 
   const selectedProvider = aiProviders.find((p) => p.value === config.provider);
+  const selectedModel = selectedProvider?.models.find((m) => m.value === config.model);
 
   const handleSave = () => {
     if (!config.apiKey) {
@@ -100,14 +201,19 @@ export default function SettingsPage() {
             <Label htmlFor="provider">AI Provider</Label>
             <Select
               value={config.provider}
-              onValueChange={(value: AIConfig['provider']) =>
-                setConfig({ ...config, provider: value, model: aiProviders.find((p) => p.value === value)?.models[0] })
-              }
+              onValueChange={(value: AIConfig['provider']) => {
+                const provider = aiProviders.find((p) => p.value === value);
+                setConfig({ 
+                  ...config, 
+                  provider: value, 
+                  model: provider?.models[0]?.value 
+                });
+              }}
             >
               <SelectTrigger id="provider">
                 <SelectValue placeholder="Select provider" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover border-border">
                 {aiProviders.map((provider) => (
                   <SelectItem key={provider.value} value={provider.value}>
                     {provider.label}
@@ -118,22 +224,117 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="model">Model</Label>
-            <Select
-              value={config.model}
-              onValueChange={(value) => setConfig({ ...config, model: value })}
-            >
-              <SelectTrigger id="model">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {selectedProvider?.models.map((model) => (
-                  <SelectItem key={model} value={model}>
-                    {model}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Model</Label>
+            <Popover open={modelOpen} onOpenChange={setModelOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={modelOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    {selectedModel ? (
+                      <>
+                        {selectedModel.label}
+                        {selectedModel.free && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success rounded">
+                            FREE
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      "Select model..."
+                    )}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0 bg-popover border-border" align="start">
+                <Command className="bg-transparent">
+                  <CommandInput placeholder="Search model..." className="border-b border-border" />
+                  <CommandList className="max-h-[300px]">
+                    <CommandEmpty>No model found.</CommandEmpty>
+                    {config.provider === 'openrouter' && (
+                      <>
+                        <CommandGroup heading="🆓 Free Models">
+                          {selectedProvider?.models
+                            .filter((m) => m.free)
+                            .map((model) => (
+                              <CommandItem
+                                key={model.value}
+                                value={model.label}
+                                onSelect={() => {
+                                  setConfig({ ...config, model: model.value });
+                                  setModelOpen(false);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    config.model === model.value ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <span className="flex-1">{model.label}</span>
+                                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success rounded">
+                                  FREE
+                                </span>
+                              </CommandItem>
+                            ))}
+                        </CommandGroup>
+                        <CommandGroup heading="💎 Premium Models">
+                          {selectedProvider?.models
+                            .filter((m) => !m.free)
+                            .map((model) => (
+                              <CommandItem
+                                key={model.value}
+                                value={model.label}
+                                onSelect={() => {
+                                  setConfig({ ...config, model: model.value });
+                                  setModelOpen(false);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    config.model === model.value ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {model.label}
+                              </CommandItem>
+                            ))}
+                        </CommandGroup>
+                      </>
+                    )}
+                    {config.provider !== 'openrouter' && (
+                      <CommandGroup>
+                        {selectedProvider?.models.map((model) => (
+                          <CommandItem
+                            key={model.value}
+                            value={model.label}
+                            onSelect={() => {
+                              setConfig({ ...config, model: model.value });
+                              setModelOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                config.model === model.value ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {model.label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="space-y-2 md:col-span-2">
@@ -236,6 +437,10 @@ export default function SettingsPage() {
           <li className="flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-success mt-0.5" />
             API keys are stored locally in your browser
+          </li>
+          <li className="flex items-start gap-2">
+            <CheckCircle className="w-4 h-4 text-success mt-0.5" />
+            OpenRouter provides access to many free models with rate limits
           </li>
         </ul>
       </motion.div>
