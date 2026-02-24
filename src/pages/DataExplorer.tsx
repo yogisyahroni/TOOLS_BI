@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, ArrowUpDown, BarChart3, Hash, Type, Calendar, ToggleLeft, Download } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function DataExplorer() {
   const { dataSets } = useDataStore();
+  const { toast } = useToast();
   const [selectedDataSet, setSelectedDataSet] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState('');
@@ -93,6 +95,20 @@ export default function DataExplorer() {
     setPage(0);
   };
 
+  const handleExportCSV = () => {
+    if (!dataset || !filteredData.length) return;
+    const cols = dataset.columns.map(c => c.name);
+    const header = cols.join(',');
+    const rows = filteredData.map(r => cols.map(c => JSON.stringify(r[c] ?? '')).join(','));
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${dataset.name}_export.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Exported', description: `${filteredData.length} rows exported as CSV` });
+  };
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
@@ -157,6 +173,9 @@ export default function DataExplorer() {
               <div className="p-3 border-b border-border flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">{filteredData.length} of {dataset.rowCount} rows</span>
                 <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={!filteredData.length}>
+                    <Download className="w-4 h-4 mr-1" /> CSV
+                  </Button>
                   <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
                   <span className="text-xs text-muted-foreground">{page + 1} / {totalPages || 1}</span>
                   <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next</Button>
