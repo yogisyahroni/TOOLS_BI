@@ -7,6 +7,10 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import UploadData from "./pages/UploadData";
 import Datasets from "./pages/Datasets";
+import DataExplorer from "./pages/DataExplorer";
+import ChartBuilder from "./pages/ChartBuilder";
+import DashboardBuilder from "./pages/DashboardBuilder";
+import QueryEditor from "./pages/QueryEditor";
 import ETLPipeline from "./pages/ETLPipeline";
 import AIReports from "./pages/AIReports";
 import Reports from "./pages/Reports";
@@ -27,6 +31,10 @@ const App = () => (
             <Route path="/" element={<Dashboard />} />
             <Route path="/upload" element={<UploadData />} />
             <Route path="/datasets" element={<Datasets />} />
+            <Route path="/explorer" element={<DataExplorer />} />
+            <Route path="/chart-builder" element={<ChartBuilder />} />
+            <Route path="/dashboard-builder" element={<DashboardBuilder />} />
+            <Route path="/query" element={<QueryEditor />} />
             <Route path="/etl" element={<ETLPipeline />} />
             <Route path="/ai-reports" element={<AIReports />} />
             <Route path="/reports" element={<Reports />} />

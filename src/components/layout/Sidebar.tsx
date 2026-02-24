@@ -13,6 +13,10 @@ import {
   Database,
   Sparkles,
   BarChart3,
+  Code2,
+  Search,
+  LayoutGrid,
+  PaintBucket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +24,10 @@ const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Upload, label: 'Upload Data', path: '/upload' },
   { icon: Database, label: 'Datasets', path: '/datasets' },
+  { icon: Search, label: 'Data Explorer', path: '/explorer' },
+  { icon: PaintBucket, label: 'Chart Builder', path: '/chart-builder' },
+  { icon: LayoutGrid, label: 'Dashboard Builder', path: '/dashboard-builder' },
+  { icon: Code2, label: 'SQL Query', path: '/query' },
   { icon: GitBranch, label: 'ETL Pipeline', path: '/etl' },
   { icon: Sparkles, label: 'AI Reports', path: '/ai-reports' },
   { icon: FileText, label: 'Reports', path: '/reports' },
