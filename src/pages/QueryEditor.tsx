@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Code2, Play, Clock, Download, Trash2, Save, Table as TableIcon } from 'lucide-react';
+import { AIChatPanel } from '@/components/AIChatPanel';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -158,6 +159,28 @@ export default function QueryEditor() {
     URL.revokeObjectURL(url);
   };
 
+  const handleAIResponse = (response: string) => {
+    // Extract SQL from AI response
+    const sqlMatch = response.match(/```sql\n?([\s\S]*?)```/) || response.match(/SELECT[\s\S]*?(?:LIMIT\s+\d+|$)/i);
+    if (sqlMatch) {
+      const sql = (sqlMatch[1] || sqlMatch[0]).trim();
+      setQuery(sql);
+      toast({ title: 'AI Query Generated', description: 'Query has been placed in the editor. Press Run to execute.' });
+    } else if (response.toUpperCase().startsWith('SELECT')) {
+      setQuery(response.trim());
+      toast({ title: 'AI Query Generated', description: 'Query placed in editor.' });
+    }
+  };
+
+  const getAIPrompt = () => {
+    if (!dataset) return 'No dataset selected. Ask the user to select a dataset first.';
+    return `You are a SQL query assistant for a dataset called "${dataset.name}". The available columns are: ${dataset.columns.map(c => `${c.name} (${c.type})`).join(', ')}. Total rows: ${dataset.rowCount}.
+
+Generate SQL-like queries using this syntax: SELECT, WHERE (=, !=, >, <, >=, <=, LIKE), ORDER BY (ASC/DESC), LIMIT.
+Table name is always "dataset".
+When the user asks in natural language, generate the appropriate SQL query. Return the SQL query clearly, ideally in a code block.`;
+  };
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
@@ -173,7 +196,7 @@ export default function QueryEditor() {
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Left Panel - Schema */}
+        {/* Left Panel - Schema + AI */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
           <div className="bg-card rounded-xl p-5 border border-border shadow-card">
             <h3 className="font-semibold text-foreground mb-3">Data Source</h3>
@@ -220,6 +243,14 @@ export default function QueryEditor() {
               </div>
             </div>
           )}
+
+          {/* AI Chat */}
+          <AIChatPanel
+            systemPrompt={getAIPrompt()}
+            title="AI SQL Assistant"
+            placeholder="e.g., Tampilkan top 10 data dengan nilai tertinggi..."
+            onAIResponse={handleAIResponse}
+          />
         </motion.div>
 
         {/* Right Panel - Editor & Results */}
