@@ -61,6 +61,7 @@ export default function AIReports() {
     }
 
     setIsGenerating(true);
+    try {
 
     // Prepare data with privacy settings
     let sampleData = dataset.data.slice(0, 10);
@@ -138,27 +139,29 @@ export default function AIReports() {
       }
     } else {
       // Fallback: generate locally without AI
-      setTimeout(() => {
-        const report: Report = {
-          id: generateId(),
-          title: `${dataset.name} Analysis Report`,
-          content: `## Executive Summary\n\nAnalysis of "${dataset.name}" dataset with ${dataset.rowCount.toLocaleString()} records across ${dataset.columns.length} columns.\n\n## Key Findings\n\n${Object.entries(stats).map(([col, s]: [string, any]) => {
-            if (s.avg) return `- **${col}**: Min ${s.min}, Max ${s.max}, Avg ${s.avg}, Sum ${s.sum}`;
-            return `- **${col}**: ${s.uniqueValues} unique values`;
-          }).join('\n')}\n\n## Analysis Request\n\n"${prompt}"\n\n> ⚠️ This is a basic report generated without AI. Configure an AI provider in Settings for intelligent, detailed analysis.`,
-          story: `Dataset "${dataset.name}" contains ${dataset.rowCount} records. A comprehensive AI-powered analysis requires configuring an AI provider in Settings.`,
-          decisions: ['Configure AI provider for deeper analysis', 'Review data quality metrics', 'Identify key business metrics to track'],
-          recommendations: ['Setup API key in Settings → AI Configuration', 'Upload more data for comprehensive analysis', 'Use ETL Pipeline to clean and transform data'],
-          dataSetId: selectedDataset,
-          createdAt: new Date(),
-        };
-        setGeneratedReport(report);
-        addReport(report);
-        toast({ title: 'Basic report generated', description: 'Configure AI in Settings for intelligent reports.' });
-      }, 1500);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const report: Report = {
+        id: generateId(),
+        title: `${dataset.name} Analysis Report`,
+        content: `## Executive Summary\n\nAnalysis of "${dataset.name}" dataset with ${dataset.rowCount.toLocaleString()} records across ${dataset.columns.length} columns.\n\n## Key Findings\n\n${Object.entries(stats).map(([col, s]: [string, any]) => {
+          if (s.avg) return `- **${col}**: Min ${s.min}, Max ${s.max}, Avg ${s.avg}, Sum ${s.sum}`;
+          return `- **${col}**: ${s.uniqueValues} unique values`;
+        }).join('\n')}\n\n## Analysis Request\n\n"${prompt}"\n\n> ⚠️ This is a basic report generated without AI. Configure an AI provider in Settings for intelligent, detailed analysis.`,
+        story: `Dataset "${dataset.name}" contains ${dataset.rowCount} records. A comprehensive AI-powered analysis requires configuring an AI provider in Settings.`,
+        decisions: ['Configure AI provider for deeper analysis', 'Review data quality metrics', 'Identify key business metrics to track'],
+        recommendations: ['Setup API key in Settings → AI Configuration', 'Upload more data for comprehensive analysis', 'Use ETL Pipeline to clean and transform data'],
+        dataSetId: selectedDataset,
+        createdAt: new Date(),
+      };
+      setGeneratedReport(report);
+      addReport(report);
+      toast({ title: 'Basic report generated', description: 'Configure AI in Settings for intelligent reports.' });
     }
-
-    setIsGenerating(false);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to generate report', variant: 'destructive' });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (

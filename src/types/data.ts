@@ -66,3 +66,32 @@ export interface AIConfig {
   maxTokens: number;
   temperature: number;
 }
+
+export interface SavedChart {
+  id: string;
+  title: string;
+  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar' | 'funnel' | 'treemap';
+  dataSetId: string;
+  xAxis: string;
+  yAxis: string;
+  groupBy?: string;
+}
+
+export type WidgetType = 'bar' | 'line' | 'pie' | 'area' | 'stat' | 'text';
+
+export interface Widget {
+  id: string;
+  type: WidgetType;
+  title: string;
+  dataSetId: string;
+  xAxis: string;
+  yAxis: string;
+  width: 'half' | 'full' | 'third';
+}
+
+export interface DashboardConfig {
+  id: string;
+  name: string;
+  widgets: Widget[];
+  createdAt: Date;
+}
