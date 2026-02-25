@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type {
   DataSet, ETLPipeline, Report, DataPrivacySettings, AIConfig,
   SavedChart, DashboardConfig, KPI, DataAlert, DataStory,
-  DataRelationship, Bookmark, CalculatedField
+  DataRelationship, Bookmark, CalculatedField, ReportTemplate
 } from '@/types/data';
 
 interface DataStore {
@@ -18,6 +18,7 @@ interface DataStore {
   relationships: DataRelationship[];
   bookmarks: Bookmark[];
   calculatedFields: CalculatedField[];
+  templates: ReportTemplate[];
   privacySettings: DataPrivacySettings;
   aiConfig: AIConfig | null;
 
@@ -70,6 +71,10 @@ interface DataStore {
   addCalculatedField: (field: CalculatedField) => void;
   removeCalculatedField: (id: string) => void;
 
+  // Template operations
+  addTemplate: (template: ReportTemplate) => void;
+  removeTemplate: (id: string) => void;
+
   // Settings
   updatePrivacySettings: (settings: Partial<DataPrivacySettings>) => void;
   setAIConfig: (config: AIConfig | null) => void;
@@ -89,6 +94,7 @@ export const useDataStore = create<DataStore>()(
       relationships: [],
       bookmarks: [],
       calculatedFields: [],
+      templates: [],
       privacySettings: {
         maskSensitiveData: true,
         excludeColumns: [],
@@ -143,6 +149,9 @@ export const useDataStore = create<DataStore>()(
 
       addCalculatedField: (field) => set((s) => ({ calculatedFields: [...s.calculatedFields, field] })),
       removeCalculatedField: (id) => set((s) => ({ calculatedFields: s.calculatedFields.filter((f) => f.id !== id) })),
+
+      addTemplate: (template) => set((s) => ({ templates: [...s.templates, template] })),
+      removeTemplate: (id) => set((s) => ({ templates: s.templates.filter((t) => t.id !== id) })),
 
       updatePrivacySettings: (settings) => set((s) => ({
         privacySettings: { ...s.privacySettings, ...settings },

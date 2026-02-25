@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Sparkles, FileText, Lightbulb, TrendingUp, Target,
-  Send, Loader2, AlertTriangle, Shield, Download,
+  Send, Loader2, AlertTriangle, Shield, Download, Layout,
 } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
@@ -11,19 +11,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { generateReport } from '@/lib/aiService';
 import { AIChatPanel } from '@/components/AIChatPanel';
-import type { Report } from '@/types/data';
+import { builtinTemplates } from '@/lib/builtinTemplates';
+import type { Report, ReportTemplate } from '@/types/data';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
 }
 
 export default function AIReports() {
-  const { dataSets, addReport, privacySettings, aiConfig } = useDataStore();
+  const { dataSets, addReport, privacySettings, aiConfig, templates } = useDataStore();
   const { toast } = useToast();
   const [selectedDataset, setSelectedDataset] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<Report | null>(null);
+
+  const allTemplates = [...builtinTemplates, ...templates];
+  const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId);
 
   const dataset = dataSets.find(ds => ds.id === selectedDataset);
 
@@ -80,8 +85,13 @@ export default function AIReports() {
     const stats = computeStats();
 
     if (aiConfig?.apiKey) {
+      // Build template context for AI
+      const templateContext = selectedTemplate
+        ? `\n\nUse this report template structure:\nTemplate: "${selectedTemplate.name}" (${selectedTemplate.category})\nPages: ${selectedTemplate.pages.map(p => `"${p.title}" with sections: ${p.sections.map(s => `${s.type}(${s.title})`).join(', ')}`).join(' | ')}\nColor scheme: ${JSON.stringify(selectedTemplate.colorScheme)}\nGenerate content that fits this template layout with appropriate data for each section.`
+        : '';
+
       // Use real AI
-      const response = await generateReport(dataset.name, columns, sampleData, stats, prompt);
+      const response = await generateReport(dataset.name, columns, sampleData, stats, prompt + templateContext);
 
       if (response.error) {
         toast({ title: 'AI Error', description: response.error, variant: 'destructive' });
@@ -208,6 +218,22 @@ export default function AIReports() {
                     {dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name} ({ds.rowCount.toLocaleString()} rows)</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Report Template (optional)</label>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="No template — free form" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No template — free form</SelectItem>
+                    {allTemplates.map(t => <SelectItem key={t.id} value={t.id}>{t.name} ({t.category})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {selectedTemplate && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <Layout className="w-3 h-3" />
+                    {selectedTemplate.pages.length} pages · {selectedTemplate.pages.reduce((a, p) => a + p.sections.length, 0)} sections · {selectedTemplate.source}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">What would you like to analyze?</label>
