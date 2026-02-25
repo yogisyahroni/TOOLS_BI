@@ -34,6 +34,7 @@ import CrossFilter from "./pages/CrossFilter";
 import Annotations from "./pages/Annotations";
 import EmbedShare from "./pages/EmbedShare";
 import ExportPDF from "./pages/ExportPDF";
+import DataRefresh from "./pages/DataRefresh";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/rls" element={<RowLevelSecurity />} />
             <Route path="/embed" element={<EmbedShare />} />
             <Route path="/export" element={<ExportPDF />} />
+            <Route path="/data-refresh" element={<DataRefresh />} />
             <Route path="/stories" element={<DataStories />} />
             <Route path="/ai-reports" element={<AIReports />} />
             <Route path="/reports" element={<Reports />} />
