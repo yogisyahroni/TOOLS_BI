@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 const COLORS = [
   'hsl(174, 72%, 46%)', 'hsl(199, 89%, 48%)', 'hsl(142, 76%, 36%)',
@@ -94,7 +95,7 @@ export default function DrillDown() {
             <Layers className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Drill-Down Explorer</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Drill-Down Explorer <HelpTooltip text="Klik segmen chart untuk drill-down ke level detail berikutnya. Pilih kolom hierarki (misal: Departemen → Kota → Nama) untuk navigasi data bertingkat." /></h1>
             <p className="text-muted-foreground">Navigate data hierarchies by clicking into chart segments</p>
           </div>
         </div>

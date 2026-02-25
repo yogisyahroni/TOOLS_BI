@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 type AggFunc = 'sum' | 'avg' | 'count' | 'min' | 'max';
 
@@ -102,7 +103,7 @@ export default function PivotTable() {
             <Table2 className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Pivot Table</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Pivot Table <HelpTooltip text="Buat tabel pivot: pilih Row Field (baris), Column Field (kolom), Value Field (nilai numerik), dan Aggregation (Sum/Avg/dll). Ekspor hasil ke CSV." /></h1>
             <p className="text-muted-foreground">Cross-tabulation analysis with drag & drop fields</p>
           </div>
         </div>

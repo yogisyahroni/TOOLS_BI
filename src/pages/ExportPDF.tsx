@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
 import { FileDown, Download } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
@@ -72,7 +73,7 @@ export default function ExportPDF() {
             <FileDown className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Export & Download</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Export & Download <HelpTooltip text="Ekspor dataset sebagai CSV/JSON/Excel, atau ekspor laporan dan chart sebagai file untuk distribusi." /></h1>
             <p className="text-muted-foreground">Export datasets, reports, and dashboards</p>
           </div>
         </div>

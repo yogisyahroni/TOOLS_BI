@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 interface RLSRule {
   id: string;
@@ -52,7 +53,7 @@ export default function RowLevelSecurity() {
             <ShieldCheck className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Row-Level Security</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Row-Level Security <HelpTooltip text="Atur akses data per baris berdasarkan role. Tentukan kolom dan nilai yang diizinkan untuk setiap role pengguna." /></h1>
             <p className="text-muted-foreground">Control data access by user role</p>
           </div>
         </div>

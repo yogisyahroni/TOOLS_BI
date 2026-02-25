@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import type { Report } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 export default function Reports() {
   const { reports, removeReport, dataSets } = useDataStore();
@@ -55,7 +56,7 @@ export default function Reports() {
             <FileText className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Reports</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Reports <HelpTooltip text="Lihat semua laporan yang sudah dibuat oleh AI Reports. Klik untuk melihat detail, ekspor sebagai Markdown, atau hapus." /></h1>
             <p className="text-muted-foreground">
               View and manage your generated reports
             </p>

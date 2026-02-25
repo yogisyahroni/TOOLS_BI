@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 type RefreshMode = 'realtime' | 'interval' | 'scheduled' | 'manual';
 type JobType = 'data_refresh' | 'report_gen' | 'alert_check' | 'etl_run' | 'export_send' | 'kpi_snapshot';
@@ -157,7 +158,7 @@ export default function DataRefresh() {
             <RefreshCw className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Data Refresh & Cron Jobs</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Refresh & Cron Jobs <HelpTooltip text="Kelola jadwal refresh data: Realtime (WebSocket), Interval (setiap X menit), Scheduled (cron expression), atau Manual. Cocok untuk ETL, alert, dan report otomatis." /></h1>
             <p className="text-muted-foreground">Configure realtime, interval, or scheduled data refresh</p>
           </div>
         </div>

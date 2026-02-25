@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 interface FormatRule {
   id: string;
@@ -94,7 +95,7 @@ export default function ConditionalFormatting() {
             <Paintbrush className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Conditional Formatting</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Conditional Formatting <HelpTooltip text="Warnai cell tabel berdasarkan aturan (>, <, =, contains, dll). Pilih warna background dan teks untuk setiap kondisi." /></h1>
             <p className="text-muted-foreground">Color-code cells based on data rules</p>
           </div>
         </div>

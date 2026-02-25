@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { callAI } from '@/lib/aiService';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 const COLORS = [
   'hsl(174 72% 46%)', 'hsl(199 89% 48%)', 'hsl(142 76% 36%)',
@@ -185,7 +186,7 @@ Return ONLY valid JSON.`
             <MessageSquare className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Ask Data</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Ask Data <HelpTooltip text="Tanya data menggunakan bahasa natural (misal: 'berapa rata-rata gaji?'). AI akan menjawab dengan teks dan visualisasi chart otomatis." /></h1>
             <p className="text-muted-foreground">Ask questions in natural language, get instant visualizations</p>
           </div>
         </div>

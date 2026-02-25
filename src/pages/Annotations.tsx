@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 interface Annotation {
   id: string;
@@ -62,7 +63,7 @@ export default function Annotations() {
             <StickyNote className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Chart Annotations</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Chart Annotations <HelpTooltip text="Tambahkan garis referensi dan catatan pada chart. Berguna untuk menandai threshold, target, atau event penting." /></h1>
             <p className="text-muted-foreground">Add reference lines, notes, and markers to charts</p>
           </div>
         </div>

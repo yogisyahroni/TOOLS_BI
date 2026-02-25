@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import type { KPI } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function genId() { return Math.random().toString(36).substring(2, 15); }
 
@@ -61,7 +62,7 @@ export default function KPIScorecard() {
               <Target className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">KPI Scorecard</h1>
+              <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">KPI Scorecard <HelpTooltip text="Buat KPI dari kolom numerik dataset. Pilih agregasi (Sum, Avg, dll), set target, dan pantau progress. Warna hijau = target tercapai." /></h1>
               <p className="text-muted-foreground">Track key performance indicators</p>
             </div>
           </div>

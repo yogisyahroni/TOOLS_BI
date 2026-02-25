@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import type { CalculatedField } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 const FORMULA_TEMPLATES = [
   { label: 'SUM(column)', formula: 'SUM(column_name)', desc: 'Sum of all values' },
@@ -154,7 +155,7 @@ export default function CalculatedFields() {
             <Calculator className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Calculated Fields</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Calculated Fields <HelpTooltip text="Buat kolom baru dengan formula DAX-like (SUM, AVG, IF, CONCAT, dll). Pilih dataset, tulis formula, lalu klik Evaluate untuk melihat hasil." /></h1>
             <p className="text-muted-foreground">Create DAX-like formulas and computed columns</p>
           </div>
         </div>

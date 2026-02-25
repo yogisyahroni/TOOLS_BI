@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 export default function DataExplorer() {
   const { dataSets } = useDataStore();
@@ -117,7 +118,7 @@ export default function DataExplorer() {
             <Search className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Data Explorer</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Explorer <HelpTooltip text="Jelajahi data dengan fitur search, filter per kolom, sort, dan paging. Tab 'Column Statistics' untuk melihat ringkasan statistik tiap kolom." /></h1>
             <p className="text-muted-foreground">Explore, filter, and analyze your datasets</p>
           </div>
         </div>

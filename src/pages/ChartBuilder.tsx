@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 const CHART_TYPES = [
   { id: 'bar', label: 'Bar', icon: BarChart3 },
@@ -175,7 +176,7 @@ export default function ChartBuilder() {
             <BarChart3 className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Chart Builder</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Chart Builder <HelpTooltip text="Buat visualisasi chart interaktif. Pilih tipe chart, dataset, sumbu X dan Y, lalu simpan atau ekspor sebagai PNG." /></h1>
             <p className="text-muted-foreground">Create interactive visualizations from your data</p>
           </div>
         </div>
@@ -185,7 +186,7 @@ export default function ChartBuilder() {
         {/* Config Panel */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-1 space-y-6">
           <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground">Chart Type</h3>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">Chart Type <HelpTooltip text="Pilih tipe chart untuk visualisasi data Anda. Setiap tipe cocok untuk jenis data yang berbeda: Bar untuk perbandingan, Line untuk tren, Pie untuk proporsi." /></h3>
             <div className="grid grid-cols-4 gap-2">
               {CHART_TYPES.map(ct => (
                 <button key={ct.id} onClick={() => setChartType(ct.id)}
@@ -197,7 +198,7 @@ export default function ChartBuilder() {
           </div>
 
           <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground">Data Source</h3>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">Data Source <HelpTooltip text="Pilih dataset, lalu tentukan kolom X-Axis (kategori) dan Y-Axis (nilai numerik) untuk membuat chart." /></h3>
             <div className="space-y-3">
               <div>
                 <Label className="text-muted-foreground text-xs">Dataset</Label>
@@ -224,7 +225,7 @@ export default function ChartBuilder() {
           </div>
 
           <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground">Settings</h3>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">Settings <HelpTooltip text="Beri judul chart Anda lalu klik Save. Chart yang tersimpan bisa digunakan di Dashboard Builder." /></h3>
             <div>
               <Label className="text-muted-foreground text-xs">Chart Title</Label>
               <Input value={chartTitle} onChange={e => setChartTitle(e.target.value)} className="bg-muted/50 border-border" />

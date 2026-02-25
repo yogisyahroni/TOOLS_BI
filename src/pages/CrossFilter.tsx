@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
 import { Link2, X } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
@@ -53,7 +54,7 @@ export default function CrossFilter() {
             <Link2 className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Cross-Filter Charts</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Cross-Filter Charts <HelpTooltip text="Klik segmen pada satu chart untuk memfilter semua chart lainnya secara bersamaan. Pilih dataset dan kolom yang ingin dianalisis." /></h1>
             <p className="text-muted-foreground">Click any chart segment to filter all charts simultaneously</p>
           </div>
         </div>

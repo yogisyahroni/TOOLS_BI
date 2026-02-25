@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 interface QueryResult {
   columns: string[];
@@ -189,7 +190,7 @@ When the user asks in natural language, generate the appropriate SQL query. Retu
             <Code2 className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">SQL Query Editor</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">SQL Query Editor <HelpTooltip text="Tulis query SQL (SELECT, WHERE, ORDER BY, LIMIT) pada dataset. Gunakan AI Assistant untuk generate query dari bahasa natural. Ctrl+Enter untuk run." /></h1>
             <p className="text-muted-foreground">Query your datasets with SQL-like syntax</p>
           </div>
         </div>

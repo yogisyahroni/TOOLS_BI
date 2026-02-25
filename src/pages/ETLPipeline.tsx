@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AIChatPanel } from '@/components/AIChatPanel';
 import type { ETLPipeline as ETLPipelineType, ETLStep } from '@/types/data';
 import { cn } from '@/lib/utils';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -460,7 +461,7 @@ When the user asks in natural language, generate the appropriate steps. Return J
             <GitBranch className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">ETL Pipeline</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">ETL Pipeline <HelpTooltip text="Buat pipeline data: tambah step Filter, Transform, Aggregate, Select, atau Sort. Run untuk proses data, lalu simpan output sebagai dataset baru." /></h1>
             <p className="text-muted-foreground">Extract, Transform, and Load your data</p>
           </div>
         </div>

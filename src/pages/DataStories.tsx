@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { formatDistanceToNow } from 'date-fns';
 import type { DataStory } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function genId() { return Math.random().toString(36).substring(2, 15); }
 
@@ -105,7 +106,7 @@ Return ONLY valid JSON.`
             <BookOpen className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Data Stories</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Stories <HelpTooltip text="Generate narasi data otomatis oleh AI. Pilih dataset dan (opsional) focus area, lalu klik Generate. AI akan membuat cerita lengkap dengan insight." /></h1>
             <p className="text-muted-foreground">AI-powered narrative insights from your data</p>
           </div>
         </div>

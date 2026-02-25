@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import type { DataAlert } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function genId() { return Math.random().toString(36).substring(2, 15); }
 
@@ -81,7 +82,7 @@ export default function Alerts() {
               <Bell className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Data Alerts</h1>
+              <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Alerts <HelpTooltip text="Buat alert untuk monitor kolom numerik dataset. Pilih kondisi (>, <, =, dll) dan threshold. Alert bisa diaktifkan/nonaktifkan dan dicek manual." /></h1>
               <p className="text-muted-foreground">Monitor thresholds and get notified</p>
             </div>
           </div>

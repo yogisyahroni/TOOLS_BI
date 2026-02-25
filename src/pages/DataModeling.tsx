@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import type { DataRelationship } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function genId() { return Math.random().toString(36).substring(2, 15); }
 
@@ -44,7 +45,7 @@ export default function DataModeling() {
               <Network className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Data Modeling</h1>
+              <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Modeling <HelpTooltip text="Definisikan relasi antar dataset (One-to-One, One-to-Many, Many-to-Many). Pilih kolom penghubung untuk join data." /></h1>
               <p className="text-muted-foreground">Define relationships between datasets</p>
             </div>
           </div>

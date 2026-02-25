@@ -28,6 +28,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import type { AIConfig } from '@/types/data';
 import { cn } from '@/lib/utils';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 interface ModelOption {
   value: string;
@@ -169,7 +170,7 @@ export default function SettingsPage() {
             <Settings className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Settings</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Settings <HelpTooltip text="Konfigurasi koneksi AI: pilih provider (OpenAI, Gemini, dll), masukkan API Key, dan pilih model. API Key disimpan lokal di browser." /></h1>
             <p className="text-muted-foreground">
               Configure your AI integration and preferences
             </p>

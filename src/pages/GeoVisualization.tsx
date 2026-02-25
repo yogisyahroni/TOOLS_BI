@@ -4,6 +4,7 @@ import { MapPin, Globe } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 const REGION_COLORS = [
   'hsl(199 89% 48%)', 'hsl(142 76% 36%)', 'hsl(38 92% 50%)', 'hsl(0 72% 51%)',
@@ -40,7 +41,7 @@ export default function GeoVisualization() {
             <Globe className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Geo Visualization</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Geo Visualization <HelpTooltip text="Visualisasikan data berdasarkan lokasi geografis. Pilih kolom lokasi (kota/negara) dan kolom nilai untuk melihat distribusi pada chart." /></h1>
             <p className="text-muted-foreground">Visualize data by geographic regions</p>
           </div>
         </div>

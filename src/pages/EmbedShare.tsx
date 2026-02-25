@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 export default function EmbedShare() {
   const { dashboards, savedCharts } = useDataStore();
@@ -41,7 +42,7 @@ export default function EmbedShare() {
             <Code className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Embed & Share</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Embed & Share <HelpTooltip text="Generate kode iframe atau link untuk embed dashboard/chart di website lain. Atur ukuran dan opsi toolbar." /></h1>
             <p className="text-muted-foreground">Generate embed codes and shareable links for dashboards and charts</p>
           </div>
         </div>

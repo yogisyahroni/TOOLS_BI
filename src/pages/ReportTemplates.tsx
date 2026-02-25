@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useDataStore } from '@/stores/dataStore';
 import { builtinTemplates } from '@/lib/builtinTemplates';
 import type { ReportTemplate, TemplateCategory, TemplateSource, TemplatePage, TemplateSection } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function genId() { return Math.random().toString(36).substring(2, 12); }
 
@@ -151,7 +152,7 @@ export default function ReportTemplates() {
             <Layout className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Report Templates</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Report Templates <HelpTooltip text="Kelola template laporan. Import dari Power BI (.pbix), Tableau (.twb), PPTX, atau JSON. Gunakan template saat generate AI Reports." /></h1>
             <p className="text-muted-foreground">Pre-built templates for reports, dashboards & presentations</p>
           </div>
         </div>

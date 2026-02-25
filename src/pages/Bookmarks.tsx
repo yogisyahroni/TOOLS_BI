@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 export default function Bookmarks() {
   const { dataSets, bookmarks, addBookmark, removeBookmark } = useDataStore();
@@ -57,7 +58,7 @@ export default function Bookmarks() {
             <Bookmark className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Bookmarks & Saved Views</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Bookmarks & Saved Views <HelpTooltip text="Simpan state tampilan (filter, sort, halaman) sebagai bookmark. Klik bookmark untuk kembali ke tampilan tersebut dengan cepat." /></h1>
             <p className="text-muted-foreground">Save and restore data views with filters and sorting</p>
           </div>
         </div>

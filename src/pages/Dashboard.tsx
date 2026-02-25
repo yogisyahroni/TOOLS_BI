@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Database, BarChart3, FileText, Shield, Sparkles, Clock } from 'lucide-react';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { useDataStore } from '@/stores/dataStore';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { DataChart } from '@/components/dashboard/DataChart';
@@ -71,7 +72,7 @@ export default function Dashboard() {
             <Sparkles className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Dashboard <HelpTooltip text="Halaman utama dengan ringkasan KPI, grafik tren, distribusi data, dan laporan terbaru. Gunakan Quick Actions untuk navigasi cepat." /></h1>
             <p className="text-muted-foreground">
               Welcome back! Here's your analytics overview.
             </p>

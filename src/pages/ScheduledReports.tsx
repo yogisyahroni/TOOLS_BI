@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
 import { Clock, Plus, Trash2, Play, Pause } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
@@ -79,7 +80,7 @@ export default function ScheduledReports() {
             <Clock className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Scheduled Reports</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Scheduled Reports <HelpTooltip text="Jadwalkan pengiriman laporan otomatis. Pilih laporan, format (PDF/CSV/Excel), frekuensi, dan email penerima." /></h1>
             <p className="text-muted-foreground">Automate report generation and export</p>
           </div>
         </div>

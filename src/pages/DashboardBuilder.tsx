@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 const COLORS = [
   'hsl(174, 72%, 46%)', 'hsl(199, 89%, 48%)', 'hsl(142, 76%, 36%)',
@@ -114,7 +115,7 @@ export default function DashboardBuilder() {
             <LayoutGrid className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard Builder</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Dashboard Builder <HelpTooltip text="Buat dashboard kustom dengan widget chart. Pilih/buat dashboard, lalu klik 'Add Widget' untuk menambahkan chart bar, line, area, atau pie." /></h1>
             <p className="text-muted-foreground">Create custom dashboards with widgets</p>
           </div>
         </div>

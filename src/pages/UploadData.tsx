@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -218,7 +219,7 @@ export default function UploadData() {
             <Upload className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Upload Data</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Upload Data <HelpTooltip text="Drag & drop file CSV, Excel (.xlsx/.xls), atau JSON ke area upload. File akan otomatis diproses dan tersedia sebagai dataset untuk analisis." /></h1>
             <p className="text-muted-foreground">Import your data files for analysis</p>
           </div>
         </div>

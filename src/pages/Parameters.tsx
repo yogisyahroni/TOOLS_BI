@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
 import { Variable, Plus, Trash2 } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
@@ -61,7 +62,7 @@ export default function Parameters() {
             <Variable className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Parameters & Variables</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Parameters & Variables <HelpTooltip text="Buat parameter dinamis (dropdown, slider, teks) yang bisa mengontrol filter dan tampilan chart/dashboard secara interaktif." /></h1>
             <p className="text-muted-foreground">Create dynamic parameters to control data views</p>
           </div>
         </div>

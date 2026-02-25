@@ -13,6 +13,7 @@ import { generateReport } from '@/lib/aiService';
 import { AIChatPanel } from '@/components/AIChatPanel';
 import { builtinTemplates } from '@/lib/builtinTemplates';
 import type { Report, ReportTemplate } from '@/types/data';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -182,7 +183,7 @@ export default function AIReports() {
             <Sparkles className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">AI Reports</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">AI Reports <HelpTooltip text="Pilih dataset dan template (opsional), lalu deskripsikan analisis yang diinginkan. AI akan membuat laporan lengkap dengan insight, keputusan, dan rekomendasi." /></h1>
             <p className="text-muted-foreground">Generate intelligent reports from your data</p>
           </div>
         </div>

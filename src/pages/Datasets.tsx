@@ -21,6 +21,7 @@ import {
 import { useState } from 'react';
 import type { DataSet } from '@/types/data';
 import { useToast } from '@/hooks/use-toast';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 export default function Datasets() {
   const { dataSets, removeDataSet } = useDataStore();
@@ -64,7 +65,7 @@ export default function Datasets() {
             <Database className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Datasets</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Datasets <HelpTooltip text="Daftar semua dataset yang sudah diunggah. Klik Eye untuk preview data, Download untuk ekspor JSON, atau Trash untuk menghapus." /></h1>
             <p className="text-muted-foreground">
               Manage and explore your uploaded data
             </p>

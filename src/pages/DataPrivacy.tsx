@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Shield, Lock, Eye, EyeOff, Trash2, Clock, Database } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Switch } from '@/components/ui/switch';
@@ -43,7 +44,7 @@ export default function DataPrivacy() {
             <Shield className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Data Privacy</h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Privacy <HelpTooltip text="Lindungi data sensitif dari AI. Aktifkan masking, anonymization, atau exclude kolom tertentu saat generate laporan AI." /></h1>
             <p className="text-muted-foreground">
               Protect your data from AI absorption
             </p>
