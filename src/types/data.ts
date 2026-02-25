@@ -59,8 +59,10 @@ export interface DataPrivacySettings {
   encryptAtRest: boolean;
 }
 
+export type AIProvider = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'nvidia' | 'moonshot' | 'groq' | 'together' | 'mistral' | 'cohere' | 'deepseek';
+
 export interface AIConfig {
-  provider: 'openai' | 'anthropic' | 'google' | 'openrouter';
+  provider: AIProvider;
   model: string;
   apiKey: string;
   maxTokens: number;

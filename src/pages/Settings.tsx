@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Key, Bot, Save, AlertCircle, CheckCircle, Search, Check, ChevronsUpDown } from 'lucide-react';
+import { Settings, Key, Bot, Save, AlertCircle, CheckCircle, Search, Check, ChevronsUpDown, RefreshCw, Loader2, Globe } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,101 +26,10 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { useToast } from '@/hooks/use-toast';
-import type { AIConfig } from '@/types/data';
+import type { AIConfig, AIProvider } from '@/types/data';
 import { cn } from '@/lib/utils';
 import { HelpTooltip } from '@/components/HelpTooltip';
-
-interface ModelOption {
-  value: string;
-  label: string;
-  free?: boolean;
-}
-
-const aiProviders: { value: AIConfig['provider']; label: string; models: ModelOption[] }[] = [
-  { 
-    value: 'openai', 
-    label: 'OpenAI', 
-    models: [
-      { value: 'gpt-4o', label: 'GPT-4o' },
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-      { value: 'gpt-4', label: 'GPT-4' },
-      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-    ] 
-  },
-  { 
-    value: 'anthropic', 
-    label: 'Anthropic', 
-    models: [
-      { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-      { value: 'claude-opus-4-1-20250805', label: 'Claude Opus 4.1' },
-      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
-    ] 
-  },
-  { 
-    value: 'google', 
-    label: 'Google AI', 
-    models: [
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-    ] 
-  },
-  { 
-    value: 'openrouter', 
-    label: 'OpenRouter', 
-    models: [
-      // Free Models
-      { value: 'google/gemma-3-27b-it:free', label: 'Google Gemma 3 27B', free: true },
-      { value: 'google/gemma-3-12b-it:free', label: 'Google Gemma 3 12B', free: true },
-      { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B', free: true },
-      { value: 'meta-llama/llama-3.2-11b-vision-instruct:free', label: 'Llama 3.2 11B Vision', free: true },
-      { value: 'meta-llama/llama-3.2-3b-instruct:free', label: 'Llama 3.2 3B', free: true },
-      { value: 'meta-llama/llama-3.2-1b-instruct:free', label: 'Llama 3.2 1B', free: true },
-      { value: 'meta-llama/llama-3.1-8b-instruct:free', label: 'Llama 3.1 8B', free: true },
-      { value: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B', free: true },
-      { value: 'qwen/qwen-2.5-coder-32b-instruct:free', label: 'Qwen 2.5 Coder 32B', free: true },
-      { value: 'qwen/qwen3-32b:free', label: 'Qwen 3 32B', free: true },
-      { value: 'qwen/qwen3-14b:free', label: 'Qwen 3 14B', free: true },
-      { value: 'qwen/qwen3-8b:free', label: 'Qwen 3 8B', free: true },
-      { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 24B', free: true },
-      { value: 'mistralai/mistral-nemo:free', label: 'Mistral Nemo', free: true },
-      { value: 'microsoft/phi-4:free', label: 'Microsoft Phi-4', free: true },
-      { value: 'microsoft/phi-3-medium-128k-instruct:free', label: 'Microsoft Phi-3 Medium', free: true },
-      { value: 'deepseek/deepseek-r1:free', label: 'DeepSeek R1', free: true },
-      { value: 'deepseek/deepseek-chat-v3-0324:free', label: 'DeepSeek Chat V3', free: true },
-      { value: 'nvidia/llama-3.1-nemotron-70b-instruct:free', label: 'Nvidia Nemotron 70B', free: true },
-      { value: 'openchat/openchat-7b:free', label: 'OpenChat 7B', free: true },
-      { value: 'huggingfaceh4/zephyr-7b-beta:free', label: 'Zephyr 7B', free: true },
-      { value: 'undi95/toppy-m-7b:free', label: 'Toppy M 7B', free: true },
-      { value: 'gryphe/mythomist-7b:free', label: 'MythoMist 7B', free: true },
-      
-      // Paid Premium Models
-      { value: 'openai/gpt-4o', label: 'OpenAI GPT-4o' },
-      { value: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
-      { value: 'openai/gpt-4-turbo', label: 'OpenAI GPT-4 Turbo' },
-      { value: 'openai/o1-preview', label: 'OpenAI O1 Preview' },
-      { value: 'openai/o1-mini', label: 'OpenAI O1 Mini' },
-      { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-      { value: 'anthropic/claude-3-opus', label: 'Claude 3 Opus' },
-      { value: 'anthropic/claude-3-haiku', label: 'Claude 3 Haiku' },
-      { value: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash' },
-      { value: 'google/gemini-pro-1.5', label: 'Gemini Pro 1.5' },
-      { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B (Paid)' },
-      { value: 'meta-llama/llama-3.1-405b-instruct', label: 'Llama 3.1 405B' },
-      { value: 'mistralai/mistral-large-2411', label: 'Mistral Large' },
-      { value: 'mistralai/mixtral-8x22b-instruct', label: 'Mixtral 8x22B' },
-      { value: 'cohere/command-r-plus', label: 'Cohere Command R+' },
-      { value: 'cohere/command-r', label: 'Cohere Command R' },
-      { value: 'perplexity/sonar-pro', label: 'Perplexity Sonar Pro' },
-      { value: 'perplexity/sonar', label: 'Perplexity Sonar' },
-      { value: 'deepseek/deepseek-chat', label: 'DeepSeek Chat (Paid)' },
-      { value: 'deepseek/deepseek-coder', label: 'DeepSeek Coder' },
-      { value: 'x-ai/grok-2', label: 'xAI Grok 2' },
-      { value: 'x-ai/grok-beta', label: 'xAI Grok Beta' },
-    ] 
-  },
-];
+import { aiProviders, fetchOpenRouterModels, type ModelOption } from '@/lib/aiProviders';
 
 export default function SettingsPage() {
   const { aiConfig, setAIConfig } = useDataStore();
@@ -136,114 +45,139 @@ export default function SettingsPage() {
 
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [customModel, setCustomModel] = useState('');
+  
+  // Auto-update state for OpenRouter
+  const [dynamicModels, setDynamicModels] = useState<ModelOption[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [useDynamic, setUseDynamic] = useState(false);
 
   const selectedProvider = aiProviders.find((p) => p.value === config.provider);
-  const selectedModel = selectedProvider?.models.find((m) => m.value === config.model);
+  const currentModels = useDynamic && dynamicModels.length > 0 ? dynamicModels : (selectedProvider?.models || []);
+  const selectedModel = currentModels.find((m) => m.value === config.model);
+
+  const loadOpenRouterModels = useCallback(async () => {
+    setIsLoadingModels(true);
+    const models = await fetchOpenRouterModels();
+    if (models.length > 0) {
+      setDynamicModels(models);
+      setLastUpdated(new Date());
+      setUseDynamic(true);
+      toast({ title: 'Model berhasil diperbarui', description: `${models.length} model ditemukan dari OpenRouter.` });
+    } else {
+      toast({ title: 'Gagal memuat model', description: 'Menggunakan daftar model bawaan.', variant: 'destructive' });
+    }
+    setIsLoadingModels(false);
+  }, [toast]);
+
+  // Auto-fetch OpenRouter models on provider change
+  useEffect(() => {
+    if (config.provider === 'openrouter' && dynamicModels.length === 0) {
+      // Don't auto-fetch, let user click refresh
+      setUseDynamic(false);
+    } else if (config.provider !== 'openrouter') {
+      setUseDynamic(false);
+    }
+  }, [config.provider, dynamicModels.length]);
 
   const handleSave = () => {
     if (!config.apiKey) {
-      toast({
-        title: 'API Key Required',
-        description: 'Please enter your AI provider API key.',
-        variant: 'destructive',
-      });
+      toast({ title: 'API Key Required', description: 'Please enter your AI provider API key.', variant: 'destructive' });
       return;
     }
-
     setAIConfig(config as AIConfig);
-    toast({
-      title: 'Settings saved',
-      description: 'Your AI configuration has been updated.',
-    });
+    toast({ title: 'Settings saved', description: 'Your AI configuration has been updated.' });
   };
+
+  const freeModels = currentModels.filter(m => m.free);
+  const paidModels = currentModels.filter(m => !m.free);
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
             <Settings className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Settings <HelpTooltip text="Konfigurasi koneksi AI: pilih provider (OpenAI, Gemini, dll), masukkan API Key, dan pilih model. API Key disimpan lokal di browser." /></h1>
-            <p className="text-muted-foreground">
-              Configure your AI integration and preferences
-            </p>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Settings <HelpTooltip text="Konfigurasi koneksi AI: pilih provider (OpenAI, Gemini, NVIDIA, dll), masukkan API Key, dan pilih model. API Key disimpan lokal di browser." /></h1>
+            <p className="text-muted-foreground">Configure your AI integration and preferences</p>
           </div>
         </div>
       </motion.div>
 
       {/* AI Configuration */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="bg-card rounded-xl p-6 border border-border shadow-card"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="bg-card rounded-xl p-6 border border-border shadow-card">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
             <Bot className="w-5 h-5 text-primary" />
           </div>
           <div>
             <h3 className="text-lg font-semibold text-foreground">AI Configuration</h3>
-            <p className="text-sm text-muted-foreground">
-              Connect your preferred AI provider
-            </p>
+            <p className="text-sm text-muted-foreground">Connect your preferred AI provider — 11 providers supported</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Provider Select */}
           <div className="space-y-2">
             <Label htmlFor="provider">AI Provider</Label>
             <Select
               value={config.provider}
-              onValueChange={(value: AIConfig['provider']) => {
+              onValueChange={(value: AIProvider) => {
                 const provider = aiProviders.find((p) => p.value === value);
-                setConfig({ 
-                  ...config, 
-                  provider: value, 
-                  model: provider?.models[0]?.value 
-                });
+                setConfig({ ...config, provider: value, model: provider?.models[0]?.value });
+                setUseDynamic(false);
               }}
             >
               <SelectTrigger id="provider">
                 <SelectValue placeholder="Select provider" />
               </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
+              <SelectContent className="bg-popover border-border max-h-[350px]">
                 {aiProviders.map((provider) => (
                   <SelectItem key={provider.value} value={provider.value}>
-                    {provider.label}
+                    <div className="flex items-center gap-2">
+                      <span>{provider.label}</span>
+                      <span className="text-[10px] text-muted-foreground">— {provider.description}</span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
+          {/* Model Select */}
           <div className="space-y-2">
-            <Label>Model</Label>
+            <div className="flex items-center justify-between">
+              <Label>Model</Label>
+              {selectedProvider?.supportsAutoUpdate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs gap-1"
+                  onClick={loadOpenRouterModels}
+                  disabled={isLoadingModels}
+                >
+                  {isLoadingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  {isLoadingModels ? 'Loading...' : 'Auto-Update'}
+                </Button>
+              )}
+            </div>
             <Popover open={modelOpen} onOpenChange={setModelOpen}>
               <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={modelOpen}
-                  className="w-full justify-between font-normal"
-                >
+                <Button variant="outline" role="combobox" aria-expanded={modelOpen} className="w-full justify-between font-normal">
                   <span className="flex items-center gap-2 truncate">
                     {selectedModel ? (
                       <>
                         {selectedModel.label}
                         {selectedModel.free && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success rounded">
-                            FREE
-                          </span>
+                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success rounded">FREE</span>
                         )}
                       </>
+                    ) : config.model ? (
+                      <span className="text-muted-foreground">{config.model}</span>
                     ) : (
                       "Select model..."
                     )}
@@ -251,67 +185,47 @@ export default function SettingsPage() {
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0 bg-popover border-border" align="start">
+              <PopoverContent className="w-[450px] p-0 bg-popover border-border" align="start">
                 <Command className="bg-transparent">
-                  <CommandInput placeholder="Search model..." className="border-b border-border" />
-                  <CommandList className="max-h-[300px]">
-                    <CommandEmpty>No model found.</CommandEmpty>
-                    {config.provider === 'openrouter' && (
-                      <>
-                        <CommandGroup heading="🆓 Free Models">
-                          {selectedProvider?.models
-                            .filter((m) => m.free)
-                            .map((model) => (
-                              <CommandItem
-                                key={model.value}
-                                value={model.label}
-                                onSelect={() => {
-                                  setConfig({ ...config, model: model.value });
-                                  setModelOpen(false);
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    config.model === model.value ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <span className="flex-1">{model.label}</span>
-                                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success rounded">
-                                  FREE
-                                </span>
-                              </CommandItem>
-                            ))}
-                        </CommandGroup>
-                        <CommandGroup heading="💎 Premium Models">
-                          {selectedProvider?.models
-                            .filter((m) => !m.free)
-                            .map((model) => (
-                              <CommandItem
-                                key={model.value}
-                                value={model.label}
-                                onSelect={() => {
-                                  setConfig({ ...config, model: model.value });
-                                  setModelOpen(false);
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    config.model === model.value ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                {model.label}
-                              </CommandItem>
-                            ))}
-                        </CommandGroup>
-                      </>
-                    )}
-                    {config.provider !== 'openrouter' && (
-                      <CommandGroup>
-                        {selectedProvider?.models.map((model) => (
+                  <CommandInput placeholder="Cari model..." className="border-b border-border" />
+                  <CommandList className="max-h-[350px]">
+                    <CommandEmpty>Model tidak ditemukan.</CommandEmpty>
+
+                    {/* Custom model input */}
+                    <CommandGroup heading="✏️ Custom Model">
+                      <div className="px-2 py-1.5 flex gap-2">
+                        <Input
+                          placeholder="Ketik model ID custom..."
+                          value={customModel}
+                          onChange={(e) => setCustomModel(e.target.value)}
+                          className="h-8 text-xs"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && customModel.trim()) {
+                              setConfig({ ...config, model: customModel.trim() });
+                              setCustomModel('');
+                              setModelOpen(false);
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs"
+                          disabled={!customModel.trim()}
+                          onClick={() => {
+                            setConfig({ ...config, model: customModel.trim() });
+                            setCustomModel('');
+                            setModelOpen(false);
+                          }}
+                        >
+                          Set
+                        </Button>
+                      </div>
+                    </CommandGroup>
+
+                    {/* Free models */}
+                    {freeModels.length > 0 && (
+                      <CommandGroup heading="🆓 Free Models">
+                        {freeModels.map((model) => (
                           <CommandItem
                             key={model.value}
                             value={model.label}
@@ -321,13 +235,29 @@ export default function SettingsPage() {
                             }}
                             className="cursor-pointer"
                           >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                config.model === model.value ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            {model.label}
+                            <Check className={cn("mr-2 h-4 w-4", config.model === model.value ? "opacity-100" : "opacity-0")} />
+                            <span className="flex-1 truncate">{model.label}</span>
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success rounded">FREE</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+
+                    {/* Paid models */}
+                    {paidModels.length > 0 && (
+                      <CommandGroup heading={freeModels.length > 0 ? "💎 Premium Models" : "📦 Models"}>
+                        {paidModels.map((model) => (
+                          <CommandItem
+                            key={model.value}
+                            value={model.label}
+                            onSelect={() => {
+                              setConfig({ ...config, model: model.value });
+                              setModelOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", config.model === model.value ? "opacity-100" : "opacity-0")} />
+                            <span className="truncate">{model.label}</span>
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -336,8 +266,15 @@ export default function SettingsPage() {
                 </Command>
               </PopoverContent>
             </Popover>
+            {lastUpdated && useDynamic && (
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Globe className="w-3 h-3" />
+                Model terakhir diperbarui: {lastUpdated.toLocaleTimeString('id-ID')} ({dynamicModels.length} model)
+              </p>
+            )}
           </div>
 
+          {/* API Key */}
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="apiKey" className="flex items-center gap-2">
               <Key className="w-4 h-4" />
@@ -352,10 +289,7 @@ export default function SettingsPage() {
                 onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
                 className="flex-1"
               />
-              <Button
-                variant="outline"
-                onClick={() => setApiKeyVisible(!apiKeyVisible)}
-              >
+              <Button variant="outline" onClick={() => setApiKeyVisible(!apiKeyVisible)}>
                 {apiKeyVisible ? 'Hide' : 'Show'}
               </Button>
             </div>
@@ -365,6 +299,7 @@ export default function SettingsPage() {
             </p>
           </div>
 
+          {/* Max Tokens */}
           <div className="space-y-2">
             <Label htmlFor="maxTokens">Max Tokens</Label>
             <Input
@@ -377,6 +312,7 @@ export default function SettingsPage() {
             />
           </div>
 
+          {/* Temperature */}
           <div className="space-y-2">
             <Label htmlFor="temperature">Temperature</Label>
             <Input
@@ -414,13 +350,34 @@ export default function SettingsPage() {
         </div>
       </motion.div>
 
+      {/* Provider Cards */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15 }} className="bg-card rounded-xl p-6 border border-border shadow-card">
+        <h4 className="font-semibold text-foreground mb-4">Supported Providers ({aiProviders.length})</h4>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {aiProviders.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => {
+                const provider = aiProviders.find(pr => pr.value === p.value);
+                setConfig({ ...config, provider: p.value, model: provider?.models[0]?.value });
+                setUseDynamic(false);
+              }}
+              className={cn(
+                "p-3 rounded-lg border text-left transition-all hover:shadow-md",
+                config.provider === p.value
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <p className="font-medium text-sm text-foreground">{p.label}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{p.models.length} model{p.supportsAutoUpdate ? ' + auto-update' : ''}</p>
+            </button>
+          ))}
+        </div>
+      </motion.div>
+
       {/* Info Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-        className="bg-muted/50 rounded-xl p-6 border border-border"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }} className="bg-muted/50 rounded-xl p-6 border border-border">
         <h4 className="font-semibold text-foreground mb-3">About AI Integration</h4>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li className="flex items-start gap-2">
@@ -441,7 +398,11 @@ export default function SettingsPage() {
           </li>
           <li className="flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-success mt-0.5" />
-            OpenRouter provides access to many free models with rate limits
+            OpenRouter supports auto-update model list dari API resmi
+          </li>
+          <li className="flex items-start gap-2">
+            <CheckCircle className="w-4 h-4 text-success mt-0.5" />
+            11 provider didukung: OpenAI, Anthropic, Google, NVIDIA, Moonshot, Groq, Together, Mistral, Cohere, DeepSeek, OpenRouter
           </li>
         </ul>
       </motion.div>

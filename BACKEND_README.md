@@ -1548,4 +1548,43 @@ internal/
 
 ---
 
+## AI Provider Integration (Frontend-side)
+
+AI calls are made directly from the browser to provider APIs. No backend proxy needed (API keys stored in localStorage). The following **11 providers** are supported:
+
+| Provider | Base URL | API Format | Notes |
+|----------|----------|-----------|-------|
+| **OpenAI** | `api.openai.com/v1/chat/completions` | OpenAI | GPT-4o, GPT-3.5 |
+| **Anthropic** | `api.anthropic.com/v1/messages` | Anthropic | Claude Sonnet/Opus/Haiku |
+| **Google AI** | `generativelanguage.googleapis.com` | Google | Gemini 2.0/1.5 |
+| **NVIDIA NIM** | `integrate.api.nvidia.com/v1/chat/completions` | OpenAI-compat | Nemotron, Llama, DeepSeek |
+| **Moonshot (Kimi)** | `api.moonshot.cn/v1/chat/completions` | OpenAI-compat | V1 8K/32K/128K |
+| **Groq** | `api.groq.com/openai/v1/chat/completions` | OpenAI-compat | Ultra-fast Llama/Mixtral |
+| **Together AI** | `api.together.xyz/v1/chat/completions` | OpenAI-compat | Open-source at scale |
+| **Mistral AI** | `api.mistral.ai/v1/chat/completions` | OpenAI-compat | Large/Small/Codestral |
+| **Cohere** | `api.cohere.com/v2/chat` | OpenAI-compat | Command R/R+ |
+| **DeepSeek** | `api.deepseek.com/v1/chat/completions` | OpenAI-compat | V3/R1/Coder |
+| **OpenRouter** | `openrouter.ai/api/v1/chat/completions` | OpenAI-compat | 100+ models, auto-update |
+
+### Auto-Update Models (OpenRouter)
+
+OpenRouter supports dynamic model fetching via `GET https://openrouter.ai/api/v1/models`. The frontend fetches the latest model list on user request and categorizes them as Free/Premium based on pricing data.
+
+### Backend Proxy (Optional)
+
+If you want to move API key management server-side, add an endpoint:
+
+```go
+// internal/handlers/ai_proxy_handler.go
+func (h *AIProxyHandler) ProxyAIRequest(c *fiber.Ctx) error {
+    // 1. Read user's provider config from DB
+    // 2. Forward request to provider API with server-stored key
+    // 3. Stream response back to client
+}
+```
+
+Route: `POST /api/v1/ai/proxy` — requires auth middleware.
+
+---
+
 **DataLens** — Enterprise BI powered by AI, built with Go. 🚀

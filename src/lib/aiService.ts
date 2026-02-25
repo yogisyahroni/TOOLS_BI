@@ -1,4 +1,5 @@
 import { useDataStore } from '@/stores/dataStore';
+import { getProviderConfig } from '@/lib/aiProviders';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -10,16 +11,6 @@ interface AIResponse {
   error?: string;
 }
 
-function getProviderUrl(provider: string): string {
-  switch (provider) {
-    case 'openai': return 'https://api.openai.com/v1/chat/completions';
-    case 'anthropic': return 'https://api.anthropic.com/v1/messages';
-    case 'google': return 'https://generativelanguage.googleapis.com/v1beta/models';
-    case 'openrouter': return 'https://openrouter.ai/api/v1/chat/completions';
-    default: return 'https://openrouter.ai/api/v1/chat/completions';
-  }
-}
-
 export async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
   const { aiConfig } = useDataStore.getState();
 
@@ -28,9 +19,11 @@ export async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
   }
 
   const { provider, model, apiKey, maxTokens, temperature } = aiConfig;
+  const providerConfig = getProviderConfig(provider);
 
   try {
-    if (provider === 'anthropic') {
+    // Anthropic has unique API format
+    if (provider === 'anthropic' || providerConfig?.apiFormat === 'anthropic') {
       const systemMsg = messages.find(m => m.role === 'system')?.content || '';
       const userMessages = messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role as 'user' | 'assistant',
@@ -63,7 +56,8 @@ export async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
       return { content: data.content?.[0]?.text || '' };
     }
 
-    if (provider === 'google') {
+    // Google AI has unique API format
+    if (provider === 'google' || providerConfig?.apiFormat === 'google') {
       const allContent = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
@@ -83,8 +77,8 @@ export async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
       return { content: data.candidates?.[0]?.content?.parts?.[0]?.text || '' };
     }
 
-    // OpenAI & OpenRouter (compatible API)
-    const url = getProviderUrl(provider);
+    // OpenAI-compatible API (OpenAI, OpenRouter, NVIDIA, Groq, Together, Mistral, Cohere, DeepSeek, Moonshot)
+    const url = providerConfig?.baseUrl || 'https://openrouter.ai/api/v1/chat/completions';
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
