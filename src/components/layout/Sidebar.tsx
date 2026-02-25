@@ -37,6 +37,7 @@ const menuItems = [
   { icon: FileDown, label: 'Export', path: '/export' },
   { icon: RefreshCw, label: 'Data Refresh', path: '/data-refresh' },
   { icon: BookOpen, label: 'Data Stories', path: '/stories' },
+  { icon: LayoutGrid, label: 'Report Templates', path: '/report-templates' },
   { icon: Sparkles, label: 'AI Reports', path: '/ai-reports' },
   { icon: FileText, label: 'Reports', path: '/reports' },
   { icon: Bell, label: 'Alerts', path: '/alerts' },

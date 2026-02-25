@@ -1320,8 +1320,231 @@ seed:
 | AI Ask Data | ❌ | ✅ Ask Data | ❌ | ✅ 🏆 |
 | AI Data Stories | ✅ Smart | ❌ | ❌ | ✅ 🏆 |
 | Realtime WebSocket | ❌ | ❌ | ❌ | ✅ 🏆 |
+| Report Templates | ✅ | ✅ | ❌ | ✅ Import+AI 🏆 |
 | Self-hosted Go | ❌ | ❌ | ✅ Java | ✅ Go 🏆 |
 | Docker < 20MB | ❌ | ❌ | ❌ | ✅ 🏆 |
+
+---
+
+## Report Templates & Import System
+
+### Overview
+
+DataLens supports a template system for generating professional reports, dashboards, and presentations. Templates define multi-page layouts with KPI cards, charts, tables, and AI-generated narrative sections.
+
+### Template Sources
+
+| Source | Format | Parser | Description |
+|--------|--------|--------|-------------|
+| Built-in | Internal JSON | N/A | 7 pre-built templates (Performance, Logistics, Executive, Sales, etc.) |
+| Power BI | `.pbix` | Go backend | Extract visuals, measures, and layout from Power BI Desktop files |
+| Tableau | `.twb`/`.twbx` | Go backend | Parse XML workbook structure, extract sheets and dashboards |
+| Metabase | JSON API | Go backend | Import questions/dashboards via Metabase REST API |
+| PPTX | `.pptx` | Go backend | Parse slides, extract chart configs, tables, and text layouts |
+| Custom | `.json` | Frontend | DataLens native template format |
+
+### Database Schema
+
+```sql
+-- 017_create_report_templates.up.sql
+CREATE TABLE report_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(50) NOT NULL, -- executive, operational, client, performance, financial, logistics, sales, custom
+    source VARCHAR(20) NOT NULL, -- builtin, powerbi, tableau, metabase, pptx, custom
+    pages JSONB NOT NULL DEFAULT '[]',
+    color_scheme JSONB NOT NULL DEFAULT '{}',
+    is_default BOOLEAN DEFAULT FALSE,
+    is_public BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_templates_user ON report_templates(user_id);
+CREATE INDEX idx_templates_category ON report_templates(category);
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/templates` | List all templates (built-in + user) |
+| GET | `/api/v1/templates/:id` | Get template detail |
+| POST | `/api/v1/templates` | Create custom template |
+| PUT | `/api/v1/templates/:id` | Update template |
+| DELETE | `/api/v1/templates/:id` | Delete template |
+| POST | `/api/v1/templates/import/powerbi` | Import from .pbix file |
+| POST | `/api/v1/templates/import/tableau` | Import from .twb/.twbx file |
+| POST | `/api/v1/templates/import/pptx` | Import from .pptx file |
+| POST | `/api/v1/templates/import/metabase` | Import from Metabase API |
+| POST | `/api/v1/templates/:id/duplicate` | Duplicate template |
+| POST | `/api/v1/templates/:id/export` | Export as JSON |
+
+### Template Import Handlers
+
+```go
+// internal/handlers/template_handler.go
+
+// ImportPowerBI parses .pbix file (ZIP with XML layout)
+func (h *TemplateHandler) ImportPowerBI(c *fiber.Ctx) error {
+    file, err := c.FormFile("file")
+    if err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": "File required"})
+    }
+
+    // .pbix is a ZIP containing:
+    // - DataModelSchema (JSON) → columns, measures, tables
+    // - Report/Layout (JSON) → pages, visuals, filters
+    // - Report/StaticResources/ → images
+
+    template, err := h.parser.ParsePBIX(file)
+    if err != nil {
+        return c.Status(422).JSON(fiber.Map{"error": err.Error()})
+    }
+
+    template.UserID = c.Locals("userId").(string)
+    template.Source = "powerbi"
+    
+    if err := h.repo.Create(template); err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": "Failed to save template"})
+    }
+    return c.JSON(template)
+}
+
+// ImportTableau parses .twb/.twbx (XML workbook)
+func (h *TemplateHandler) ImportTableau(c *fiber.Ctx) error {
+    file, err := c.FormFile("file")
+    if err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": "File required"})
+    }
+
+    // .twb is XML, .twbx is ZIP containing .twb + data extracts
+    // Parse: <workbook> → <worksheets> → <dashboard> → <zones>
+    
+    template, err := h.parser.ParseTableau(file)
+    if err != nil {
+        return c.Status(422).JSON(fiber.Map{"error": err.Error()})
+    }
+
+    template.UserID = c.Locals("userId").(string)
+    template.Source = "tableau"
+    
+    if err := h.repo.Create(template); err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": "Failed to save template"})
+    }
+    return c.JSON(template)
+}
+
+// ImportPPTX parses PowerPoint slides
+func (h *TemplateHandler) ImportPPTX(c *fiber.Ctx) error {
+    file, err := c.FormFile("file")
+    if err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": "File required"})
+    }
+
+    // .pptx is ZIP with:
+    // - ppt/slides/slide*.xml → slide content
+    // - ppt/charts/chart*.xml → embedded charts
+    // - ppt/tables/ → table definitions
+    // Use github.com/unidoc/unioffice for parsing
+
+    template, err := h.parser.ParsePPTX(file)
+    if err != nil {
+        return c.Status(422).JSON(fiber.Map{"error": err.Error()})
+    }
+
+    template.UserID = c.Locals("userId").(string)
+    template.Source = "pptx"
+    
+    if err := h.repo.Create(template); err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": "Failed to save template"})
+    }
+    return c.JSON(template)
+}
+```
+
+### Template Parser Libraries (Go)
+
+| Source | Go Library | Notes |
+|--------|-----------|-------|
+| PBIX | `archive/zip` + `encoding/json` | .pbix is ZIP; layout in Report/Layout JSON |
+| Tableau | `encoding/xml` + `archive/zip` | .twb is XML; .twbx is ZIP containing .twb |
+| PPTX | [unidoc/unioffice](https://github.com/unidoc/unioffice) | Full OOXML parsing for slides, charts, tables |
+| Metabase | `net/http` (REST API) | GET `/api/card` for questions, `/api/dashboard` for dashboards |
+
+### Template-Aware AI Report Generation
+
+When generating reports with a template, the AI receives the template structure as context:
+
+```go
+// internal/handlers/report_handler.go
+func (h *ReportHandler) GenerateWithTemplate(c *fiber.Ctx) error {
+    var req struct {
+        DatasetID  string `json:"datasetId"`
+        TemplateID string `json:"templateId"`
+        Prompt     string `json:"prompt"`
+    }
+    c.BodyParser(&req)
+
+    template, _ := h.templateRepo.GetByID(req.TemplateID)
+    dataset, _ := h.datasetRepo.GetByID(req.DatasetID)
+    stats := h.engine.ComputeStats(dataset)
+
+    // Build AI prompt with template context
+    templateCtx := fmt.Sprintf(
+        "Generate report using template '%s' (%s).\nPages: %s\nFor each section, provide data-driven content.",
+        template.Name, template.Category,
+        formatTemplatePages(template.Pages),
+    )
+
+    aiResponse := h.ai.Generate(dataset, stats, req.Prompt + "\n" + templateCtx)
+    
+    report := buildReportFromAI(aiResponse, template, dataset)
+    h.reportRepo.Create(report)
+    
+    // Push via WebSocket
+    h.hub.SendToUser(userID, realtime.Event{Type: "report_ready", Payload: report})
+    
+    return c.JSON(report)
+}
+```
+
+### Cron Job: Scheduled Report with Template
+
+```go
+// Cron job config for scheduled template-based report generation
+{
+    "type": "report_gen",
+    "target_id": "dataset-uuid",
+    "schedule": "0 8 * * 1",  // Monday 8 AM
+    "config": {
+        "template_id": "tpl-performance-summary",
+        "prompt": "Generate weekly performance report",
+        "recipients": ["manager@company.com"],
+        "export_format": "pdf"
+    }
+}
+```
+
+### Project Structure (Updated)
+
+```
+internal/
+├── handlers/
+│   ├── template_handler.go      # Template CRUD + import endpoints
+│   └── ...
+├── parser/
+│   ├── pbix.go                  # Power BI .pbix parser
+│   ├── tableau.go               # Tableau .twb/.twbx parser
+│   ├── pptx.go                  # PowerPoint .pptx parser
+│   ├── metabase.go              # Metabase API importer
+│   └── template_builder.go      # Convert parsed data → ReportTemplate
+├── models/
+│   ├── template.go              # ReportTemplate model
+│   └── ...
+```
 
 ---
 

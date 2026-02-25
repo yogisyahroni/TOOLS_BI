@@ -164,3 +164,42 @@ export interface CalculatedField {
   formula: string;
   createdAt: Date;
 }
+
+// Report Template
+export type TemplateSource = 'builtin' | 'powerbi' | 'tableau' | 'metabase' | 'pptx' | 'custom';
+export type TemplateCategory = 'executive' | 'operational' | 'client' | 'performance' | 'financial' | 'logistics' | 'sales' | 'custom';
+
+export interface TemplateSection {
+  id: string;
+  type: 'kpi_cards' | 'bar_chart' | 'line_chart' | 'pie_chart' | 'donut_chart' | 'table' | 'pivot_table' | 'text' | 'filter_panel' | 'stacked_bar' | 'horizontal_bar' | 'trend_line' | 'geo_map';
+  title: string;
+  width: 'full' | 'half' | 'third' | 'quarter';
+  height?: 'sm' | 'md' | 'lg';
+  config: Record<string, any>;
+}
+
+export interface TemplatePage {
+  id: string;
+  title: string;
+  subtitle?: string;
+  sections: TemplateSection[];
+  filters?: string[]; // column names usable as filters
+}
+
+export interface ReportTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: TemplateCategory;
+  source: TemplateSource;
+  thumbnail?: string;
+  pages: TemplatePage[];
+  colorScheme: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+  };
+  createdAt: Date;
+  isDefault?: boolean;
+}

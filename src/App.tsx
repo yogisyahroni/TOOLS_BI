@@ -35,6 +35,7 @@ import Annotations from "./pages/Annotations";
 import EmbedShare from "./pages/EmbedShare";
 import ExportPDF from "./pages/ExportPDF";
 import DataRefresh from "./pages/DataRefresh";
+import ReportTemplates from "./pages/ReportTemplates";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/embed" element={<EmbedShare />} />
             <Route path="/export" element={<ExportPDF />} />
             <Route path="/data-refresh" element={<DataRefresh />} />
+            <Route path="/report-templates" element={<ReportTemplates />} />
             <Route path="/stories" element={<DataStories />} />
             <Route path="/ai-reports" element={<AIReports />} />
             <Route path="/reports" element={<Reports />} />
