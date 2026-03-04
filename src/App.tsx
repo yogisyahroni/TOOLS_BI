@@ -25,6 +25,7 @@ import DataModeling from "./pages/DataModeling";
 import DBDiagram from "./pages/DBDiagram";
 import VisualETL from "./pages/VisualETL";
 import CalculatedFields from "./pages/CalculatedFields";
+import DataProfiling from "./pages/DataProfiling";
 import Bookmarks from "./pages/Bookmarks";
 import ConditionalFormatting from "./pages/ConditionalFormatting";
 import DrillDown from "./pages/DrillDown";
