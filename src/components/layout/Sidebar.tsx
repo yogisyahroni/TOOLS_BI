@@ -23,6 +23,8 @@ const menuItems = [
   { icon: Code2, label: 'SQL Query', path: '/query' },
   { icon: GitBranch, label: 'ETL Pipeline', path: '/etl' },
   { icon: Network, label: 'Data Modeling', path: '/modeling' },
+  { icon: Database, label: 'DB Diagram', path: '/db-diagram' },
+  { icon: GitBranch, label: 'Visual ETL', path: '/visual-etl' },
   { icon: Calculator, label: 'Calculated Fields', path: '/calculated-fields' },
   { icon: Layers, label: 'Drill-Down', path: '/drill-down' },
   { icon: Paintbrush, label: 'Formatting', path: '/formatting' },

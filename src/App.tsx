@@ -22,6 +22,8 @@ import KPIScorecard from "./pages/KPIScorecard";
 import PivotTable from "./pages/PivotTable";
 import Alerts from "./pages/Alerts";
 import DataModeling from "./pages/DataModeling";
+import DBDiagram from "./pages/DBDiagram";
+import VisualETL from "./pages/VisualETL";
 import CalculatedFields from "./pages/CalculatedFields";
 import Bookmarks from "./pages/Bookmarks";
 import ConditionalFormatting from "./pages/ConditionalFormatting";
@@ -60,6 +62,8 @@ const App = () => (
             <Route path="/query" element={<QueryEditor />} />
             <Route path="/etl" element={<ETLPipeline />} />
             <Route path="/modeling" element={<DataModeling />} />
+            <Route path="/db-diagram" element={<DBDiagram />} />
+            <Route path="/visual-etl" element={<VisualETL />} />
             <Route path="/calculated-fields" element={<CalculatedFields />} />
             <Route path="/drill-down" element={<DrillDown />} />
             <Route path="/formatting" element={<ConditionalFormatting />} />
