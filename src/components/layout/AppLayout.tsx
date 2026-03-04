@@ -1,8 +1,14 @@
 import { ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
+import { useGlobalShortcuts } from '@/hooks/use-keyboard-shortcuts';
 
 interface AppLayoutProps {
   children: ReactNode;
+}
+
+function ShortcutProvider({ children }: { children: ReactNode }) {
+  useGlobalShortcuts();
+  return <>{children}</>;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
