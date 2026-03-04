@@ -1587,4 +1587,485 @@ Route: `POST /api/v1/ai/proxy` — requires auth middleware.
 
 ---
 
+## DB Diagram & Schema Introspection
+
+### Overview
+
+Fitur DB Diagram memvisualisasikan skema database secara interaktif — seperti dbdiagram.io. Mendukung **dataset yang di-upload** (skema dari kolom CSV/Excel) dan **koneksi database external** (PostgreSQL, MySQL, SQL Server).
+
+### Database Schema
+
+```sql
+-- 017_create_db_connections.up.sql
+CREATE TABLE db_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    db_type VARCHAR(20) NOT NULL, -- 'postgresql', 'mysql', 'sqlserver', 'sqlite'
+    host VARCHAR(255) NOT NULL,
+    port INTEGER NOT NULL,
+    database_name VARCHAR(255) NOT NULL,
+    username VARCHAR(255) NOT NULL,
+    password_encrypted TEXT NOT NULL, -- AES-256 encrypted
+    ssl_mode VARCHAR(20) DEFAULT 'prefer',
+    schema_name VARCHAR(100) DEFAULT 'public',
+    is_active BOOLEAN DEFAULT TRUE,
+    last_synced_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_db_connections_user ON db_connections(user_id);
+
+-- 018_create_schema_tables.up.sql
+CREATE TABLE schema_tables (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    connection_id UUID REFERENCES db_connections(id) ON DELETE CASCADE,
+    table_name VARCHAR(255) NOT NULL,
+    schema_name VARCHAR(100) DEFAULT 'public',
+    row_count BIGINT DEFAULT 0,
+    table_type VARCHAR(20) DEFAULT 'table', -- 'table', 'view', 'materialized_view'
+    comment TEXT,
+    columns JSONB NOT NULL DEFAULT '[]',
+    -- columns format: [{"name":"id","type":"uuid","nullable":false,"is_pk":true,"default":"gen_random_uuid()","fk_table":"","fk_column":""}]
+    primary_keys JSONB DEFAULT '[]',
+    indexes JSONB DEFAULT '[]',
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_schema_tables_connection ON schema_tables(connection_id);
+
+-- 019_create_schema_relationships.up.sql
+CREATE TABLE schema_relationships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    connection_id UUID REFERENCES db_connections(id) ON DELETE CASCADE,
+    constraint_name VARCHAR(255),
+    source_table VARCHAR(255) NOT NULL,
+    source_column VARCHAR(255) NOT NULL,
+    target_table VARCHAR(255) NOT NULL,
+    target_column VARCHAR(255) NOT NULL,
+    rel_type VARCHAR(20) NOT NULL, -- 'one-to-one', 'one-to-many', 'many-to-many'
+    on_delete VARCHAR(20) DEFAULT 'NO ACTION',
+    on_update VARCHAR(20) DEFAULT 'NO ACTION',
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_schema_rels_connection ON schema_relationships(connection_id);
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/connections` | List DB connections |
+| POST | `/api/v1/connections` | Create DB connection |
+| PUT | `/api/v1/connections/:id` | Update connection |
+| DELETE | `/api/v1/connections/:id` | Delete connection |
+| POST | `/api/v1/connections/:id/test` | Test connectivity |
+| POST | `/api/v1/connections/:id/sync` | Sync schema (introspect tables, columns, FKs) |
+| GET | `/api/v1/connections/:id/schema` | Get full schema (tables + relationships) |
+| GET | `/api/v1/connections/:id/tables` | List tables with columns |
+| GET | `/api/v1/connections/:id/tables/:table/preview` | Preview table data (limit 100) |
+| GET | `/api/v1/connections/:id/diagram` | Get diagram layout (node positions) |
+| PUT | `/api/v1/connections/:id/diagram` | Save diagram layout |
+
+### Schema Introspection Handler
+
+```go
+// internal/handlers/schema_handler.go
+
+// SyncSchema introspects the external database and stores schema info
+func (h *SchemaHandler) SyncSchema(c *fiber.Ctx) error {
+    connID := c.Params("id")
+    conn, err := h.repo.GetConnection(connID)
+    if err != nil {
+        return c.Status(404).JSON(fiber.Map{"error": "Connection not found"})
+    }
+
+    // Decrypt password
+    password := crypto.Decrypt(conn.PasswordEncrypted, h.encryptionKey)
+
+    // Connect to external DB
+    dsn := buildDSN(conn.DBType, conn.Host, conn.Port, conn.DatabaseName, conn.Username, password, conn.SSLMode)
+    extDB, err := sql.Open(conn.DBType, dsn)
+    if err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": "Cannot connect: " + err.Error()})
+    }
+    defer extDB.Close()
+
+    // Introspect based on DB type
+    var tables []SchemaTable
+    var rels []SchemaRelationship
+
+    switch conn.DBType {
+    case "postgresql":
+        tables, err = introspectPostgres(extDB, conn.SchemaName)
+        rels, err = introspectPostgresFKs(extDB, conn.SchemaName)
+    case "mysql":
+        tables, err = introspectMySQL(extDB, conn.DatabaseName)
+        rels, err = introspectMySQLFKs(extDB, conn.DatabaseName)
+    case "sqlserver":
+        tables, err = introspectSQLServer(extDB, conn.SchemaName)
+        rels, err = introspectSQLServerFKs(extDB, conn.SchemaName)
+    }
+
+    // Save to schema_tables and schema_relationships
+    h.repo.UpsertSchemaTables(connID, tables)
+    h.repo.UpsertSchemaRelationships(connID, rels)
+
+    return c.JSON(fiber.Map{"tables": len(tables), "relationships": len(rels)})
+}
+
+// PostgreSQL introspection queries
+func introspectPostgres(db *sql.DB, schema string) ([]SchemaTable, error) {
+    query := `
+        SELECT t.table_name, t.table_type,
+               obj_description((quote_ident(t.table_schema)||'.'||quote_ident(t.table_name))::regclass) as comment
+        FROM information_schema.tables t
+        WHERE t.table_schema = $1
+        ORDER BY t.table_name
+    `
+    // For each table, get columns:
+    colQuery := `
+        SELECT c.column_name, c.data_type, c.is_nullable, c.column_default,
+               (SELECT true FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.table_name = c.table_name AND kcu.column_name = c.column_name
+                AND tc.constraint_type = 'PRIMARY KEY') as is_pk
+        FROM information_schema.columns c
+        WHERE c.table_schema = $1 AND c.table_name = $2
+        ORDER BY c.ordinal_position
+    `
+    // Execute and build SchemaTable structs...
+}
+
+func introspectPostgresFKs(db *sql.DB, schema string) ([]SchemaRelationship, error) {
+    query := `
+        SELECT
+            tc.constraint_name,
+            kcu.table_name AS source_table,
+            kcu.column_name AS source_column,
+            ccu.table_name AS target_table,
+            ccu.column_name AS target_column,
+            rc.delete_rule,
+            rc.update_rule
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+        JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+        JOIN information_schema.referential_constraints rc ON tc.constraint_name = rc.constraint_name
+        WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = $1
+    `
+    // Execute and build SchemaRelationship structs...
+}
+```
+
+### Models
+
+```go
+// internal/models/db_connection.go
+type DBConnection struct {
+    ID                string    `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    UserID            string    `json:"user_id" gorm:"type:uuid;not null"`
+    Name              string    `json:"name" gorm:"not null"`
+    DBType            string    `json:"db_type" gorm:"not null"` // postgresql, mysql, sqlserver
+    Host              string    `json:"host" gorm:"not null"`
+    Port              int       `json:"port" gorm:"not null"`
+    DatabaseName      string    `json:"database_name" gorm:"not null"`
+    Username          string    `json:"username" gorm:"not null"`
+    PasswordEncrypted string    `json:"-" gorm:"not null"`
+    SSLMode           string    `json:"ssl_mode" gorm:"default:prefer"`
+    SchemaName        string    `json:"schema_name" gorm:"default:public"`
+    IsActive          bool      `json:"is_active" gorm:"default:true"`
+    LastSyncedAt      *time.Time `json:"last_synced_at"`
+    CreatedAt         time.Time `json:"created_at"`
+    UpdatedAt         time.Time `json:"updated_at"`
+}
+
+// internal/models/schema_table.go
+type SchemaTable struct {
+    ID           string          `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    ConnectionID string          `json:"connection_id" gorm:"type:uuid;not null"`
+    TableName    string          `json:"table_name" gorm:"not null"`
+    SchemaName   string          `json:"schema_name" gorm:"default:public"`
+    RowCount     int64           `json:"row_count" gorm:"default:0"`
+    TableType    string          `json:"table_type" gorm:"default:table"`
+    Comment      string          `json:"comment"`
+    Columns      json.RawMessage `json:"columns" gorm:"type:jsonb;default:'[]'"`
+    PrimaryKeys  json.RawMessage `json:"primary_keys" gorm:"type:jsonb;default:'[]'"`
+    Indexes      json.RawMessage `json:"indexes" gorm:"type:jsonb;default:'[]'"`
+    SyncedAt     time.Time       `json:"synced_at"`
+}
+```
+
+---
+
+## Visual ETL / ELT Pipeline Engine
+
+### Overview
+
+Visual ETL memungkinkan user membuat pipeline data processing melalui drag-and-drop canvas. Setiap node merepresentasikan operasi data (source, filter, transform, join, aggregate, dll) yang dihubungkan dengan edge. Backend menjalankan pipeline sebagai DAG (Directed Acyclic Graph).
+
+### Database Schema
+
+```sql
+-- 020_create_visual_pipelines.up.sql
+CREATE TABLE visual_pipelines (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    nodes JSONB NOT NULL DEFAULT '[]',
+    -- nodes format: [{"id":"n1","type":"source","position":{"x":100,"y":200},"data":{"label":"Sales","nodeType":"source","config":{"dataSetId":"..."}}}]
+    edges JSONB NOT NULL DEFAULT '[]',
+    -- edges format: [{"id":"e1","source":"n1","target":"n2","sourceHandle":"output","targetHandle":"input"}]
+    status VARCHAR(20) DEFAULT 'draft', -- draft, running, completed, error, scheduled
+    last_run_at TIMESTAMPTZ,
+    last_run_duration_ms INTEGER,
+    last_error TEXT,
+    output_dataset_id UUID REFERENCES datasets(id) ON DELETE SET NULL,
+    schedule VARCHAR(100), -- optional cron expression
+    is_template BOOLEAN DEFAULT FALSE,
+    tags JSONB DEFAULT '[]',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_visual_pipelines_user ON visual_pipelines(user_id);
+CREATE INDEX idx_visual_pipelines_status ON visual_pipelines(status);
+
+-- 021_create_pipeline_runs.up.sql
+CREATE TABLE pipeline_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pipeline_id UUID REFERENCES visual_pipelines(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL, -- running, completed, error
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    duration_ms INTEGER,
+    node_results JSONB DEFAULT '{}',
+    -- node_results: {"n1":{"status":"done","rows":1000,"duration_ms":120},"n2":{"status":"error","error":"..."}}
+    output_rows INTEGER,
+    error TEXT,
+    triggered_by VARCHAR(20) DEFAULT 'manual' -- manual, cron, webhook
+);
+
+CREATE INDEX idx_pipeline_runs_pipeline ON pipeline_runs(pipeline_id, started_at DESC);
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/visual-pipelines` | List visual pipelines |
+| POST | `/api/v1/visual-pipelines` | Create pipeline (save canvas state) |
+| PUT | `/api/v1/visual-pipelines/:id` | Update pipeline (nodes, edges, config) |
+| DELETE | `/api/v1/visual-pipelines/:id` | Delete pipeline |
+| POST | `/api/v1/visual-pipelines/:id/run` | Execute pipeline |
+| POST | `/api/v1/visual-pipelines/:id/validate` | Validate DAG (check cycles, missing config) |
+| GET | `/api/v1/visual-pipelines/:id/runs` | List pipeline runs with history |
+| GET | `/api/v1/visual-pipelines/:id/runs/:runId` | Get run detail with per-node results |
+| POST | `/api/v1/visual-pipelines/:id/preview/:nodeId` | Preview data at specific node |
+| POST | `/api/v1/visual-pipelines/:id/schedule` | Set cron schedule for pipeline |
+| POST | `/api/v1/visual-pipelines/import` | Import pipeline from JSON template |
+| GET | `/api/v1/visual-pipelines/:id/export` | Export pipeline as JSON template |
+
+### Pipeline Execution Engine
+
+```go
+// internal/engine/visual_etl.go
+
+type NodeProcessor interface {
+    Process(ctx context.Context, input []map[string]interface{}, config map[string]interface{}) ([]map[string]interface{}, error)
+}
+
+// Registry of node processors
+var processors = map[string]NodeProcessor{
+    "source":      &SourceProcessor{},
+    "filter":      &FilterProcessor{},
+    "transform":   &TransformProcessor{},
+    "aggregate":   &AggregateProcessor{},
+    "sort":        &SortProcessor{},
+    "select":      &SelectProcessor{},
+    "join":        &JoinProcessor{},
+    "deduplicate": &DeduplicateProcessor{},
+    "split":       &SplitProcessor{},
+    "custom":      &CustomCodeProcessor{},
+    "output":      &OutputProcessor{},
+}
+
+// ExecutePipeline runs the visual ETL pipeline as a DAG
+func ExecutePipeline(ctx context.Context, pipeline *VisualPipeline, dataSets map[string]*DataSet) (*PipelineRunResult, error) {
+    // 1. Parse nodes and edges from JSONB
+    nodes, edges := parsePipelineGraph(pipeline.Nodes, pipeline.Edges)
+
+    // 2. Topological sort (detect cycles → error)
+    sortedNodes, err := topologicalSort(nodes, edges)
+    if err != nil {
+        return nil, fmt.Errorf("invalid pipeline: %w", err) // cycle detected
+    }
+
+    // 3. Execute nodes in order
+    nodeOutputs := make(map[string][]map[string]interface{})
+    nodeResults := make(map[string]NodeRunResult)
+
+    for _, node := range sortedNodes {
+        start := time.Now()
+
+        // Get input from upstream nodes
+        var input []map[string]interface{}
+        for _, edge := range edges {
+            if edge.Target == node.ID {
+                if upstream, ok := nodeOutputs[edge.Source]; ok {
+                    input = append(input, upstream...)
+                }
+            }
+        }
+
+        // Special case: source node loads data from dataset
+        if node.Type == "source" {
+            dsID := node.Config["dataSetId"].(string)
+            if ds, ok := dataSets[dsID]; ok {
+                input = ds.Data
+            }
+        }
+
+        // Process node
+        processor, ok := processors[node.Type]
+        if !ok {
+            return nil, fmt.Errorf("unknown node type: %s", node.Type)
+        }
+
+        output, err := processor.Process(ctx, input, node.Config)
+        duration := time.Since(start)
+
+        if err != nil {
+            nodeResults[node.ID] = NodeRunResult{Status: "error", Error: err.Error(), DurationMs: duration.Milliseconds()}
+            return &PipelineRunResult{Status: "error", NodeResults: nodeResults, Error: err.Error()}, nil
+        }
+
+        nodeOutputs[node.ID] = output
+        nodeResults[node.ID] = NodeRunResult{Status: "done", Rows: len(output), DurationMs: duration.Milliseconds()}
+
+        // Broadcast progress via WebSocket
+        hub.Broadcast("pipeline_progress", map[string]interface{}{
+            "pipelineId": pipeline.ID,
+            "nodeId":     node.ID,
+            "status":     "done",
+            "rows":       len(output),
+        })
+    }
+
+    return &PipelineRunResult{Status: "completed", NodeResults: nodeResults}, nil
+}
+
+// FilterProcessor example
+type FilterProcessor struct{}
+
+func (p *FilterProcessor) Process(ctx context.Context, input []map[string]interface{}, config map[string]interface{}) ([]map[string]interface{}, error) {
+    column := config["column"].(string)
+    operator := config["operator"].(string)
+    value := config["value"]
+
+    var result []map[string]interface{}
+    for _, row := range input {
+        if matchCondition(row[column], operator, value) {
+            result = append(result, row)
+        }
+    }
+    return result, nil
+}
+
+// JoinProcessor example  
+type JoinProcessor struct{}
+
+func (p *JoinProcessor) Process(ctx context.Context, input []map[string]interface{}, config map[string]interface{}) ([]map[string]interface{}, error) {
+    joinType := config["joinType"].(string) // inner, left, right, full
+    leftKey := config["leftKey"].(string)
+    rightKey := config["rightKey"].(string)
+    // Load right dataset, perform join logic
+    // ...
+}
+
+// DeduplicateProcessor
+type DeduplicateProcessor struct{}
+
+func (p *DeduplicateProcessor) Process(ctx context.Context, input []map[string]interface{}, config map[string]interface{}) ([]map[string]interface{}, error) {
+    columns := strings.Split(config["columns"].(string), ",")
+    seen := make(map[string]bool)
+    var result []map[string]interface{}
+    for _, row := range input {
+        key := buildKey(row, columns)
+        if !seen[key] {
+            seen[key] = true
+            result = append(result, row)
+        }
+    }
+    return result, nil
+}
+```
+
+### WebSocket Events for Pipeline
+
+```go
+// Realtime pipeline events
+type PipelineEvent struct {
+    Type       string      `json:"type"` // pipeline_started, pipeline_progress, pipeline_completed, pipeline_error
+    PipelineID string      `json:"pipeline_id"`
+    NodeID     string      `json:"node_id,omitempty"`
+    Status     string      `json:"status"`
+    Rows       int         `json:"rows,omitempty"`
+    Error      string      `json:"error,omitempty"`
+    Preview    interface{} `json:"preview,omitempty"` // First 5 rows at each node
+}
+```
+
+### External Database Connectors
+
+```go
+// internal/connectors/connector.go
+
+type DBConnector interface {
+    Connect(config DBConnectionConfig) (*sql.DB, error)
+    IntrospectTables(db *sql.DB, schema string) ([]SchemaTable, error)
+    IntrospectRelationships(db *sql.DB, schema string) ([]SchemaRelationship, error)
+    PreviewTable(db *sql.DB, table string, limit int) ([]map[string]interface{}, error)
+    ExecuteQuery(db *sql.DB, query string, params ...interface{}) ([]map[string]interface{}, error)
+}
+
+// Supported connectors
+var connectors = map[string]DBConnector{
+    "postgresql": &PostgresConnector{},
+    "mysql":      &MySQLConnector{},
+    "sqlserver":  &SQLServerConnector{},
+    "sqlite":     &SQLiteConnector{},
+}
+
+// PostgresConnector implementation
+type PostgresConnector struct{}
+
+func (c *PostgresConnector) Connect(config DBConnectionConfig) (*sql.DB, error) {
+    dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+        config.Host, config.Port, config.Username, config.Password, config.DatabaseName, config.SSLMode)
+    return sql.Open("pgx", dsn)
+}
+```
+
+### Environment Variables (New)
+
+```env
+# Database Connection Encryption
+DB_CONN_ENCRYPTION_KEY=your-32-byte-aes-key-here
+
+# External DB connection pool settings
+EXT_DB_MAX_OPEN_CONNS=10
+EXT_DB_MAX_IDLE_CONNS=5
+EXT_DB_CONN_MAX_LIFETIME=300  # seconds
+
+# Pipeline execution
+PIPELINE_MAX_CONCURRENT=5
+PIPELINE_NODE_TIMEOUT=60      # seconds per node
+PIPELINE_MAX_ROWS=1000000     # max rows in memory
+```
+
+---
+
 **DataLens** — Enterprise BI powered by AI, built with Go. 🚀
