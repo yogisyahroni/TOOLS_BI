@@ -316,7 +316,8 @@ func main() {
 	log.Info().Msg("Server stopped cleanly")
 }
 
-// initDB creates a GORM PostgreSQL connection with connection pool settings.
+// initDB creates a GORM PostgreSQL connection with retry logic.
+// Retries up to 10 times with 3s delay to handle CI service startup lag.
 func initDB(cfg *config.Config) (*gorm.DB, error) {
 	if cfg.DB.URL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is not set")
@@ -326,20 +327,39 @@ func initDB(cfg *config.Config) (*gorm.DB, error) {
 		Logger: logger.Default.LogMode(logger.Silent),
 	}
 
-	db, err := gorm.Open(postgres.Open(cfg.DB.URL), gormCfg)
-	if err != nil {
-		return nil, err
+	const maxAttempts = 10
+	var db *gorm.DB
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var openErr error
+		db, openErr = gorm.Open(postgres.Open(cfg.DB.URL), gormCfg)
+		if openErr == nil {
+			sqlDB, pingErr := db.DB()
+			if pingErr == nil && sqlDB.Ping() == nil {
+				lastErr = nil
+				break
+			}
+			lastErr = fmt.Errorf("ping failed")
+		} else {
+			lastErr = openErr
+		}
+		if attempt < maxAttempts {
+			log.Warn().Err(lastErr).Int("attempt", attempt).Msg("DB not ready, retrying in 3s...")
+		\ttime.Sleep(3 * time.Second)
+	\t}
+	}
+	if lastErr != nil {
+	\treturn nil, fmt.Errorf("DB connection failed after %d attempts: %w", maxAttempts, lastErr)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
 	}
-
 	sqlDB.SetMaxOpenConns(cfg.DB.MaxConnections)
 	sqlDB.SetMaxIdleConns(cfg.DB.MaxIdle)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
-
 	return db, nil
 }
 
