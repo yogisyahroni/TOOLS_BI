@@ -85,7 +85,7 @@ echo ""
 log "[1] Health & metadata"
 # ═══════════════════════════════════════════════════════════════════════════════
 
-code=$(curl -s -o /dev/null -w "%{http_code}" "${BASE%/api/v1}/health" 2>/dev/null || echo "000")
+code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 --retry 3 --retry-delay 2 "${BASE%/api/v1}/health" 2>/dev/null || echo "000")
 if [ "$code" = "200" ] || [ "$code" = "404" ]; then
   ok "Server reachable (HTTP $code)"
 else
