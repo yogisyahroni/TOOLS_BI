@@ -11,7 +11,7 @@ env:
   NODE_VERSION: "20"
 
 jobs:
-  # ─── Backend ───────────────────────────────────────────────────────────────
+  # ─── 1. Backend ─────────────────────────────────────────────────────────────
   backend:
     name: Backend (Go)
     runs-on: ubuntu-latest
@@ -20,11 +20,9 @@ jobs:
         working-directory: ./datalens-backend
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: datalens-backend/go.sum
@@ -35,34 +33,29 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # ── Unit Tests (pure, no DB required) ────────────────────────────────
-      - name: Unit Tests - engine (formula / visual_etl / anomaly / aggregator)
+      - name: Unit Tests - engine
         run: go test ./internal/engine/... -v -count=1 -timeout 120s
 
-      - name: Unit Tests - parser (pbix / tableau / pptx)
+      - name: Unit Tests - parser
         run: go test ./internal/parser/... -v -count=1 -timeout 120s
 
-      # ── Full build verification ───────────────────────────────────────────
       - name: Build binary
         run: go build -o /tmp/datalens-server ./cmd/server/
 
-      # ── Security advisory (non-blocking) ─────────────────────────────────
-      - name: govulncheck
+      - name: govulncheck (advisory only)
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./... || true
 
-  # ─── Frontend ──────────────────────────────────────────────────────────────
+  # ─── 2. Frontend ────────────────────────────────────────────────────────────
   frontend:
     name: Frontend (React + TypeScript)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -76,7 +69,7 @@ jobs:
       - name: Vite production build
         run: npm run build
 
-  # ─── Integration / Smoke Tests ─────────────────────────────────────────────
+  # ─── 3. Smoke Tests (main/develop only) ────────────────────────────────────
   smoke:
     name: Smoke Tests (API)
     runs-on: ubuntu-latest
@@ -97,6 +90,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
       redis:
         image: redis:7-alpine
         ports:
@@ -108,11 +102,9 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: datalens-backend/go.sum
@@ -124,41 +116,51 @@ jobs:
       - name: Build and start backend
         working-directory: ./datalens-backend
         env:
-          # These must EXACTLY match config.go env var key names
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/datalens
-          REDIS_URL: redis://localhost:6379
-          JWT_SECRET: smoke-test-jwt-secret-minimum-32-chars!!
+          # ── Exact names from internal/config/config.go ──────────────────────
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/datalens?sslmode=disable"
+          REDIS_URL: "redis://localhost:6379"
+          JWT_SECRET: "ci-smoke-test-secret-key-minimum-32chars!!"
+          DB_CONN_ENCRYPTION_KEY: "ci-enc-key-32-chars-exactly-here"
           PORT: "8080"
-          ENV: test
+          ENV: "test"
           CORS_ORIGINS: "*"
-          # S3 / MinIO optional — leave empty
+          # S3 optional — leave empty so MinIO is disabled gracefully
           S3_ENDPOINT: ""
           S3_ACCESS_KEY: ""
           S3_SECRET_KEY: ""
-          S3_BUCKET: datalens
+          S3_BUCKET: "datalens"
           # AI optional
           AI_API_KEY: ""
-          # No static files in CI
+          # Do NOT serve static files in CI (no dist/ present)
           STATIC_DIR: ""
         run: |
           go build -o /tmp/datalens-server ./cmd/server/
           /tmp/datalens-server &
-          echo "Waiting for server to be ready..."
+          SERVER_PID=$!
+          echo "Server started (PID=$SERVER_PID), waiting for readiness..."
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
-              echo "Server up after ${i}s"
+            if curl -sf http://localhost:8080/health > /dev/null 2>&1 || \
+               curl -sf http://localhost:8080/api/v1/auth/me > /dev/null 2>&1; then
+              echo "Server is ready after ${i}s"
               break
             fi
             sleep 1
           done
-          curl -sf http://localhost:8080/health || { echo "Health check failed"; exit 1; }
+          # Verify server is actually responding
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080/health 2>/dev/null || echo "000")
+          echo "Health endpoint HTTP status: $STATUS"
+          if [ "$STATUS" = "000" ]; then
+            echo "ERROR: Server did not start. Check logs above."
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
 
       - name: Run smoke tests
         run: |
           chmod +x ./datalens-backend/scripts/smoke_test.sh
           ./datalens-backend/scripts/smoke_test.sh http://localhost:8080/api/v1
 
-  # ─── Docker image (main branch only) ───────────────────────────────────────
+  # ─── 4. Docker Build (main only) ────────────────────────────────────────────
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -166,11 +168,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Build backend image
         uses: docker/build-push-action@v5
