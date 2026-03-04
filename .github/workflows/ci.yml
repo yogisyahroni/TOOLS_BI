@@ -1,0 +1,188 @@
+name: DataLens CI
+
+on:
+  push:
+    branches: [main, develop, "feat/**", "fix/**", "chore/**"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  GO_VERSION: "1.22"
+  NODE_VERSION: "20"
+
+jobs:
+  # ─── Backend ──────────────────────────────────────────────────────────────────
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./datalens-backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: datalens_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: datalens-backend/go.sum
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      # ── Unit Tests (pure, no DB required) ─────────────────────────────────────
+      - name: Unit Tests — engine (aggregator / anomaly / formula / visual_etl)
+        run: go test ./internal/engine/... -v -count=1 -timeout 120s
+
+      - name: Unit Tests — parser (pbix / tableau / pptx)
+        run: go test ./internal/parser/... -v -count=1 -timeout 120s
+
+      # ── Full build verification ────────────────────────────────────────────────
+      - name: Build binary
+        run: go build -o /tmp/datalens-server ./cmd/server/
+
+      # ── Security advisory (non-blocking) ──────────────────────────────────────
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || true
+
+  # ─── Frontend ─────────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend (React + TypeScript)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type-check
+        run: npx tsc --noEmit
+
+      - name: Vite production build
+        run: npm run build
+
+  # ─── Integration / Smoke Tests ────────────────────────────────────────────────
+  smoke:
+    name: Smoke Tests (API)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: datalens
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: datalens-backend/go.sum
+
+      - name: Download modules
+        working-directory: ./datalens-backend
+        run: go mod download
+
+      - name: Start backend
+        working-directory: ./datalens-backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/datalens
+          REDIS_ADDR: localhost:6379
+          JWT_SECRET: smoke-test-jwt-secret-minimum-32-chars
+          SERVER_PORT: "8080"
+          SERVER_ENV: test
+          CORS_ALLOWED_ORIGINS: "*"
+          MINIO_ENDPOINT: ""
+          MINIO_ACCESS_KEY: ""
+          MINIO_SECRET_KEY: ""
+          MINIO_BUCKET: datalens
+          AI_OPENAI_KEY: ""
+        run: |
+          go build -o /tmp/datalens-server ./cmd/server/
+          /tmp/datalens-server &
+          sleep 5  # wait for migrations + server startup
+          curl -sf http://localhost:8080/health || \
+          curl -sf http://localhost:8080/api/v1/auth/me || true
+
+      - name: Run smoke tests
+        run: |
+          chmod +x ./datalens-backend/scripts/smoke_test.sh
+          ./datalens-backend/scripts/smoke_test.sh http://localhost:8080/api/v1
+
+  # ─── Docker image (main branch only) ─────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./datalens-backend
+          push: false
+          tags: |
+            datalens-backend:${{ github.sha }}
+            datalens-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
