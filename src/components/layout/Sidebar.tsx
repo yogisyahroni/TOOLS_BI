@@ -7,6 +7,7 @@ import {
   Search, LayoutGrid, PaintBucket, MessageSquare, BookOpen, Target,
   Table2, Bell, Network, Calculator, Bookmark, Paintbrush, Layers,
   Globe, Link2, StickyNote, Variable, Clock, ShieldCheck, Code, FileDown, RefreshCw,
+  Activity, Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
