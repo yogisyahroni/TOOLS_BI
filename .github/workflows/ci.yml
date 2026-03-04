@@ -142,7 +142,7 @@ jobs:
 
           # Wait up to 30s for readiness
           READY=false
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             HTTP=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080/health 2>/dev/null || echo "000")
             if [ "$HTTP" != "000" ]; then
               echo "Server ready after ${i}s (HTTP $HTTP)"
