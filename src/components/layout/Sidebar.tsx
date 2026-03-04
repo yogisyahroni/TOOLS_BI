@@ -27,6 +27,7 @@ const menuItems = [
   { icon: Database, label: 'DB Diagram', path: '/db-diagram' },
   { icon: GitBranch, label: 'Visual ETL', path: '/visual-etl' },
   { icon: Calculator, label: 'Calculated Fields', path: '/calculated-fields' },
+  { icon: Activity, label: 'Data Profiling', path: '/data-profiling' },
   { icon: Layers, label: 'Drill-Down', path: '/drill-down' },
   { icon: Paintbrush, label: 'Formatting', path: '/formatting' },
   { icon: Bookmark, label: 'Bookmarks', path: '/bookmarks' },
