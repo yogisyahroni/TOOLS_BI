@@ -212,7 +212,7 @@ func main() {
 	alerts.Delete("/:id", alertH.DeleteAlert)
 	alerts.Post("/:id/toggle", alertH.ToggleAlert)
 
-	// Cron job routes
+	// Cron job routes (primary: /cron-jobs)
 	cronJobs := api.Group("/cron-jobs")
 	cronJobs.Get("/", cronH.ListCronJobs)
 	cronJobs.Post("/", cronH.CreateCronJob)
@@ -221,6 +221,14 @@ func main() {
 	cronJobs.Delete("/:id", cronH.DeleteCronJob)
 	cronJobs.Post("/:id/run", cronH.TriggerCronJob)
 	cronJobs.Get("/:id/history", cronH.GetCronJobHistory)
+
+	// Cron job routes (alias: /cron for smoke test compatibility)
+	cronAlias := api.Group("/cron")
+	cronAlias.Get("/", cronH.ListCronJobs)
+	cronAlias.Post("/", cronH.CreateCronJob)
+	cronAlias.Get("/:id", cronH.GetCronJob)
+	cronAlias.Put("/:id", cronH.UpdateCronJob)
+	cronAlias.Delete("/:id", cronH.DeleteCronJob)
 
 	// AI route
 	api.Post("/ask-data", aiH.AskData)
@@ -272,7 +280,7 @@ func main() {
 	if distDir == "" {
 		distDir = "../dist"
 	}
-	if _, err := os.Stat(distDir); err == nil {
+	if _, statErr := os.Stat(distDir); statErr == nil {
 		app.Static("/", distDir, fiber.Static{
 			Compress:  true,
 			ByteRange: true,
@@ -317,7 +325,7 @@ func main() {
 }
 
 // initDB creates a GORM PostgreSQL connection with retry logic.
-// Retries up to 10 times with 3s delay to handle CI service startup lag.
+// Retries up to 10 times with 3s sleep to handle CI service container startup lag.
 func initDB(cfg *config.Config) (*gorm.DB, error) {
 	if cfg.DB.URL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is not set")
@@ -340,26 +348,28 @@ func initDB(cfg *config.Config) (*gorm.DB, error) {
 				lastErr = nil
 				break
 			}
-			lastErr = fmt.Errorf("ping failed")
+			lastErr = fmt.Errorf("db ping failed")
 		} else {
 			lastErr = openErr
 		}
 		if attempt < maxAttempts {
 			log.Warn().Err(lastErr).Int("attempt", attempt).Msg("DB not ready, retrying in 3s...")
-		\ttime.Sleep(3 * time.Second)
-	\t}
+			time.Sleep(3 * time.Second)
+		}
 	}
 	if lastErr != nil {
-	\treturn nil, fmt.Errorf("DB connection failed after %d attempts: %w", maxAttempts, lastErr)
+		return nil, fmt.Errorf("DB connection failed after %d attempts: %w", maxAttempts, lastErr)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
 	}
+
 	sqlDB.SetMaxOpenConns(cfg.DB.MaxConnections)
 	sqlDB.SetMaxIdleConns(cfg.DB.MaxIdle)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+
 	return db, nil
 }
 
