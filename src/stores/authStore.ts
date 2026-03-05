@@ -7,7 +7,6 @@ import { persist } from 'zustand/middleware';
 import {
     authApi,
     setAccessToken,
-    setRefreshToken,
     clearTokens,
     type UserProfile,
 } from '@/lib/api';
@@ -37,7 +36,8 @@ export const useAuthStore = create<AuthState>()(
                 try {
                     const { data } = await authApi.login(email, password);
                     setAccessToken(data.accessToken);
-                    setRefreshToken(data.refreshToken);
+                    // BUG-07: Refresh token is now in httpOnly cookie set by backend
+                    // No need to call setRefreshToken here
                     set({ user: data.user, isAuthenticated: true, isLoading: false });
                 } catch (err) {
                     set({ isLoading: false });
