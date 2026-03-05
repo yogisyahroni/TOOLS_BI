@@ -110,32 +110,28 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	var tableDef struct {
-		DataTableName string
-		Columns       json.RawMessage
-	}
-	if err := h.db.Table("datasets").Select("data_table_name, columns").
-		Where("id = ?", req.DatasetID).Scan(&tableDef).Error; err != nil {
+	tableName, schemaStr, sampleData, ok := h.extractDatasetContext(req.DatasetID)
+	if !ok {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
-	schemaContext := fmt.Sprintf("Table: %s\nColumns: %s", tableDef.DataTableName, string(tableDef.Columns))
-	prompt := fmt.Sprintf(`You are a PostgreSQL expert. Given the following table schema, write a SQL SELECT query to answer the user's question.
-ONLY output valid SQL, nothing else. Do not include markdown code fences.
-
-Schema:
-%s
-
-Question: %s
-
-SQL:`, schemaContext, req.Question)
+	// Use expert prompt: Data Engineer (schema fidelity) + Data Scientist (anti-hallucination)
+	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, req.Question)
 
 	sqlQuery, err := h.callOpenAI(cfg, prompt)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed: " + err.Error()})
 	}
 
-	if !strings.HasPrefix(strings.TrimSpace(strings.ToUpper(sqlQuery)), "SELECT") {
+	sqlQuery = strings.TrimSpace(sqlQuery)
+	// Strip markdown fences if model added them despite instructions
+	sqlQuery = strings.TrimPrefix(sqlQuery, "```sql")
+	sqlQuery = strings.TrimPrefix(sqlQuery, "```postgresql")
+	sqlQuery = strings.TrimPrefix(sqlQuery, "```")
+	sqlQuery = strings.TrimSuffix(sqlQuery, "```")
+	sqlQuery = strings.TrimSpace(sqlQuery)
+
+	if !strings.HasPrefix(strings.ToUpper(sqlQuery), "SELECT") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "AI generated a non-SELECT query. Rejected for safety."})
 	}
 
@@ -146,9 +142,17 @@ SQL:`, schemaContext, req.Question)
 		})
 	}
 
+	// Phase 2: Interpret results using Data Scientist + Data Storytelling skill
+	resultJSON, _ := json.Marshal(results)
+	interpretPrompt := BuildAskDataInterpretationPrompt(req.Question, sqlQuery, string(resultJSON), len(results))
+	interpretation, _ := h.callOpenAI(cfg, interpretPrompt)
+
 	return c.JSON(fiber.Map{
-		"question": req.Question, "sql": sqlQuery,
-		"data": results, "rowCount": len(results),
+		"question":       req.Question,
+		"sql":            sqlQuery,
+		"data":           results,
+		"rowCount":       len(results),
+		"interpretation": interpretation, // AI-generated business insight
 	})
 }
 
@@ -172,16 +176,62 @@ func (h *AIHandler) GenerateReport(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	basePrompt := "Generate a comprehensive data analysis report."
-	if req.Prompt != "" {
-		basePrompt = req.Prompt
-	}
+	tableName, schemaStr, sampleData, _ := h.extractDatasetContext(req.DatasetID)
 
-	content, err := h.callOpenAI(cfg, basePrompt)
+	// Use expert prompt from Data Storytelling + Data Scientist skills
+	prompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt)
+	content, err := h.callOpenAI(cfg, prompt)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed"})
 	}
 	return c.JSON(fiber.Map{"title": "AI Generated Report", "content": content})
+}
+
+// extractDatasetContext fetches the dataset table name, a formatted schema string,
+// and a sample of up to 3 real rows from the actual data table.
+// This is critical for anti-hallucination: AI receives real schema + real data.
+func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaStr, sampleData string, ok bool) {
+	if datasetID == "" {
+		return "", "", "", false
+	}
+
+	var ds struct {
+		DataTableName string
+		Columns       json.RawMessage
+	}
+	if err := h.db.Table("datasets").Select("data_table_name, columns").
+		Where("id = ?", datasetID).Scan(&ds).Error; err != nil || ds.DataTableName == "" {
+		return "", "", "", false
+	}
+
+	// Format schema as readable column list
+	var cols []map[string]interface{}
+	if json.Unmarshal(ds.Columns, &cols) == nil {
+		var sb strings.Builder
+		for _, col := range cols {
+			name, _ := col["name"].(string)
+			dtype, _ := col["type"].(string)
+			if name != "" {
+				sb.WriteString(fmt.Sprintf("  - %s (%s)\n", name, dtype))
+			}
+		}
+		schemaStr = sb.String()
+	} else {
+		schemaStr = string(ds.Columns) // fallback raw JSON
+	}
+
+	// Fetch real sample rows (max 3) for type inference & grounding
+	var samples []map[string]interface{}
+	if err := h.db.Raw(fmt.Sprintf("SELECT * FROM %q LIMIT 3", ds.DataTableName)).Find(&samples).Error; err == nil {
+		if b, err := json.MarshalIndent(samples, "", "  "); err == nil {
+			sampleData = string(b)
+		}
+	}
+	if sampleData == "" {
+		sampleData = "(sample data unavailable — analysis based on schema only)"
+	}
+
+	return ds.DataTableName, schemaStr, sampleData, true
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,10 +262,11 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 		})
 	}
 
-	basePrompt := "Generate a comprehensive data analysis report with executive summary, key findings, recommendations, and data story."
-	if req.Prompt != "" {
-		basePrompt = req.Prompt
-	}
+	// Extract real schema + sample data → anti-hallucination grounding
+	tableName, schemaStr, sampleData, _ := h.extractDatasetContext(req.DatasetID)
+
+	// Build expert prompt: Data Engineer + Data Scientist + Data Storytelling skills
+	expertPrompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -223,10 +274,10 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 	c.Set("X-Accel-Buffering", "no")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		sendSSEEvent(w, "progress", `{"stage":"generating","message":"AI is writing your report..."}`)
+		sendSSEEvent(w, "progress", `{"stage":"generating","message":"Analyst AI is analyzing your data and writing report..."}`)
 		w.Flush()
 
-		err := h.streamOpenAI(cfg, basePrompt, func(token string) {
+		err := h.streamOpenAI(cfg, expertPrompt, func(token string) {
 			sendSSEEvent(w, "token", jsonEscape(token))
 			w.Flush()
 		})
