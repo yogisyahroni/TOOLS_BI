@@ -12,10 +12,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { useDataStore } from '@/stores/dataStore';
 import { builtinTemplates } from '@/lib/builtinTemplates';
 import type { ReportTemplate, TemplateCategory, TemplateSource, TemplatePage, TemplateSection } from '@/types/data';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { useReportTemplates, useCreateReportTemplate, useDeleteReportTemplate } from '@/hooks/useApi';
 
 function genId() { return Math.random().toString(36).substring(2, 12); }
 
@@ -40,14 +40,32 @@ const sectionTypeIcons: Record<string, any> = {
 };
 
 export default function ReportTemplates() {
-  const { templates, addTemplate, removeTemplate } = useDataStore();
   const { toast } = useToast();
+  // BUG-H4 FIX: use API hooks instead of useDataStore().templates
+  const { data: userTemplates = [] } = useReportTemplates();
+  const createMut = useCreateReportTemplate();
+  const deleteMut = useDeleteReportTemplate();
+
+  // Merge builtin (client-side) with user templates from backend
+  const allTemplates: ReportTemplate[] = [
+    ...builtinTemplates,
+    ...userTemplates.map((t) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      category: t.category as TemplateCategory,
+      source: t.source as TemplateSource,
+      pages: (t.pages as TemplatePage[]) || [],
+      colorScheme: (t.colorScheme as ReportTemplate['colorScheme']) || { primary: '#2c3e50', secondary: '#3498db', accent: '#e74c3c', background: '#ffffff' },
+      isDefault: false,
+      createdAt: new Date(t.createdAt),
+    })),
+  ];
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [viewTemplate, setViewTemplate] = useState<ReportTemplate | null>(null);
   const [importSource, setImportSource] = useState<TemplateSource>('powerbi');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const allTemplates = [...builtinTemplates, ...templates];
   const filtered = selectedCategory === 'all' ? allTemplates : allTemplates.filter(t => t.category === selectedCategory);
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,8 +128,17 @@ export default function ReportTemplates() {
           return;
         }
 
-        addTemplate(template);
+        // BUG-H4 FIX: persist imported template to backend
+        createMut.mutate({
+          name: template.name,
+          description: template.description,
+          category: template.category,
+          source: template.source,
+          pages: template.pages as unknown[],
+          colorScheme: template.colorScheme as Record<string, string>,
+        });
         toast({ title: 'Template imported', description: `"${template.name}" added successfully.` });
+
       } catch (err) {
         toast({ title: 'Import error', description: 'Failed to parse template file.', variant: 'destructive' });
       }
@@ -130,7 +157,15 @@ export default function ReportTemplates() {
       isDefault: false,
       createdAt: new Date(),
     };
-    addTemplate(copy);
+    // BUG-H4 FIX: persist to backend
+    createMut.mutate({
+      name: copy.name,
+      description: copy.description,
+      category: copy.category,
+      source: copy.source,
+      pages: copy.pages as unknown[],
+      colorScheme: copy.colorScheme as Record<string, string>,
+    });
     toast({ title: 'Template duplicated' });
   };
 
@@ -273,7 +308,14 @@ export default function ReportTemplates() {
                     <Download className="w-3 h-3" />
                   </Button>
                   {!tpl.isDefault && (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => { removeTemplate(tpl.id); toast({ title: 'Template deleted' }); }}>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive"
+                      onClick={() => {
+                        // BUG-H4 FIX: delete from backend if it has a backend id (user template)
+                        if (userTemplates.find(u => u.id === tpl.id)) {
+                          deleteMut.mutate(tpl.id);
+                        }
+                        toast({ title: 'Template deleted' });
+                      }}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   )}

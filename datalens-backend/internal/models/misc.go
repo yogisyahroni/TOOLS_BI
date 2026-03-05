@@ -88,3 +88,19 @@ type AuditLog struct {
 }
 
 func (AuditLog) TableName() string { return "audit_log" }
+
+// Annotation stores reference lines on charts (BUG-H6 fix).
+type Annotation struct {
+	ID        string    `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID    string    `json:"userId" gorm:"type:uuid;not null;index"`
+	DatasetID string    `json:"datasetId" gorm:"type:uuid;not null;index"`
+	XCol      string    `json:"xCol" gorm:"size:100"`
+	YCol      string    `json:"yCol" gorm:"size:100"`
+	Label     string    `json:"label" gorm:"size:200;not null"`
+	Value     float64   `json:"value" gorm:"not null"`
+	Color     string    `json:"color" gorm:"size:50"`
+	AnnoType  string    `json:"type" gorm:"column:anno_type;size:20;default:'line'"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (Annotation) TableName() string { return "annotations" }

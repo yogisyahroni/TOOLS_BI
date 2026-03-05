@@ -12,11 +12,20 @@ import {
     alertApi,
     cronApi,
     aiApi,
+    bookmarkApi,
+    annotationApi,
+    reportTemplateApi,
+    relationshipApi,
     type DataQueryParams,
     type KPICreate,
     type AlertCreate,
     type CronJobCreate,
+    type BookmarkCreate,
+    type AnnotationCreate,
+    type UserReportTemplateCreate,
+    type RelationshipCreate,
 } from '@/lib/api';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Datasets
@@ -342,5 +351,109 @@ export function useDeleteConnection() {
     return useMutation({
         mutationFn: (id: string) => connectionApi.delete(id),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1 Hooks — Bookmarks (BUG-H5)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useBookmarks() {
+    return useQuery({
+        queryKey: ['bookmarks'],
+        queryFn: () => bookmarkApi.list().then((r) => r.data.data),
+    });
+}
+
+export function useCreateBookmark() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: BookmarkCreate) => bookmarkApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
+    });
+}
+
+export function useDeleteBookmark() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => bookmarkApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['bookmarks'] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1 Hooks — Chart Annotations (BUG-H6)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useAnnotations(datasetId?: string) {
+    return useQuery({
+        queryKey: ['annotations', datasetId],
+        queryFn: () => annotationApi.list(datasetId).then((r) => r.data.data),
+    });
+}
+
+export function useCreateAnnotation() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: AnnotationCreate) => annotationApi.create(payload).then((r) => r.data),
+        onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['annotations', vars.datasetId] }),
+    });
+}
+
+export function useDeleteAnnotation(datasetId?: string) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => annotationApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['annotations', datasetId] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1 Hooks — Report Templates (BUG-H4)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useReportTemplates() {
+    return useQuery({
+        queryKey: ['report-templates'],
+        queryFn: () => reportTemplateApi.list().then((r) => r.data.data),
+    });
+}
+
+export function useCreateReportTemplate() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: UserReportTemplateCreate) => reportTemplateApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['report-templates'] }),
+    });
+}
+
+export function useDeleteReportTemplate() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => reportTemplateApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['report-templates'] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1 Hooks — Dataset Relationships (BUG-H2)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useRelationships() {
+    return useQuery({
+        queryKey: ['relationships'],
+        queryFn: () => relationshipApi.list().then((r) => r.data.data),
+    });
+}
+
+export function useCreateRelationship() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: RelationshipCreate) => relationshipApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['relationships'] }),
+    });
+}
+
+export function useDeleteRelationship() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => relationshipApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['relationships'] }),
     });
 }

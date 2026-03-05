@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bookmark, Plus, Trash2, Eye, Filter } from 'lucide-react';
+import { Bookmark, Plus, Trash2, Eye, Filter, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,18 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { useBookmarks, useCreateBookmark, useDeleteBookmark } from '@/hooks/useApi';
 
 export default function Bookmarks() {
-  const { dataSets, bookmarks, addBookmark, removeBookmark } = useDataStore();
+  const { dataSets } = useDataStore();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // BUG-H5 FIX: use API hooks instead of local state / useDataStore
+  const { data: bookmarks = [], isLoading } = useBookmarks();
+  const createMut = useCreateBookmark();
+  const deleteMut = useDeleteBookmark();
+
   const [selectedDataSet, setSelectedDataSet] = useState('');
   const [name, setName] = useState('');
   const [filterCol, setFilterCol] = useState('');
@@ -26,28 +33,27 @@ export default function Bookmarks() {
   const addFilter = () => {
     if (!filterCol || !filterVal) return;
     setFilters(prev => [...prev, { column: filterCol, value: filterVal }]);
-    setFilterCol('');
-    setFilterVal('');
+    setFilterCol(''); setFilterVal('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim() || !selectedDataSet) {
       toast({ title: 'Fill name and select dataset', variant: 'destructive' });
       return;
     }
-    addBookmark({
-      id: Date.now().toString(),
-      name,
-      dataSetId: selectedDataSet,
-      filters,
-      sortColumn: sortCol || undefined,
-      sortDirection: sortCol ? sortDir : undefined,
-      createdAt: new Date(),
-    });
-    toast({ title: 'Bookmark saved', description: name });
-    setName('');
-    setFilters([]);
-    setSortCol('');
+    try {
+      await createMut.mutateAsync({
+        name,
+        datasetId: selectedDataSet,
+        filters,
+        sortColumn: sortCol || undefined,
+        sortDirection: sortCol ? sortDir : undefined,
+      });
+      toast({ title: 'Bookmark saved', description: name });
+      setName(''); setFilters([]); setSortCol('');
+    } catch {
+      toast({ title: 'Failed to save bookmark', variant: 'destructive' });
+    }
   };
 
   return (
@@ -58,7 +64,10 @@ export default function Bookmarks() {
             <Bookmark className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Bookmarks & Saved Views <HelpTooltip text="Simpan state tampilan (filter, sort, halaman) sebagai bookmark. Klik bookmark untuk kembali ke tampilan tersebut dengan cepat." /></h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+              Bookmarks &amp; Saved Views
+              <HelpTooltip text="Simpan state tampilan (filter, sort) sebagai bookmark. Data tersimpan persisten ke backend." />
+            </h1>
             <p className="text-muted-foreground">Save and restore data views with filters and sorting</p>
           </div>
         </div>
@@ -74,9 +83,7 @@ export default function Bookmarks() {
               <label className="text-xs text-muted-foreground mb-1 block">Dataset</label>
               <Select value={selectedDataSet} onValueChange={setSelectedDataSet}>
                 <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select dataset" /></SelectTrigger>
-                <SelectContent>
-                  {dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}
-                </SelectContent>
+                <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
 
@@ -85,12 +92,11 @@ export default function Bookmarks() {
               <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., High salary employees" className="bg-muted/50 border-border" />
             </div>
 
-            {/* Filters */}
             {dataset && (
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground block">Add Filters</label>
                 <div className="flex gap-2">
-                  <Select value={filterCol || "none"} onValueChange={v => setFilterCol(v === "none" ? "" : v)}>
+                  <Select value={filterCol || 'none'} onValueChange={v => setFilterCol(v === 'none' ? '' : v)}>
                     <SelectTrigger className="bg-muted/50 border-border flex-1"><SelectValue placeholder="Column" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Select column</SelectItem>
@@ -113,12 +119,11 @@ export default function Bookmarks() {
               </div>
             )}
 
-            {/* Sort */}
             {dataset && (
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="text-xs text-muted-foreground mb-1 block">Sort By</label>
-                  <Select value={sortCol || "none"} onValueChange={v => setSortCol(v === "none" ? "" : v)}>
+                  <Select value={sortCol || 'none'} onValueChange={v => setSortCol(v === 'none' ? '' : v)}>
                     <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Sort column" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
@@ -139,8 +144,9 @@ export default function Bookmarks() {
               </div>
             )}
 
-            <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground" disabled={!name || !selectedDataSet}>
-              <Bookmark className="w-4 h-4 mr-1" /> Save Bookmark
+            <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground" disabled={!name || !selectedDataSet || createMut.isPending}>
+              {createMut.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Bookmark className="w-4 h-4 mr-1" />}
+              Save Bookmark
             </Button>
           </div>
         </motion.div>
@@ -149,7 +155,11 @@ export default function Bookmarks() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <div className="bg-card rounded-xl p-6 border border-border shadow-card">
             <h3 className="font-semibold text-foreground mb-4">Saved Bookmarks ({bookmarks.length})</h3>
-            {bookmarks.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : bookmarks.length === 0 ? (
               <div className="text-center py-8">
                 <Bookmark className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
                 <p className="text-muted-foreground text-sm">No bookmarks yet</p>
@@ -157,7 +167,8 @@ export default function Bookmarks() {
             ) : (
               <div className="space-y-3">
                 {bookmarks.map(bm => {
-                  const ds = dataSets.find(d => d.id === bm.dataSetId);
+                  const ds = dataSets.find(d => d.id === bm.datasetId);
+                  const bmFilters = Array.isArray(bm.filters) ? bm.filters : [];
                   return (
                     <div key={bm.id} className="p-4 rounded-lg bg-muted/30 border border-border/50">
                       <div className="flex items-center justify-between mb-2">
@@ -166,15 +177,15 @@ export default function Bookmarks() {
                           <Button variant="ghost" size="sm" onClick={() => navigate('/explorer')}>
                             <Eye className="w-4 h-4 text-primary" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => { removeBookmark(bm.id); toast({ title: 'Deleted' }); }}>
+                          <Button variant="ghost" size="sm" onClick={() => deleteMut.mutate(bm.id)}>
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground mb-1">Dataset: {ds?.name || 'Unknown'}</p>
-                      {bm.filters.length > 0 && (
+                      {bmFilters.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {bm.filters.map((f, i) => (
+                          {bmFilters.map((f: { column: string; value: string }, i: number) => (
                             <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">
                               {f.column}={f.value}
                             </span>

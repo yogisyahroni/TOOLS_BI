@@ -1,22 +1,14 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { StickyNote, Plus, Trash2 } from 'lucide-react';
+import { StickyNote, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-
-interface Annotation {
-  id: string;
-  type: 'line' | 'note';
-  value: number;
-  label: string;
-  color: string;
-}
+import { useAnnotations, useCreateAnnotation, useDeleteAnnotation } from '@/hooks/useApi';
 
 const ANNO_COLORS = [
   { label: 'Red', value: 'hsl(0 72% 51%)' },
@@ -31,10 +23,14 @@ export default function Annotations() {
   const [dsId, setDsId] = useState('');
   const [xCol, setXCol] = useState('');
   const [yCol, setYCol] = useState('');
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [annoLabel, setAnnoLabel] = useState('');
   const [annoValue, setAnnoValue] = useState('');
   const [annoColor, setAnnoColor] = useState(ANNO_COLORS[0].value);
+
+  // BUG-H6 FIX: use API hooks instead of local useState<Annotation[]>
+  const { data: annotations = [], isLoading } = useAnnotations(dsId || undefined);
+  const createMut = useCreateAnnotation();
+  const deleteMut = useDeleteAnnotation(dsId || undefined);
 
   const dataset = dataSets.find(ds => ds.id === dsId);
 
@@ -48,11 +44,26 @@ export default function Annotations() {
     return Object.entries(grouped).map(([name, value]) => ({ name, value })).slice(0, 20);
   }, [dataset, xCol, yCol]);
 
-  const addAnnotation = () => {
-    if (!annoLabel || !annoValue) { toast({ title: 'Fill label and value', variant: 'destructive' }); return; }
-    setAnnotations(prev => [...prev, { id: Date.now().toString(), type: 'line', value: Number(annoValue), label: annoLabel, color: annoColor }]);
-    toast({ title: 'Annotation added' });
-    setAnnoLabel(''); setAnnoValue('');
+  const addAnnotation = async () => {
+    if (!annoLabel || !annoValue) {
+      toast({ title: 'Fill label and value', variant: 'destructive' });
+      return;
+    }
+    try {
+      await createMut.mutateAsync({
+        datasetId: dsId,
+        xCol,
+        yCol,
+        label: annoLabel,
+        value: Number(annoValue),
+        color: annoColor,
+        type: 'line',
+      });
+      toast({ title: 'Annotation saved to backend' });
+      setAnnoLabel(''); setAnnoValue('');
+    } catch {
+      toast({ title: 'Failed to save annotation', variant: 'destructive' });
+    }
   };
 
   return (
@@ -63,7 +74,10 @@ export default function Annotations() {
             <StickyNote className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Chart Annotations <HelpTooltip text="Tambahkan garis referensi dan catatan pada chart. Berguna untuk menandai threshold, target, atau event penting." /></h1>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+              Chart Annotations
+              <HelpTooltip text="Tambahkan garis referensi dan catatan pada chart. Data tersimpan persisten ke backend." />
+            </h1>
             <p className="text-muted-foreground">Add reference lines, notes, and markers to charts</p>
           </div>
         </div>
@@ -79,11 +93,11 @@ export default function Annotations() {
             </Select>
             {dataset && (
               <>
-                <Select value={xCol || "none"} onValueChange={v => setXCol(v === "none" ? "" : v)}>
+                <Select value={xCol || 'none'} onValueChange={v => setXCol(v === 'none' ? '' : v)}>
                   <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="X-Axis" /></SelectTrigger>
                   <SelectContent><SelectItem value="none">Select</SelectItem>{dataset.columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
-                <Select value={yCol || "none"} onValueChange={v => setYCol(v === "none" ? "" : v)}>
+                <Select value={yCol || 'none'} onValueChange={v => setYCol(v === 'none' ? '' : v)}>
                   <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Y-Axis" /></SelectTrigger>
                   <SelectContent><SelectItem value="none">Select</SelectItem>{dataset.columns.filter(c => c.type === 'number').map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
@@ -102,12 +116,17 @@ export default function Annotations() {
                   style={{ backgroundColor: c.value, borderColor: annoColor === c.value ? 'hsl(var(--foreground))' : 'transparent' }} />
               ))}
             </div>
-            <Button onClick={addAnnotation} className="w-full gradient-primary text-primary-foreground" size="sm">
-              <Plus className="w-4 h-4 mr-1" /> Add
+            <Button onClick={addAnnotation} className="w-full gradient-primary text-primary-foreground" size="sm" disabled={createMut.isPending}>
+              {createMut.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+              Add
             </Button>
           </div>
 
-          {annotations.length > 0 && (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : annotations.length > 0 && (
             <div className="bg-card rounded-xl p-5 border border-border shadow-card">
               <h3 className="font-semibold text-foreground text-sm mb-3">Annotations ({annotations.length})</h3>
               <div className="space-y-2">
@@ -117,7 +136,9 @@ export default function Annotations() {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: a.color }} />
                       <span className="text-xs text-foreground">{a.label}: {a.value}</span>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setAnnotations(prev => prev.filter(x => x.id !== a.id))}><Trash2 className="w-3 h-3 text-destructive" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteMut.mutate(a.id)}>
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
                   </div>
                 ))}
               </div>

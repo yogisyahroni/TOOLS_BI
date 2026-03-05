@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   ReactFlow, Background, Controls, MiniMap, Panel,
@@ -7,27 +7,34 @@ import {
   BackgroundVariant,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Database, ZoomIn, ZoomOut, Maximize, Download } from 'lucide-react';
+import { Database, Maximize } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { useToast } from '@/hooks/use-toast';
 import TableNode from '@/components/diagram/TableNode';
+import { useRelationships, useCreateRelationship, useDeleteRelationship } from '@/hooks/useApi';
 
 const nodeTypes = { tableNode: TableNode };
 
 export default function DBDiagram() {
-  const { dataSets, relationships } = useDataStore();
-  const [autoLayout, setAutoLayout] = useState(true);
+  const { dataSets } = useDataStore();
+  const { toast } = useToast();
+
+  // BUG-H2 FIX: load relationships from backend instead of useDataStore local state
+  const { data: relationships = [] } = useRelationships();
+  const createRelMut = useCreateRelationship();
+  const deleteRelMut = useDeleteRelationship();
 
   // Build nodes from datasets
   const initialNodes: Node[] = useMemo(() => {
     const cols = Math.max(3, Math.ceil(Math.sqrt(dataSets.length)));
     return dataSets.map((ds, i) => {
       const keyColumns = relationships
-        .filter(r => r.sourceDataSetId === ds.id)
+        .filter(r => r.sourceDatasetId === ds.id)
         .map(r => r.sourceColumn);
       const fkColumns = relationships
-        .filter(r => r.targetDataSetId === ds.id)
+        .filter(r => r.targetDatasetId === ds.id)
         .map(r => r.targetColumn);
       return {
         id: ds.id,
@@ -44,17 +51,17 @@ export default function DBDiagram() {
     });
   }, [dataSets, relationships]);
 
-  // Build edges from relationships
+  // Build edges from backend relationships
   const initialEdges: Edge[] = useMemo(() =>
     relationships.map(rel => ({
       id: rel.id,
-      source: rel.sourceDataSetId,
-      target: rel.targetDataSetId,
-      sourceHandle: `${rel.sourceColumn}-source`,
-      targetHandle: `${rel.targetColumn}-target`,
+      source: rel.sourceDatasetId,
+      target: rel.targetDatasetId,
+      sourceHandle: rel.sourceColumn ? `${rel.sourceColumn}-source` : undefined,
+      targetHandle: rel.targetColumn ? `${rel.targetColumn}-target` : undefined,
       type: 'smoothstep',
       animated: true,
-      label: rel.type,
+      label: rel.relType,
       labelStyle: { fontSize: 10, fill: 'hsl(var(--muted-foreground))' },
       labelBgStyle: { fill: 'hsl(var(--card))', fillOpacity: 0.9 },
       labelBgPadding: [4, 2] as [number, number],
@@ -70,9 +77,37 @@ export default function DBDiagram() {
   // Re-sync when data changes
   useMemo(() => { setNodes(initialNodes); setEdges(initialEdges); }, [initialNodes, initialEdges]);
 
-  const onConnect = useCallback((params: Connection) => {
-    setEdges(eds => addEdge({ ...params, type: 'smoothstep', animated: true, style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 } }, eds));
-  }, [setEdges]);
+  // BUG-H2 FIX: persist new connections to backend
+  const onConnect = useCallback(async (params: Connection) => {
+    // Optimistic UI: add edge immediately
+    setEdges(eds => addEdge({
+      ...params,
+      type: 'smoothstep',
+      animated: true,
+      style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+    }, eds));
+
+    // Persist to backend
+    try {
+      await createRelMut.mutateAsync({
+        sourceDatasetId: params.source ?? '',
+        targetDatasetId: params.target ?? '',
+        sourceColumn: params.sourceHandle?.replace('-source', '') ?? '',
+        targetColumn: params.targetHandle?.replace('-target', '') ?? '',
+        relType: 'one-to-many',
+      });
+    } catch {
+      toast({ title: 'Failed to save relationship', variant: 'destructive' });
+    }
+  }, [setEdges, createRelMut, toast]);
+
+  // Delete edge → also delete from backend
+  const onEdgesDelete = useCallback((deletedEdges: Edge[]) => {
+    deletedEdges.forEach(e => {
+      // id matches backend relationship id
+      deleteRelMut.mutate(e.id);
+    });
+  }, [deleteRelMut]);
 
   return (
     <div className="space-y-4">
@@ -85,13 +120,13 @@ export default function DBDiagram() {
             <div>
               <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
                 DB Diagram
-                <HelpTooltip text="Visualisasi skema database. Drag tabel untuk mengatur posisi, lihat relasi antar tabel dengan garis penghubung." />
+                <HelpTooltip text="Visualisasi skema database. Drag untuk mengatur posisi, hubungkan tabel dengan garis. Relasi tersimpan persisten ke backend." />
               </h1>
-              <p className="text-muted-foreground">Visual database schema & relationships</p>
+              <p className="text-muted-foreground">Visual database schema &amp; relationships — backend persisted</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setAutoLayout(!autoLayout)}>
+            <Button variant="outline" size="sm">
               <Maximize className="w-4 h-4 mr-1" /> Auto Layout
             </Button>
           </div>
@@ -115,6 +150,7 @@ export default function DBDiagram() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onEdgesDelete={onEdgesDelete}
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ padding: 0.2 }}

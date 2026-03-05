@@ -118,6 +118,11 @@ func main() {
 	etlH := handlers.NewETLHandler(db, hub)
 	schemaH := handlers.NewSchemaHandler(db)
 	importH := handlers.NewImportHandler(db)
+	// P1 BUG fixes: new handlers for backend-persisted bookmark/annotation/template/relationship
+	bookmarkH := handlers.NewBookmarkHandler(db)
+	annotationH := handlers.NewAnnotationHandler(db)
+	templateH := handlers.NewTemplateHandler(db)
+	relationshipH := handlers.NewRelationshipHandler(db)
 
 	// --- Fiber App ---
 	app := fiber.New(fiber.Config{
@@ -301,6 +306,31 @@ func main() {
 	importGrp.Post("/parse", importH.ParseFile)
 	importGrp.Post("/confirm", importH.ConfirmImport)
 
+	// P1 BUG fixes: backend-persistent routes
+	// BUG-H5: Bookmarks
+	bookmarks := api.Group("/bookmarks")
+	bookmarks.Get("/", bookmarkH.ListBookmarks)
+	bookmarks.Post("/", bookmarkH.CreateBookmark)
+	bookmarks.Delete("/:id", bookmarkH.DeleteBookmark)
+
+	// BUG-H6: Chart Annotations
+	annotations := api.Group("/annotations")
+	annotations.Get("/", annotationH.ListAnnotations)
+	annotations.Post("/", annotationH.CreateAnnotation)
+	annotations.Delete("/:id", annotationH.DeleteAnnotation)
+
+	// BUG-H4: Report Templates
+	reportTemplates := api.Group("/report-templates")
+	reportTemplates.Get("/", templateH.ListTemplates)
+	reportTemplates.Post("/", templateH.CreateTemplate)
+	reportTemplates.Delete("/:id", templateH.DeleteTemplate)
+
+	// BUG-H2: Dataset Relationships for DB Diagram
+	relationships := api.Group("/relationships")
+	relationships.Get("/", relationshipH.ListRelationships)
+	relationships.Post("/", relationshipH.CreateRelationship)
+	relationships.Delete("/:id", relationshipH.DeleteRelationship)
+
 	// --- Static Frontend (React SPA) ---
 	// Serve the built frontend from ../dist/ if it exists.
 	// All non-API routes return index.html (SPA client-side routing).
@@ -440,6 +470,7 @@ func autoMigrate(db *gorm.DB) error {
 		&models.SchemaTable{},
 		&models.SchemaRelationship{},
 		&models.UserAIConfig{}, // per-user encrypted AI config (security: API key stored server-side)
+		&models.Annotation{},   // BUG-H6: chart annotations persisted to DB
 	)
 }
 

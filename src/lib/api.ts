@@ -243,6 +243,34 @@ export const connectionApi = {
     delete: (id: string) => api.delete(`/connections/${id}`),
 };
 
+// BUG-H5: Bookmarks
+export const bookmarkApi = {
+    list: () => api.get<{ data: Bookmark[] }>('/bookmarks'),
+    create: (payload: BookmarkCreate) => api.post<Bookmark>('/bookmarks', payload),
+    delete: (id: string) => api.delete(`/bookmarks/${id}`),
+};
+
+// BUG-H6: Chart Annotations
+export const annotationApi = {
+    list: (datasetId?: string) => api.get<{ data: AnnotationItem[] }>('/annotations', { params: datasetId ? { datasetId } : undefined }),
+    create: (payload: AnnotationCreate) => api.post<AnnotationItem>('/annotations', payload),
+    delete: (id: string) => api.delete(`/annotations/${id}`),
+};
+
+// BUG-H4: Report Templates
+export const reportTemplateApi = {
+    list: () => api.get<{ data: UserReportTemplate[] }>('/report-templates'),
+    create: (payload: UserReportTemplateCreate) => api.post<UserReportTemplate>('/report-templates', payload),
+    delete: (id: string) => api.delete(`/report-templates/${id}`),
+};
+
+// BUG-H2: Dataset Relationships (DB Diagram)
+export const relationshipApi = {
+    list: () => api.get<{ data: DataRelationship[] }>('/relationships'),
+    create: (payload: RelationshipCreate) => api.post<DataRelationship>('/relationships', payload),
+    delete: (id: string) => api.delete(`/relationships/${id}`),
+};
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -541,3 +569,89 @@ export const importApi = {
         });
     },
 };
+
+// ── P1 Types ──────────────────────────────────────────────────────────────────
+
+export interface Bookmark {
+    id: string;
+    userId: string;
+    datasetId: string;
+    name: string;
+    filters: { column: string; value: string }[];
+    sortColumn: string;
+    sortDirection: string;
+    createdAt: string;
+}
+
+export interface BookmarkCreate {
+    name: string;
+    datasetId: string;
+    filters: { column: string; value: string }[];
+    sortColumn?: string;
+    sortDirection?: string;
+}
+
+export interface AnnotationItem {
+    id: string;
+    userId: string;
+    datasetId: string;
+    xCol: string;
+    yCol: string;
+    label: string;
+    value: number;
+    color: string;
+    type: string;
+    createdAt: string;
+}
+
+export interface AnnotationCreate {
+    datasetId: string;
+    xCol?: string;
+    yCol?: string;
+    label: string;
+    value: number;
+    color?: string;
+    type?: string;
+}
+
+export interface UserReportTemplate {
+    id: string;
+    userId: string;
+    name: string;
+    description: string;
+    category: string;
+    source: string;
+    pages: unknown[];
+    colorScheme: Record<string, string>;
+    isDefault: boolean;
+    createdAt: string;
+}
+
+export interface UserReportTemplateCreate {
+    name: string;
+    description?: string;
+    category?: string;
+    source?: string;
+    pages?: unknown[];
+    colorScheme?: Record<string, string>;
+}
+
+export interface DataRelationship {
+    id: string;
+    userId: string;
+    sourceDatasetId: string;
+    targetDatasetId: string;
+    sourceColumn: string;
+    targetColumn: string;
+    relType: string;
+    createdAt: string;
+}
+
+export interface RelationshipCreate {
+    sourceDatasetId: string;
+    targetDatasetId: string;
+    sourceColumn?: string;
+    targetColumn?: string;
+    relType?: string;
+}
+
