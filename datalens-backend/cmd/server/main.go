@@ -46,9 +46,22 @@ func main() {
 	// --- Database ---
 	db, err := initDB(cfg)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to database")
+		log.Fatal().Err(err).Msg("Failed to connect to local database")
 	}
-	log.Info().Msg("Database connected")
+	log.Info().Msg("Local Database connected")
+
+	// --- Supabase Database ---
+	var supabaseDB *gorm.DB
+	if cfg.DB.SupabaseURL != "" {
+		supabaseDB, err = initSupabaseDB(cfg)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to connect to Supabase database (non-fatal)")
+		} else {
+			log.Info().Msg("Supabase database connected")
+		}
+	}
+	// To prevent unused variable errors later if we don't pass supabaseDB to handlers yet
+	_ = supabaseDB
 
 	// --- Auto-migrate all models ---
 	if err := autoMigrate(db); err != nil {
@@ -467,6 +480,54 @@ func initDB(cfg *config.Config) (*gorm.DB, error) {
 	}
 	if lastErr != nil {
 		return nil, fmt.Errorf("DB connection failed after %d attempts: %w", maxAttempts, lastErr)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDB.SetMaxOpenConns(cfg.DB.MaxConnections)
+	sqlDB.SetMaxIdleConns(cfg.DB.MaxIdle)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+
+	return db, nil
+}
+
+// initSupabaseDB creates a GORM PostgreSQL connection for the Supabase database.
+func initSupabaseDB(cfg *config.Config) (*gorm.DB, error) {
+	if cfg.DB.SupabaseURL == "" {
+		return nil, fmt.Errorf("SUPABASE_DB_URL is not set")
+	}
+
+	gormCfg := &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	}
+
+	const maxAttempts = 5
+	var db *gorm.DB
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var openErr error
+		db, openErr = gorm.Open(postgres.Open(cfg.DB.SupabaseURL), gormCfg)
+		if openErr == nil {
+			sqlDB, pingErr := db.DB()
+			if pingErr == nil && sqlDB.Ping() == nil {
+				lastErr = nil
+				break
+			}
+			lastErr = fmt.Errorf("supabase db ping failed")
+		} else {
+			lastErr = openErr
+		}
+		if attempt < maxAttempts {
+			log.Warn().Err(lastErr).Int("attempt", attempt).Msg("Supabase DB not ready, retrying in 3s...")
+			time.Sleep(3 * time.Second)
+		}
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("Supabase DB connection failed after %d attempts: %w", maxAttempts, lastErr)
 	}
 
 	sqlDB, err := db.DB()

@@ -31,6 +31,7 @@ type ServerConfig struct {
 
 type DatabaseConfig struct {
 	URL            string
+	SupabaseURL    string
 	MaxConnections int
 	MaxIdle        int
 }
@@ -102,6 +103,8 @@ func Load() (*Config, error) {
 	// Defaults
 	v.SetDefault("PORT", "8080")
 	v.SetDefault("ENV", "development")
+	v.SetDefault("DATABASE_URL", "")
+	v.SetDefault("SUPABASE_DB_URL", "")
 	v.SetDefault("DB_MAX_CONNECTIONS", 50)
 	v.SetDefault("DB_MAX_IDLE", 10)
 	v.SetDefault("JWT_EXPIRY", "15m")
@@ -163,6 +166,7 @@ func Load() (*Config, error) {
 		},
 		DB: DatabaseConfig{
 			URL:            v.GetString("DATABASE_URL"),
+			SupabaseURL:    v.GetString("SUPABASE_DB_URL"),
 			MaxConnections: v.GetInt("DB_MAX_CONNECTIONS"),
 			MaxIdle:        v.GetInt("DB_MAX_IDLE"),
 		},
