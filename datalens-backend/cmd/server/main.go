@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"datalens/internal/config"
+	"datalens/internal/email"
 	"datalens/internal/handlers"
 	"datalens/internal/middleware"
 	"datalens/internal/migrations"
@@ -96,9 +97,13 @@ func main() {
 		}
 	}
 
+	// --- Email Service ---
+	// BUG-09: Create mailer (falls back to NoOpMailer in dev if SMTP_HOST not set)
+	mailer := email.NewSMTPMailer(cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.Username, cfg.SMTP.Password, cfg.SMTP.From)
+
 	// --- Build Handlers ---
-	authH := handlers.NewAuthHandler(db, rdb, cfg.JWT.Secret, cfg.JWT.Expiry, cfg.JWT.RefreshExpiry)
-	datasetH := handlers.NewDatasetHandler(db, fileStorage)
+	authH := handlers.NewAuthHandler(db, rdb, cfg.JWT.Secret, cfg.JWT.Expiry, cfg.JWT.RefreshExpiry, mailer, cfg.SMTP.AppURL)
+	datasetH := handlers.NewDatasetHandler(db, fileStorage, rdb)
 	dashboardH := handlers.NewDashboardHandler(db, hub)
 	reportH := handlers.NewReportHandler(db, hub)
 	kpiH := handlers.NewKPIHandler(db)

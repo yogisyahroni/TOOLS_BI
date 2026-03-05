@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	excelize "github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
@@ -27,11 +29,12 @@ import (
 type DatasetHandler struct {
 	db      *gorm.DB
 	storage storage.FileStorage
+	rdb     *redis.Client // PERF-07: Redis for stats caching
 }
 
 // NewDatasetHandler creates a new DatasetHandler.
-func NewDatasetHandler(db *gorm.DB, stor storage.FileStorage) *DatasetHandler {
-	return &DatasetHandler{db: db, storage: stor}
+func NewDatasetHandler(db *gorm.DB, stor storage.FileStorage, rdb *redis.Client) *DatasetHandler {
+	return &DatasetHandler{db: db, storage: stor, rdb: rdb}
 }
 
 // ListDatasets returns all datasets for the authenticated user.
@@ -241,6 +244,7 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 
 // GetDatasetStats returns per-column statistics computed via SQL aggregation.
 // PERF-03 fix: uses DB-level aggregation instead of loading all rows into RAM.
+// PERF-07 fix: results are cached in Redis for 5 minutes to avoid repeated full-scan queries.
 // GET /api/v1/datasets/:id/stats
 func (h *DatasetHandler) GetDatasetStats(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
@@ -251,10 +255,20 @@ func (h *DatasetHandler) GetDatasetStats(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
+	// PERF-07: Check Redis cache first (TTL 5 minutes)
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf("stats:%s", id)
+	if h.rdb != nil {
+		if cached, err := h.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+			c.Set("X-Cache", "HIT")
+			c.Set("Content-Type", "application/json")
+			return c.Send(cached)
+		}
+	}
+
 	// Decode column definitions to know column names and types
 	var colDefs []models.ColumnDef
 	if err := json.Unmarshal(ds.Columns, &colDefs); err != nil || len(colDefs) == 0 {
-		// Fallback: return empty stats
 		return c.JSON(map[string]interface{}{})
 	}
 
@@ -317,6 +331,14 @@ func (h *DatasetHandler) GetDatasetStats(c *fiber.Ctx) error {
 		stats[col.Name] = colStat
 	}
 
+	// PERF-07: Marshal result and cache in Redis (5 min TTL)
+	if h.rdb != nil {
+		if jsonBytes, err := json.Marshal(stats); err == nil {
+			_ = h.rdb.Set(ctx, cacheKey, jsonBytes, 5*time.Minute).Err()
+		}
+	}
+
+	c.Set("X-Cache", "MISS")
 	return c.JSON(stats)
 }
 
@@ -334,6 +356,11 @@ func (h *DatasetHandler) DeleteDataset(c *fiber.Ctx) error {
 	now := time.Now()
 	if err := h.db.Model(&ds).Update("deleted_at", now).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete dataset"})
+	}
+
+	// PERF-07: Invalidate stats cache when dataset is deleted
+	if h.rdb != nil {
+		_ = h.rdb.Del(context.Background(), fmt.Sprintf("stats:%s", id)).Err()
 	}
 
 	// Drop dynamic data table asynchronously

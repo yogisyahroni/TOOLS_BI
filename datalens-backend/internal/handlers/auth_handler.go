@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"datalens/internal/email"
 	"datalens/internal/middleware"
 	"datalens/internal/models"
 
@@ -25,16 +26,20 @@ type AuthHandler struct {
 	jwtSecret  string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
+	mailer     email.Mailer
+	appURL     string
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(db *gorm.DB, rdb *redis.Client, secret string, access, refresh time.Duration) *AuthHandler {
+func NewAuthHandler(db *gorm.DB, rdb *redis.Client, secret string, access, refresh time.Duration, mailer email.Mailer, appURL string) *AuthHandler {
 	return &AuthHandler{
 		db:         db,
 		redis:      rdb,
 		jwtSecret:  secret,
 		accessTTL:  access,
 		refreshTTL: refresh,
+		mailer:     mailer,
+		appURL:     appURL,
 	}
 }
 
@@ -105,10 +110,26 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to store session"})
 	}
 
+	// BUG-09: Send welcome email asynchronously (non-blocking)
+	go func() {
+		_ = h.mailer.Send(userRecord.Email, "Welcome to DataLens!", email.WelcomeEmail(userRecord.DisplayName))
+	}()
+
+	// BUG-07: Set refresh token in httpOnly cookie
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+		MaxAge:   int(h.refreshTTL.Seconds()),
+		Path:     "/api/v1/auth",
+	})
+
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"user":         userRecord,
-		"accessToken":  accessToken,
-		"refreshToken": refreshToken,
+		"user":        userRecord,
+		"accessToken": accessToken,
+		// refreshToken omitted from body — client reads from httpOnly cookie
 	})
 }
 
@@ -141,24 +162,43 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to store session"})
 	}
 
+	// BUG-07: Set refresh token in httpOnly cookie to prevent XSS token theft
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+		MaxAge:   int(h.refreshTTL.Seconds()),
+		Path:     "/api/v1/auth",
+	})
+
 	return c.JSON(fiber.Map{
-		"user":         userRecord,
-		"accessToken":  accessToken,
-		"refreshToken": refreshToken,
+		"user":        userRecord,
+		"accessToken": accessToken,
+		// refreshToken is now in httpOnly cookie only
 	})
 }
 
 // Refresh issues a new access token using a valid refresh token.
+// BUG-07 fix: reads refresh token from httpOnly cookie (fallback to body for backwards compat).
 // POST /api/v1/auth/refresh
 func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
-	var body struct {
-		RefreshToken string `json:"refreshToken"`
+	// BUG-07 fix: read from httpOnly cookie first, fallback to body for API clients
+	rToken := c.Cookies("refresh_token")
+	if rToken == "" {
+		var body struct {
+			RefreshToken string `json:"refreshToken"`
+		}
+		if err := c.BodyParser(&body); err == nil {
+			rToken = body.RefreshToken
+		}
 	}
-	if err := c.BodyParser(&body); err != nil || body.RefreshToken == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "refresh_token required"})
+	if rToken == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "refresh_token required (cookie or body)"})
 	}
 
-	token, err := jwt.Parse(body.RefreshToken, func(t *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(rToken, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method")
 		}
@@ -181,7 +221,7 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 
 	// Verify refresh token is still valid in Redis (not logged out)
 	ctx := context.Background()
-	storedKey := fmt.Sprintf("refresh:%s:%s", userID, body.RefreshToken[:min(32, len(body.RefreshToken))])
+	storedKey := fmt.Sprintf("refresh:%s:%s", userID, rToken[:min(32, len(rToken))])
 	if exists, err := h.redis.Exists(ctx, storedKey).Result(); err != nil || exists == 0 {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Refresh token revoked"})
 	}
@@ -202,20 +242,36 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 	})
 }
 
-// Logout invalidates the refresh token.
+// Logout invalidates the refresh token and clears the cookie.
 // POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
-	var body struct {
-		RefreshToken string `json:"refreshToken"`
+	// Read refresh token from cookie first, body as fallback
+	rToken := c.Cookies("refresh_token")
+	if rToken == "" {
+		var body struct {
+			RefreshToken string `json:"refreshToken"`
+		}
+		_ = c.BodyParser(&body)
+		rToken = body.RefreshToken
 	}
-	_ = c.BodyParser(&body)
 
-	if body.RefreshToken != "" {
+	if rToken != "" {
 		userID := middleware.GetUserID(c)
 		ctx := context.Background()
-		storedKey := fmt.Sprintf("refresh:%s:%s", userID, body.RefreshToken[:min(32, len(body.RefreshToken))])
+		storedKey := fmt.Sprintf("refresh:%s:%s", userID, rToken[:min(32, len(rToken))])
 		h.redis.Del(ctx, storedKey)
 	}
+
+	// BUG-07: Clear the httpOnly cookie
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+		MaxAge:   -1,
+		Path:     "/api/v1/auth",
+	})
 
 	return c.JSON(fiber.Map{"message": "Logged out successfully"})
 }
@@ -250,15 +306,17 @@ func (h *AuthHandler) ForgotPassword(c *fiber.Ctx) error {
 	_ = h.db.Where("email = ?", body.Email).First(&userRecord)
 
 	if userRecord.ID != "" {
-		// Generate reset token
+		// Generate reset token and store in Redis (1 hour TTL)
 		resetToken := uuid.New().String()
 		ctx := context.Background()
 		key := fmt.Sprintf("reset:%s", resetToken)
 		h.redis.Set(ctx, key, userRecord.ID, time.Hour)
 
-		// In production, send email here. For now log the token.
-		// TODO: integrate SMTP sender
-		_ = resetToken
+		// BUG-09 fix: actually send the password reset email via SMTP
+		resetURL := fmt.Sprintf("%s/reset-password?token=%s", h.appURL, resetToken)
+		go func() {
+			_ = h.mailer.Send(userRecord.Email, "Reset your DataLens password", email.ResetPasswordEmail(resetURL))
+		}()
 	}
 
 	// Always return 200 to prevent email enumeration

@@ -1,9 +1,13 @@
 /**
  * DataLens API Client
  * Axios instance with:
- * - Automatic JWT Bearer token injection
- * - 401 → silent refresh → retry
+ * - JWT Bearer token injected from memory (NOT localStorage — XSS-safe)
+ * - 401 → silent refresh via httpOnly cookie → retry
+ * - withCredentials: true so browser sends refresh_token cookie automatically
  * - Consistent error shape
+ *
+ * BUG-07 fix: Refresh token is now stored in an httpOnly cookie set by the backend.
+ * The frontend never reads or writes the refresh token — it's invisible to JS.
  */
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
@@ -11,27 +15,20 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1';
 
 // ---------------------------------------------------------------------------
-// Token helpers (stored in memory + localStorage for refresh)
+// Access token: kept in memory only (never in localStorage — XSS-safe).
+// On page reload the user re-authenticates OR the silent refresh endpoint
+// is hit first with the httpOnly cookie. See useAuth hook for bootstrap logic.
 // ---------------------------------------------------------------------------
-let accessToken: string | null = localStorage.getItem('access_token');
+let accessToken: string | null = null;
 
 export function setAccessToken(token: string) {
     accessToken = token;
-    localStorage.setItem('access_token', token);
 }
 
 export function clearTokens() {
     accessToken = null;
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-}
-
-export function getRefreshToken(): string | null {
-    return localStorage.getItem('refresh_token');
-}
-
-export function setRefreshToken(token: string) {
-    localStorage.setItem('refresh_token', token);
+    // Refresh token is in an httpOnly cookie — cleared by the server on /auth/logout
+    // We deliberately do NOT clear localStorage here as no sensitive tokens live there
 }
 
 // ---------------------------------------------------------------------------
@@ -41,9 +38,11 @@ export const api = axios.create({
     baseURL: API_BASE,
     timeout: 30_000,
     headers: { 'Content-Type': 'application/json' },
+    // BUG-07: Must be true for browser to send httpOnly refresh_token cookie
+    withCredentials: true,
 });
 
-// REQUEST: Inject Authorization header
+// REQUEST: Inject Authorization header from in-memory access token
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
@@ -51,7 +50,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     return config;
 });
 
-// RESPONSE: Handle 401 → refresh → retry once
+// RESPONSE: Handle 401 → silent refresh via httpOnly cookie → retry once
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> = [];
 
@@ -68,12 +67,8 @@ api.interceptors.response.use(
             return Promise.reject(error);
         }
 
-        const rToken = getRefreshToken();
-        if (!rToken) {
-            clearTokens();
-            window.location.href = '/login';
-            return Promise.reject(error);
-        }
+        // BUG-07: Don't read refresh token from localStorage.
+        // The browser will send the httpOnly cookie automatically with withCredentials: true.
 
         if (isRefreshing) {
             return new Promise((resolve, reject) => {
@@ -88,11 +83,11 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            const { data } = await axios.post(`${API_BASE}/auth/refresh`, {
-                refreshToken: rToken,
+            // BUG-07: No need to send refreshToken in body — browser sends httpOnly cookie
+            const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, {
+                withCredentials: true,
             });
             setAccessToken(data.accessToken);
-            if (data.refreshToken) setRefreshToken(data.refreshToken);
             processQueue(null, data.accessToken);
             original.headers.Authorization = `Bearer ${data.accessToken}`;
             return api(original);
@@ -116,10 +111,11 @@ export const authApi = {
     register: (payload: { email: string; password: string; displayName: string }) =>
         api.post('/auth/register', payload),
     login: (email: string, password: string) =>
-        api.post<{ accessToken: string; refreshToken: string; user: UserProfile }>(
+        api.post<{ accessToken: string; user: UserProfile }>(
             '/auth/login',
             { email, password }
         ),
+    // BUG-07: logout clears httpOnly cookie via backend (no token needed in body)
     logout: () => api.post('/auth/logout'),
     me: () => api.get<UserProfile>('/auth/me'),
     forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),

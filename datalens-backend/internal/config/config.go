@@ -21,6 +21,7 @@ type Config struct {
 	RateLimit  RateLimitConfig
 	Encryption EncryptionConfig
 	Static     StaticConfig
+	SMTP       SMTPConfig
 }
 
 type ServerConfig struct {
@@ -83,6 +84,17 @@ type StaticConfig struct {
 	Dir string // path to the React frontend dist/ folder (default: ../dist)
 }
 
+// SMTPConfig holds email delivery configuration.
+// BUG-09 fix: allows ForgotPassword to actually send password reset emails.
+type SMTPConfig struct {
+	Host     string // SMTP_HOST (e.g. smtp.gmail.com)
+	Port     string // SMTP_PORT (e.g. 587)
+	Username string // SMTP_USERNAME
+	Password string // SMTP_PASSWORD
+	From     string // SMTP_FROM (e.g. noreply@datalens.io)
+	AppURL   string // APP_URL (e.g. https://app.datalens.io) — used to build reset links
+}
+
 // Load reads configuration from environment variables and .env file.
 func Load() (*Config, error) {
 	v := viper.New()
@@ -107,6 +119,8 @@ func Load() (*Config, error) {
 	v.SetDefault("PIPELINE_NODE_TIMEOUT", 60)
 	v.SetDefault("PIPELINE_MAX_ROWS", 1000000)
 	v.SetDefault("STATIC_DIR", "../dist")
+	v.SetDefault("SMTP_PORT", "587")
+	v.SetDefault("APP_URL", "http://localhost:5173")
 
 	// Read from .env file if present
 	v.SetConfigFile(".env")
@@ -191,6 +205,14 @@ func Load() (*Config, error) {
 		},
 		Static: StaticConfig{
 			Dir: v.GetString("STATIC_DIR"),
+		},
+		SMTP: SMTPConfig{
+			Host:     v.GetString("SMTP_HOST"),
+			Port:     v.GetString("SMTP_PORT"),
+			Username: v.GetString("SMTP_USERNAME"),
+			Password: v.GetString("SMTP_PASSWORD"),
+			From:     v.GetString("SMTP_FROM"),
+			AppURL:   v.GetString("APP_URL"),
 		},
 	}
 
