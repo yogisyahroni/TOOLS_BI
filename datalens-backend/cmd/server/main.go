@@ -248,8 +248,10 @@ func main() {
 	cronAlias.Put("/:id", cronH.UpdateCronJob)
 	cronAlias.Delete("/:id", cronH.DeleteCronJob)
 
-	// AI route
+	// AI routes
 	api.Post("/ask-data", aiH.AskData)
+	api.Post("/ask-data/stream", aiH.StreamAskData)   // SSE: token-by-token SQL + results
+	api.Post("/reports/stream", aiH.StreamGenerateReport) // SSE: report generation
 
 	// Chart routes
 	charts := api.Group("/charts")

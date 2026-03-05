@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, FileText, Lightbulb, TrendingUp, Target,
   Send, Loader2, AlertTriangle, Shield, Download, Layout,
+  CheckCircle2, Database, Cpu, Zap, Circle,
 } from 'lucide-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
@@ -14,11 +15,86 @@ import { AIChatPanel } from '@/components/AIChatPanel';
 import { builtinTemplates } from '@/lib/builtinTemplates';
 import type { Report, ReportTemplate } from '@/types/data';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { api } from '@/lib/api';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Stream progress stage definition
+// ─────────────────────────────────────────────────────────────────────────────
+type Stage = 'idle' | 'thinking' | 'generating' | 'executing' | 'done' | 'error';
+
+interface ProgressStep {
+  id: Stage;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const STAGES: ProgressStep[] = [
+  { id: 'thinking', label: 'Analyzing request', icon: Cpu },
+  { id: 'generating', label: 'AI writing report', icon: Sparkles },
+  { id: 'done', label: 'Complete', icon: CheckCircle2 },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StreamingText — renders text with a blinking cursor as tokens arrive
+// ─────────────────────────────────────────────────────────────────────────────
+function StreamingText({ text, isDone }: { text: string; isDone: boolean }) {
+  return (
+    <div className="whitespace-pre-wrap text-foreground/90 font-mono text-sm leading-relaxed">
+      {text}
+      {!isDone && (
+        <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse align-middle" />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StageIndicator — visual pipeline showing current AI progress stage
+// ─────────────────────────────────────────────────────────────────────────────
+function StageIndicator({ currentStage }: { currentStage: Stage }) {
+  return (
+    <div className="flex items-center gap-2">
+      {STAGES.map((step, i) => {
+        const stageOrder: Stage[] = ['thinking', 'generating', 'done'];
+        const currentIdx = stageOrder.indexOf(currentStage);
+        const stepIdx = stageOrder.indexOf(step.id);
+        const isActive = step.id === currentStage;
+        const isDone = stepIdx < currentIdx || currentStage === 'done';
+
+        return (
+          <div key={step.id} className="flex items-center gap-2">
+            <div className={`
+              flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300
+              ${isActive ? 'bg-primary/20 text-primary border border-primary/40 shadow-glow' :
+                isDone ? 'bg-success/10 text-success border border-success/30' :
+                  'bg-muted/30 text-muted-foreground border border-border/40'}
+            `}>
+              {isActive ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : isDone ? (
+                <CheckCircle2 className="w-3 h-3" />
+              ) : (
+                <Circle className="w-3 h-3" />
+              )}
+              {step.label}
+            </div>
+            {i < STAGES.length - 1 && (
+              <div className={`h-px w-4 transition-all duration-500 ${isDone || isActive ? 'bg-primary/40' : 'bg-border/40'}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function AIReports() {
   const { dataSets, addReport, privacySettings, aiConfig, templates } = useDataStore();
   const { toast } = useToast();
@@ -28,10 +104,23 @@ export default function AIReports() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<Report | null>(null);
 
+  // Streaming state
+  const [streamingText, setStreamingText] = useState('');
+  const [streamStage, setStreamStage] = useState<Stage>('idle');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const streamBoxRef = useRef<HTMLDivElement>(null);
+
   const allTemplates = [...builtinTemplates, ...templates];
   const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId);
-
   const dataset = dataSets.find(ds => ds.id === selectedDataset);
+
+  // Auto-scroll streaming output box
+  useEffect(() => {
+    if (streamBoxRef.current) {
+      streamBoxRef.current.scrollTop = streamBoxRef.current.scrollHeight;
+    }
+  }, [streamingText]);
 
   const computeStats = () => {
     if (!dataset) return {};
@@ -56,20 +145,23 @@ export default function AIReports() {
     return stats;
   };
 
-  const handleGenerateReport = async () => {
+  // ── Streaming handler: calls /api/v1/reports/stream via SSE ──────────────
+  const handleStreamReport = async () => {
     if (!selectedDataset || !dataset) {
-      toast({ title: 'Select a dataset', description: 'Please select a dataset to generate a report from.', variant: 'destructive' });
+      toast({ title: 'Select a dataset', description: 'Please select a dataset first.', variant: 'destructive' });
       return;
     }
     if (!prompt.trim()) {
-      toast({ title: 'Enter a prompt', description: 'Please describe what kind of report you want.', variant: 'destructive' });
+      toast({ title: 'Enter a prompt', description: 'Describe what kind of report you want.', variant: 'destructive' });
       return;
     }
 
-    setIsGenerating(true);
-    try {
+    setIsStreaming(true);
+    setStreamingText('');
+    setStreamStage('thinking');
+    setGeneratedReport(null);
 
-    // Prepare data with privacy settings
+    // Build enriched prompt with template context & data stats
     let sampleData = dataset.data.slice(0, 10);
     if (privacySettings.excludeColumns.length > 0) {
       sampleData = sampleData.map(row => {
@@ -78,62 +170,116 @@ export default function AIReports() {
         return filtered;
       });
     }
-
-    const columns = dataset.columns
-      .filter(c => !privacySettings.excludeColumns.includes(c.name))
-      .map(c => ({ name: c.name, type: c.type }));
-
     const stats = computeStats();
+    const templateContext = selectedTemplate
+      ? `\n\nTemplate: "${selectedTemplate.name}" (${selectedTemplate.category}), Pages: ${selectedTemplate.pages.map(p => `"${p.title}"`).join(', ')}`
+      : '';
 
-    if (aiConfig?.apiKey) {
-      // Build template context for AI
-      const templateContext = selectedTemplate
-        ? `\n\nUse this report template structure:\nTemplate: "${selectedTemplate.name}" (${selectedTemplate.category})\nPages: ${selectedTemplate.pages.map(p => `"${p.title}" with sections: ${p.sections.map(s => `${s.type}(${s.title})`).join(', ')}`).join(' | ')}\nColor scheme: ${JSON.stringify(selectedTemplate.colorScheme)}\nGenerate content that fits this template layout with appropriate data for each section.`
-        : '';
+    const fullPrompt = `${prompt}${templateContext}
 
-      // Use real AI
-      const response = await generateReport(dataset.name, columns, sampleData, stats, prompt + templateContext);
+Dataset: "${dataset.name}" (${dataset.rowCount.toLocaleString()} rows)
+Columns: ${dataset.columns.filter(c => !privacySettings.excludeColumns.includes(c.name)).map(c => `${c.name}(${c.type})`).join(', ')}
+Stats sample: ${JSON.stringify(Object.fromEntries(Object.entries(stats).slice(0, 5)), null, 1)}
+Sample data (first 5 rows): ${JSON.stringify(sampleData.slice(0, 5), null, 1)}
 
-      if (response.error) {
-        toast({ title: 'AI Error', description: response.error, variant: 'destructive' });
-        setIsGenerating(false);
-        return;
+Format your response as a comprehensive markdown report with:
+# [Title]
+## Executive Summary
+## Key Findings
+## Data Analysis
+## Recommendations
+## Conclusion`;
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    try {
+      const baseUrl = (api.defaults.baseURL || '').replace(/\/$/, '');
+      const response = await fetch(`${baseUrl}/reports/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        credentials: 'include',
+        body: JSON.stringify({ datasetId: selectedDataset, prompt: fullPrompt }),
+        signal: abort.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Server error: ${response.status}`);
       }
 
-      try {
-        const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          const report: Report = {
-            id: generateId(),
-            title: parsed.title || `${dataset.name} Analysis Report`,
-            content: parsed.content || response.content,
-            story: parsed.story || '',
-            decisions: parsed.decisions || [],
-            recommendations: parsed.recommendations || [],
-            dataSetId: selectedDataset,
-            createdAt: new Date(),
-          };
-          setGeneratedReport(report);
-          addReport(report);
-          toast({ title: 'Report generated!', description: 'AI-powered report has been created.' });
-        } else {
-          // AI returned plain text
-          const report: Report = {
-            id: generateId(),
-            title: `${dataset.name} Analysis Report`,
-            content: response.content,
-            story: '',
-            decisions: [],
-            recommendations: [],
-            dataSetId: selectedDataset,
-            createdAt: new Date(),
-          };
-          setGeneratedReport(report);
-          addReport(report);
-          toast({ title: 'Report generated!' });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            // event type captured on next iteration
+          } else if (line.startsWith('data: ')) {
+            const eventLine = lines[lines.indexOf(line) - 1] ?? '';
+            const eventType = eventLine.replace('event: ', '');
+            const data = line.replace('data: ', '');
+
+            if (eventType === 'progress') {
+              try {
+                const p = JSON.parse(data);
+                setStreamStage(p.stage as Stage);
+              } catch { /* ignore */ }
+            } else if (eventType === 'token') {
+              try {
+                const token = JSON.parse(data);
+                fullContent += token;
+                setStreamingText(fullContent);
+                setStreamStage('generating');
+              } catch { /* ignore */ }
+            } else if (eventType === 'done') {
+              setStreamStage('done');
+              // Persist report
+              const report: Report = {
+                id: generateId(),
+                title: fullContent.split('\n')[0]?.replace(/^#\s*/, '').trim() || `${dataset.name} Analysis Report`,
+                content: fullContent,
+                story: '',
+                decisions: [],
+                recommendations: [],
+                dataSetId: selectedDataset,
+                createdAt: new Date(),
+              };
+              setGeneratedReport(report);
+              addReport(report);
+              toast({ title: '✅ Report generated!', description: 'AI report has been created and saved.' });
+            } else if (eventType === 'error') {
+              try { toast({ title: 'AI Error', description: JSON.parse(data), variant: 'destructive' }); } catch { /* */ }
+              setStreamStage('error');
+            }
+          }
         }
-      } catch {
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+
+      // Fallback to non‑streaming (no API key configured, etc.)
+      try {
+        setStreamStage('generating');
+        const response = await generateReport(
+          dataset.name,
+          dataset.columns.filter(c => !privacySettings.excludeColumns.includes(c.name)).map(c => ({ name: c.name, type: c.type })),
+          sampleData,
+          computeStats(),
+          prompt + (selectedTemplate ? `\n\nTemplate: ${selectedTemplate.name}` : ''),
+        );
+        if (response.error) throw new Error(response.error);
+
+        setStreamingText(response.content);
+        setStreamStage('done');
         const report: Report = {
           id: generateId(),
           title: `${dataset.name} Analysis Report`,
@@ -147,32 +293,19 @@ export default function AIReports() {
         setGeneratedReport(report);
         addReport(report);
         toast({ title: 'Report generated!' });
+      } catch (fallbackErr: any) {
+        toast({ title: 'Error', description: fallbackErr.message || 'Failed to generate report', variant: 'destructive' });
+        setStreamStage('error');
       }
-    } else {
-      // Fallback: generate locally without AI
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const report: Report = {
-        id: generateId(),
-        title: `${dataset.name} Analysis Report`,
-        content: `## Executive Summary\n\nAnalysis of "${dataset.name}" dataset with ${dataset.rowCount.toLocaleString()} records across ${dataset.columns.length} columns.\n\n## Key Findings\n\n${Object.entries(stats).map(([col, s]: [string, any]) => {
-          if (s.avg) return `- **${col}**: Min ${s.min}, Max ${s.max}, Avg ${s.avg}, Sum ${s.sum}`;
-          return `- **${col}**: ${s.uniqueValues} unique values`;
-        }).join('\n')}\n\n## Analysis Request\n\n"${prompt}"\n\n> ⚠️ This is a basic report generated without AI. Configure an AI provider in Settings for intelligent, detailed analysis.`,
-        story: `Dataset "${dataset.name}" contains ${dataset.rowCount} records. A comprehensive AI-powered analysis requires configuring an AI provider in Settings.`,
-        decisions: ['Configure AI provider for deeper analysis', 'Review data quality metrics', 'Identify key business metrics to track'],
-        recommendations: ['Setup API key in Settings → AI Configuration', 'Upload more data for comprehensive analysis', 'Use ETL Pipeline to clean and transform data'],
-        dataSetId: selectedDataset,
-        createdAt: new Date(),
-      };
-      setGeneratedReport(report);
-      addReport(report);
-      toast({ title: 'Basic report generated', description: 'Configure AI in Settings for intelligent reports.' });
-    }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to generate report', variant: 'destructive' });
     } finally {
-      setIsGenerating(false);
+      setIsStreaming(false);
     }
+  };
+
+  const handleStop = () => {
+    abortRef.current?.abort();
+    setIsStreaming(false);
+    setStreamStage('done');
   };
 
   return (
@@ -183,8 +316,10 @@ export default function AIReports() {
             <Sparkles className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">AI Reports <HelpTooltip text="Pilih dataset dan template (opsional), lalu deskripsikan analisis yang diinginkan. AI akan membuat laporan lengkap dengan insight, keputusan, dan rekomendasi." /></h1>
-            <p className="text-muted-foreground">Generate intelligent reports from your data</p>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+              AI Reports <HelpTooltip text="Pilih dataset dan template (opsional), lalu deskripsikan analisis yang diinginkan. AI akan membuat laporan lengkap secara streaming — kamu bisa melihat progress kata per kata." />
+            </h1>
+            <p className="text-muted-foreground">Generate intelligent reports from your data — streamed in real-time</p>
           </div>
         </div>
       </motion.div>
@@ -199,7 +334,7 @@ export default function AIReports() {
             {privacySettings.maskSensitiveData && 'Sensitive data is masked. '}
             {privacySettings.anonymizeData && 'Data is anonymized. '}
             {privacySettings.excludeColumns.length > 0 && `${privacySettings.excludeColumns.length} columns excluded. `}
-            {aiConfig?.apiKey ? `Using ${aiConfig.provider} (${aiConfig.model})` : '⚠️ AI not configured - using basic analysis.'}
+            {aiConfig?.apiKey ? `Using ${aiConfig.provider} (${aiConfig.model}) — streaming enabled` : '⚠️ AI not configured — using fallback analysis.'}
           </p>
         </div>
       </motion.div>
@@ -209,7 +344,9 @@ export default function AIReports() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
           className="lg:col-span-2 space-y-6">
           <div className="bg-card rounded-xl p-6 border border-border shadow-card">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Generate Report</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" /> Generate Report
+            </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">Select Dataset</label>
@@ -238,7 +375,13 @@ export default function AIReports() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">What would you like to analyze?</label>
-                <Textarea placeholder="e.g., Analyze sales trends and identify top-performing products..." value={prompt} onChange={e => setPrompt(e.target.value)} className="min-h-[120px]" />
+                <Textarea
+                  placeholder="e.g., Analyze sales trends and identify top-performing products..."
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  className="min-h-[120px]"
+                  disabled={isStreaming}
+                />
               </div>
               {dataSets.length === 0 && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20">
@@ -246,9 +389,22 @@ export default function AIReports() {
                   <p className="text-sm text-warning">No datasets available. Please upload data first.</p>
                 </div>
               )}
-              <Button className="w-full gradient-primary text-primary-foreground" onClick={handleGenerateReport} disabled={isGenerating || dataSets.length === 0}>
-                {isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</> : <><Send className="w-4 h-4 mr-2" /> Generate Report</>}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 gradient-primary text-primary-foreground"
+                  onClick={handleStreamReport}
+                  disabled={isStreaming || dataSets.length === 0}
+                >
+                  {isStreaming
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
+                    : <><Send className="w-4 h-4 mr-2" /> Generate Report (Streaming)</>}
+                </Button>
+                {isStreaming && (
+                  <Button variant="outline" onClick={handleStop} className="border-destructive/50 text-destructive hover:bg-destructive/10">
+                    Stop
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -262,8 +418,8 @@ export default function AIReports() {
                 { icon: Lightbulb, title: 'Insights Discovery', prompt: 'Discover hidden insights and correlations in the data. Highlight unexpected findings.' },
                 { icon: FileText, title: 'Executive Summary', prompt: 'Generate an executive summary suitable for senior leadership, focusing on key metrics and strategic recommendations.' },
               ].map(t => (
-                <button key={t.title} onClick={() => setPrompt(t.prompt)}
-                  className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all text-left group">
+                <button key={t.title} onClick={() => setPrompt(t.prompt)} disabled={isStreaming}
+                  className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <t.icon className="w-4 h-4 text-primary" />
                   </div>
@@ -287,8 +443,82 @@ export default function AIReports() {
         </div>
       </div>
 
-      {/* Generated Report */}
-      {generatedReport && (
+      {/* ── Streaming Output Panel ──────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {(isStreaming || streamingText) && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="bg-card rounded-xl border border-border shadow-card overflow-hidden"
+          >
+            {/* Header with stage indicator */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/20">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-primary-foreground" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground text-sm">AI Report Stream</h3>
+                  <p className="text-xs text-muted-foreground">Real-time generation</p>
+                </div>
+              </div>
+              <StageIndicator currentStage={streamStage} />
+            </div>
+
+            {/* Streaming text with scrollable box */}
+            <div
+              ref={streamBoxRef}
+              className="p-6 max-h-[520px] overflow-y-auto bg-background/50"
+            >
+              {streamingText ? (
+                <StreamingText text={streamingText} isDone={!isStreaming} />
+              ) : (
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span className="text-sm">Connecting to AI...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer progress bar */}
+            {isStreaming && (
+              <div className="h-1 bg-muted">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-primary via-primary/60 to-transparent"
+                  animate={{ width: ['0%', '90%'] }}
+                  transition={{ duration: 30, ease: 'linear' }}
+                />
+              </div>
+            )}
+
+            {/* Export button (shown when done) */}
+            {streamStage === 'done' && streamingText && (
+              <div className="px-6 py-3 border-t border-border flex items-center justify-between">
+                <div className="flex items-center gap-2 text-success text-sm">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Report generation complete ({streamingText.length.toLocaleString()} chars)
+                </div>
+                <Button variant="outline" size="sm" onClick={() => {
+                  const blob = new Blob([streamingText], { type: 'text/markdown' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `AI-Report-${dataset?.name || 'export'}-${new Date().toISOString().slice(0, 10)}.md`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast({ title: 'Report exported as Markdown' });
+                }}>
+                  <Download className="w-4 h-4 mr-1" /> Export Markdown
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Saved Report (non-streaming legacy view) ──────────────────────────── */}
+      {generatedReport && streamStage === 'done' && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="bg-card rounded-xl p-8 border border-border shadow-card">
           <div className="flex items-center justify-between mb-6">
@@ -298,11 +528,14 @@ export default function AIReports() {
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-foreground">{generatedReport.title}</h2>
-                <p className="text-sm text-muted-foreground">Generated on {new Date(generatedReport.createdAt).toLocaleDateString()}</p>
+                <p className="text-sm text-muted-foreground">
+                  <Database className="w-3 h-3 inline mr-1" />
+                  {dataset?.name} · {new Date(generatedReport.createdAt).toLocaleDateString()}
+                </p>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={() => {
-              const content = `# ${generatedReport.title}\n\nGenerated: ${new Date(generatedReport.createdAt).toLocaleDateString()}\n\n${generatedReport.content}\n\n## Data Story\n${generatedReport.story}\n\n## Key Decisions\n${generatedReport.decisions.map((d,i) => `${i+1}. ${d}`).join('\n')}\n\n## Recommendations\n${generatedReport.recommendations.map((r,i) => `${i+1}. ${r}`).join('\n')}`;
+              const content = `# ${generatedReport.title}\n\nGenerated: ${new Date(generatedReport.createdAt).toLocaleDateString()}\n\n${generatedReport.content}`;
               const blob = new Blob([content], { type: 'text/markdown' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
@@ -313,37 +546,21 @@ export default function AIReports() {
               <Download className="w-4 h-4 mr-1" /> Export
             </Button>
           </div>
-
-          <div className="prose prose-invert max-w-none">
-            <div className="whitespace-pre-wrap text-foreground/90">{generatedReport.content}</div>
-          </div>
-
-          {generatedReport.story && (
-            <div className="mt-8 p-6 rounded-xl bg-muted/50 border border-border">
-              <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Lightbulb className="w-5 h-5 text-primary" /> Data Story
-              </h3>
-              <p className="text-muted-foreground">{generatedReport.story}</p>
-            </div>
-          )}
-
-          {(generatedReport.decisions.length > 0 || generatedReport.recommendations.length > 0) && (
+          {generatedReport.decisions.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              {generatedReport.decisions.length > 0 && (
-                <div className="p-6 rounded-xl bg-success/5 border border-success/20">
-                  <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <Target className="w-5 h-5 text-success" /> Key Decisions
-                  </h3>
-                  <ul className="space-y-2">
-                    {generatedReport.decisions.map((d, i) => (
-                      <li key={i} className="flex items-start gap-2 text-muted-foreground">
-                        <span className="w-5 h-5 rounded-full bg-success/20 text-success flex items-center justify-center flex-shrink-0 text-xs font-bold">{i + 1}</span>
-                        {d}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div className="p-6 rounded-xl bg-success/5 border border-success/20">
+                <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-success" /> Key Decisions
+                </h3>
+                <ul className="space-y-2">
+                  {generatedReport.decisions.map((d, i) => (
+                    <li key={i} className="flex items-start gap-2 text-muted-foreground">
+                      <span className="w-5 h-5 rounded-full bg-success/20 text-success flex items-center justify-center flex-shrink-0 text-xs font-bold">{i + 1}</span>
+                      {d}
+                    </li>
+                  ))}
+                </ul>
+              </div>
               {generatedReport.recommendations.length > 0 && (
                 <div className="p-6 rounded-xl bg-info/5 border border-info/20">
                   <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
