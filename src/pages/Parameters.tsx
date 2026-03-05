@@ -9,48 +9,47 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter } from '@/hooks/useApi';
+import type { DashboardParameter } from '@/lib/api';
 
-interface Parameter {
-  id: string;
-  name: string;
-  type: 'number' | 'text' | 'list';
-  value: string;
-  min?: number;
-  max?: number;
-}
-
+// BUG-M1 fix: Parameters now persist to backend via /api/v1/parameters
 export default function Parameters() {
   const { dataSets } = useDataStore();
   const { toast } = useToast();
-  const [params, setParams] = useState<Parameter[]>([]);
   const [name, setName] = useState('');
   const [type, setType] = useState<'number' | 'text' | 'list'>('number');
   const [defaultVal, setDefaultVal] = useState('');
   const [dsId, setDsId] = useState('');
   const [filterCol, setFilterCol] = useState('');
 
+  const { data: params = [], isLoading } = useParameters();
+  const createMut = useCreateParameter();
+  const deleteMut = useDeleteParameter();
+  const updateMut = useUpdateParameter();
+
   const dataset = dataSets.find(ds => ds.id === dsId);
 
   const addParam = () => {
     if (!name) { toast({ title: 'Enter parameter name', variant: 'destructive' }); return; }
-    setParams(prev => [...prev, {
-      id: Date.now().toString(), name, type, value: defaultVal,
-      ...(type === 'number' ? { min: 0, max: 1000 } : {}),
-    }]);
-    toast({ title: 'Parameter created' });
-    setName(''); setDefaultVal('');
+    createMut.mutate({
+      name, type, defaultValue: defaultVal,
+      ...(type === 'number' ? { minVal: 0, maxVal: 1000 } : {}),
+    }, {
+      onSuccess: () => { toast({ title: 'Parameter created' }); setName(''); setDefaultVal(''); },
+      onError: () => toast({ title: 'Failed to create parameter', variant: 'destructive' }),
+    });
   };
 
-  const updateValue = (id: string, value: string) => setParams(prev => prev.map(p => p.id === id ? { ...p, value } : p));
+  const updateValue = (param: DashboardParameter, value: string) => {
+    updateMut.mutate({ id: param.id, data: { defaultValue: value } });
+  };
 
-  // Apply parameters as filters
   const filteredData = dataset?.data.filter(row => {
     if (!filterCol) return true;
     return params.every(p => {
-      if (!p.value) return true;
-      const cellVal = String(row[filterCol] || '');
-      if (p.type === 'number') return Number(row[filterCol]) >= Number(p.value);
-      return cellVal.toLowerCase().includes(p.value.toLowerCase());
+      if (!p.defaultValue) return true;
+      if (p.type === 'number') return Number(row[filterCol]) >= Number(p.defaultValue);
+      return String(row[filterCol] || '').toLowerCase().includes(p.defaultValue.toLowerCase());
     });
   }).slice(0, 50) || [];
 
@@ -82,27 +81,28 @@ export default function Parameters() {
               </SelectContent>
             </Select>
             <Input value={defaultVal} onChange={e => setDefaultVal(e.target.value)} placeholder="Default value" className="bg-muted/50 border-border" />
-            <Button onClick={addParam} className="w-full gradient-primary text-primary-foreground" size="sm">
-              <Plus className="w-4 h-4 mr-1" /> Add Parameter
+            <Button onClick={addParam} disabled={createMut.isPending} className="w-full gradient-primary text-primary-foreground" size="sm">
+              <Plus className="w-4 h-4 mr-1" /> {createMut.isPending ? 'Saving…' : 'Add Parameter'}
             </Button>
           </div>
 
-          {params.length > 0 && (
+          {!isLoading && params.length > 0 && (
             <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-3">
-              <h3 className="font-semibold text-foreground text-sm">Active Parameters</h3>
+              <h3 className="font-semibold text-foreground text-sm">Active Parameters ({params.length})</h3>
               {params.map(p => (
                 <div key={p.id} className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-foreground">{p.name}</span>
-                    <Button variant="ghost" size="sm" onClick={() => setParams(prev => prev.filter(x => x.id !== p.id))}><Trash2 className="w-3 h-3 text-destructive" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteMut.mutate(p.id)}><Trash2 className="w-3 h-3 text-destructive" /></Button>
                   </div>
                   {p.type === 'number' ? (
                     <div className="space-y-1">
-                      <Slider value={[Number(p.value) || 0]} min={p.min || 0} max={p.max || 1000} step={1} onValueChange={v => updateValue(p.id, String(v[0]))} />
-                      <span className="text-xs font-mono text-primary">{p.value || 0}</span>
+                      <Slider value={[Number(p.defaultValue) || 0]} min={p.minVal ?? 0} max={p.maxVal ?? 1000} step={1}
+                        onValueChange={v => updateValue(p, String(v[0]))} />
+                      <span className="text-xs font-mono text-primary">{p.defaultValue || 0}</span>
                     </div>
                   ) : (
-                    <Input value={p.value} onChange={e => updateValue(p.id, e.target.value)} className="bg-muted/50 border-border text-sm h-8" />
+                    <Input value={p.defaultValue} onChange={e => updateValue(p, e.target.value)} className="bg-muted/50 border-border text-sm h-8" />
                   )}
                 </div>
               ))}

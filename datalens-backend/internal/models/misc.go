@@ -104,3 +104,18 @@ type Annotation struct {
 }
 
 func (Annotation) TableName() string { return "annotations" }
+
+// FormatRule defines a conditional formatting rule for a dataset column (BUG-M4).
+type FormatRule struct {
+	ID        string    `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID    string    `json:"userId" gorm:"type:uuid;not null;index"`
+	DatasetID string    `json:"datasetId" gorm:"type:uuid;not null;index"`
+	Column    string    `json:"column" gorm:"size:100;not null"`
+	Condition string    `json:"condition" gorm:"size:20;not null"` // gt,lt,gte,lte,eq,contains,empty
+	Value     string    `json:"value" gorm:"size:255"`
+	BgColor   string    `json:"bgColor" gorm:"size:100"`
+	TextColor string    `json:"textColor" gorm:"size:100"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (FormatRule) TableName() string { return "format_rules" }

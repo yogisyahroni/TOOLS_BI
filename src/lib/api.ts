@@ -655,3 +655,110 @@ export interface RelationshipCreate {
     relType?: string;
 }
 
+
+// ── P2 Types ──────────────────────────────────────────────────────────────────
+
+export interface DashboardParameter {
+    id: string;
+    userId: string;
+    dashboardId: string;
+    name: string;
+    type: 'number' | 'text' | 'list' | 'date';
+    defaultValue: string;
+    minVal?: number;
+    maxVal?: number;
+    createdAt: string;
+}
+
+export interface DashboardParameterCreate {
+    dashboardId?: string;
+    name: string;
+    type: 'number' | 'text' | 'list' | 'date';
+    defaultValue?: string;
+    minVal?: number;
+    maxVal?: number;
+}
+
+export interface RLSRuleItem {
+    id: string;
+    userId: string;
+    datasetId: string;
+    role: string;
+    columnName: string;
+    allowedValues: string[];
+    enabled: boolean;
+    createdAt: string;
+}
+
+export interface RLSRuleCreate {
+    datasetId: string;
+    role: string;
+    columnName: string;
+    allowedValues: string[];
+    enabled?: boolean;
+}
+
+export interface FormatRuleItem {
+    id: string;
+    userId: string;
+    datasetId: string;
+    column: string;
+    condition: 'gt' | 'lt' | 'gte' | 'lte' | 'eq' | 'contains' | 'empty';
+    value: string;
+    bgColor: string;
+    textColor: string;
+    createdAt: string;
+}
+
+export interface FormatRuleCreate {
+    datasetId: string;
+    column: string;
+    condition: 'gt' | 'lt' | 'gte' | 'lte' | 'eq' | 'contains' | 'empty';
+    value?: string;
+    bgColor?: string;
+    textColor?: string;
+}
+
+export interface CalcFieldItem {
+    id: string;
+    userId: string;
+    datasetId: string;
+    name: string;
+    formula: string;
+    createdAt: string;
+}
+
+export interface CalcFieldCreate {
+    datasetId: string;
+    name: string;
+    formula: string;
+}
+
+// ── P2 API Objects ─────────────────────────────────────────────────────────────
+
+export const parameterApi = {
+    list: (datasetId?: string) => api.get<DashboardParameter[]>('/parameters', { params: datasetId ? { datasetId } : {} }),
+    create: (data: DashboardParameterCreate) => api.post<DashboardParameter>('/parameters', data),
+    update: (id: string, data: Partial<DashboardParameterCreate>) => api.put(`/parameters/${id}`, data),
+    delete: (id: string) => api.delete(`/parameters/${id}`),
+};
+
+export const rlsApi = {
+    list: (datasetId?: string) => api.get<RLSRuleItem[]>('/rls-rules', { params: datasetId ? { datasetId } : {} }),
+    create: (data: RLSRuleCreate) => api.post<RLSRuleItem>('/rls-rules', data),
+    toggle: (id: string, enabled: boolean) => api.patch(`/rls-rules/${id}/toggle`, { enabled }),
+    delete: (id: string) => api.delete(`/rls-rules/${id}`),
+};
+
+export const formatRuleApi = {
+    list: (datasetId?: string) => api.get<FormatRuleItem[]>('/format-rules', { params: datasetId ? { datasetId } : {} }),
+    create: (data: FormatRuleCreate) => api.post<FormatRuleItem>('/format-rules', data),
+    delete: (id: string) => api.delete(`/format-rules/${id}`),
+};
+
+export const calcFieldApi = {
+    list: (datasetId?: string) => api.get<CalcFieldItem[]>('/calc-fields', { params: datasetId ? { datasetId } : {} }),
+    create: (data: CalcFieldCreate) => api.post<CalcFieldItem>('/calc-fields', data),
+    delete: (id: string) => api.delete(`/calc-fields/${id}`),
+};
+

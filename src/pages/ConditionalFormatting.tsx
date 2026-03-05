@@ -8,15 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-
-interface FormatRule {
-  id: string;
-  column: string;
-  condition: 'gt' | 'lt' | 'eq' | 'gte' | 'lte' | 'contains' | 'empty';
-  value: string;
-  bgColor: string;
-  textColor: string;
-}
+import { useFormatRules, useCreateFormatRule, useDeleteFormatRule } from '@/hooks/useApi';
+import type { FormatRuleItem, FormatRuleCreate } from '@/lib/api';
 
 const CONDITIONS = [
   { value: 'gt', label: '>' },
@@ -35,7 +28,7 @@ const PRESETS = [
   { label: 'Info (Blue)', bg: 'hsl(199 89% 48% / 0.2)', text: 'hsl(199 89% 60%)' },
 ];
 
-function matchesRule(value: any, rule: FormatRule): boolean {
+function matchesRule(value: any, rule: FormatRuleItem): boolean {
   if (rule.condition === 'empty') return value == null || String(value).trim() === '';
   if (rule.condition === 'contains') return String(value).toLowerCase().includes(rule.value.toLowerCase());
   const num = Number(value);
@@ -54,26 +47,38 @@ function matchesRule(value: any, rule: FormatRule): boolean {
   }
 }
 
+// BUG-M4 fix: Conditional Formatting rules now persist to backend via /api/v1/format-rules
 export default function ConditionalFormatting() {
   const { dataSets } = useDataStore();
   const { toast } = useToast();
   const [selectedDataSet, setSelectedDataSet] = useState('');
-  const [rules, setRules] = useState<FormatRule[]>([]);
   const [newCol, setNewCol] = useState('');
   const [newCond, setNewCond] = useState<string>('gt');
   const [newVal, setNewVal] = useState('');
   const [newBg, setNewBg] = useState(PRESETS[0].bg);
   const [newText, setNewText] = useState(PRESETS[0].text);
 
+  const { data: allRules = [], isLoading } = useFormatRules(selectedDataSet || undefined);
+  const createMut = useCreateFormatRule();
+  const deleteMut = useDeleteFormatRule();
+
   const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const rules = useMemo(() => allRules.filter(r => !selectedDataSet || r.datasetId === selectedDataSet), [allRules, selectedDataSet]);
 
   const addRule = () => {
     if (!newCol) { toast({ title: 'Select a column', variant: 'destructive' }); return; }
-    setRules(prev => [...prev, {
-      id: Date.now().toString(), column: newCol, condition: newCond as FormatRule['condition'],
-      value: newVal, bgColor: newBg, textColor: newText,
-    }]);
-    toast({ title: 'Rule added' });
+    const payload: FormatRuleCreate = {
+      datasetId: selectedDataSet,
+      column: newCol,
+      condition: newCond as FormatRuleCreate['condition'],
+      value: newVal,
+      bgColor: newBg,
+      textColor: newText,
+    };
+    createMut.mutate(payload, {
+      onSuccess: () => toast({ title: 'Rule added' }),
+      onError: () => toast({ title: 'Failed to add rule', variant: 'destructive' }),
+    });
   };
 
   const previewData = dataset?.data.slice(0, 50) || [];
@@ -101,7 +106,6 @@ export default function ConditionalFormatting() {
         </div>
       </motion.div>
 
-      {/* Dataset + Rules */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-3">
@@ -148,15 +152,14 @@ export default function ConditionalFormatting() {
                   </div>
                 </div>
 
-                <Button onClick={addRule} className="w-full gradient-primary text-primary-foreground" size="sm">
-                  <Plus className="w-4 h-4 mr-1" /> Add Rule
+                <Button onClick={addRule} disabled={createMut.isPending} className="w-full gradient-primary text-primary-foreground" size="sm">
+                  <Plus className="w-4 h-4 mr-1" /> {createMut.isPending ? 'Saving…' : 'Add Rule'}
                 </Button>
               </>
             )}
           </div>
 
-          {/* Active Rules */}
-          {rules.length > 0 && (
+          {!isLoading && rules.length > 0 && (
             <div className="bg-card rounded-xl p-5 border border-border shadow-card">
               <h3 className="font-semibold text-foreground text-sm mb-3">Active Rules ({rules.length})</h3>
               <div className="space-y-2">
@@ -165,7 +168,7 @@ export default function ConditionalFormatting() {
                     <span className="text-xs font-mono" style={{ color: r.textColor }}>
                       {r.column} {CONDITIONS.find(c => c.value === r.condition)?.label} {r.value}
                     </span>
-                    <Button variant="ghost" size="sm" onClick={() => setRules(prev => prev.filter(x => x.id !== r.id))}>
+                    <Button variant="ghost" size="sm" onClick={() => deleteMut.mutate(r.id)}>
                       <Trash2 className="w-3 h-3 text-destructive" />
                     </Button>
                   </div>
@@ -175,7 +178,6 @@ export default function ConditionalFormatting() {
           )}
         </motion.div>
 
-        {/* Preview Table */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="lg:col-span-2">
           {dataset ? (
             <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">

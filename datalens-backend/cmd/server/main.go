@@ -123,6 +123,11 @@ func main() {
 	annotationH := handlers.NewAnnotationHandler(db)
 	templateH := handlers.NewTemplateHandler(db)
 	relationshipH := handlers.NewRelationshipHandler(db)
+	// P2 BUG fixes: parameters, rls, format-rules, calc-fields
+	parameterH := handlers.NewParameterHandler(db)
+	rlsH := handlers.NewRLSHandler(db)
+	formatRuleH := handlers.NewFormatRuleHandler(db)
+	calcFieldH := handlers.NewCalcFieldHandler(db)
 
 	// --- Fiber App ---
 	app := fiber.New(fiber.Config{
@@ -331,6 +336,33 @@ func main() {
 	relationships.Post("/", relationshipH.CreateRelationship)
 	relationships.Delete("/:id", relationshipH.DeleteRelationship)
 
+	// P2 BUG fixes: backend-persistent routes
+	// BUG-M1: Parameters
+	parameters := api.Group("/parameters")
+	parameters.Get("/", parameterH.ListParameters)
+	parameters.Post("/", parameterH.CreateParameter)
+	parameters.Put("/:id", parameterH.UpdateParameter)
+	parameters.Delete("/:id", parameterH.DeleteParameter)
+
+	// BUG-M6: Row-Level Security Rules
+	rlsRules := api.Group("/rls-rules")
+	rlsRules.Get("/", rlsH.ListRLSRules)
+	rlsRules.Post("/", rlsH.CreateRLSRule)
+	rlsRules.Patch("/:id/toggle", rlsH.ToggleRLSRule)
+	rlsRules.Delete("/:id", rlsH.DeleteRLSRule)
+
+	// BUG-M4: Conditional Formatting Rules
+	formatRules := api.Group("/format-rules")
+	formatRules.Get("/", formatRuleH.ListFormatRules)
+	formatRules.Post("/", formatRuleH.CreateFormatRule)
+	formatRules.Delete("/:id", formatRuleH.DeleteFormatRule)
+
+	// BUG-M8: Calculated Fields
+	calcFields := api.Group("/calc-fields")
+	calcFields.Get("/", calcFieldH.ListCalcFields)
+	calcFields.Post("/", calcFieldH.CreateCalcField)
+	calcFields.Delete("/:id", calcFieldH.DeleteCalcField)
+
 	// --- Static Frontend (React SPA) ---
 	// Serve the built frontend from ../dist/ if it exists.
 	// All non-API routes return index.html (SPA client-side routing).
@@ -471,6 +503,7 @@ func autoMigrate(db *gorm.DB) error {
 		&models.SchemaRelationship{},
 		&models.UserAIConfig{}, // per-user encrypted AI config (security: API key stored server-side)
 		&models.Annotation{},   // BUG-H6: chart annotations persisted to DB
+		&models.FormatRule{},   // BUG-M4: conditional formatting rules persisted to DB
 	)
 }
 

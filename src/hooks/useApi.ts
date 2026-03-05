@@ -16,6 +16,10 @@ import {
     annotationApi,
     reportTemplateApi,
     relationshipApi,
+    parameterApi,
+    rlsApi,
+    formatRuleApi,
+    calcFieldApi,
     type DataQueryParams,
     type KPICreate,
     type AlertCreate,
@@ -24,6 +28,10 @@ import {
     type AnnotationCreate,
     type UserReportTemplateCreate,
     type RelationshipCreate,
+    type DashboardParameterCreate,
+    type RLSRuleCreate,
+    type FormatRuleCreate,
+    type CalcFieldCreate,
 } from '@/lib/api';
 
 
@@ -455,5 +463,129 @@ export function useDeleteRelationship() {
     return useMutation({
         mutationFn: (id: string) => relationshipApi.delete(id),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['relationships'] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2 Hooks — Parameters (BUG-M1)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useParameters(datasetId?: string) {
+    return useQuery({
+        queryKey: ['parameters', datasetId],
+        queryFn: () => parameterApi.list(datasetId).then((r) => r.data),
+        staleTime: 1000 * 30,
+    });
+}
+
+export function useCreateParameter() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: DashboardParameterCreate) => parameterApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parameters'] }),
+    });
+}
+
+export function useUpdateParameter() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<DashboardParameterCreate> }) => parameterApi.update(id, data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parameters'] }),
+    });
+}
+
+export function useDeleteParameter() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => parameterApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['parameters'] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2 Hooks — RLS Rules (BUG-M6)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useRLSRules(datasetId?: string) {
+    return useQuery({
+        queryKey: ['rls-rules', datasetId],
+        queryFn: () => rlsApi.list(datasetId).then((r) => r.data),
+        staleTime: 1000 * 30,
+    });
+}
+
+export function useCreateRLSRule() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: RLSRuleCreate) => rlsApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['rls-rules'] }),
+    });
+}
+
+export function useToggleRLSRule() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => rlsApi.toggle(id, enabled),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['rls-rules'] }),
+    });
+}
+
+export function useDeleteRLSRule() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => rlsApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['rls-rules'] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2 Hooks — Format Rules (BUG-M4)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useFormatRules(datasetId?: string) {
+    return useQuery({
+        queryKey: ['format-rules', datasetId],
+        queryFn: () => formatRuleApi.list(datasetId).then((r) => r.data),
+        staleTime: 1000 * 30,
+    });
+}
+
+export function useCreateFormatRule() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: FormatRuleCreate) => formatRuleApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['format-rules'] }),
+    });
+}
+
+export function useDeleteFormatRule() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => formatRuleApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['format-rules'] }),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2 Hooks — Calculated Fields (BUG-M8)
+// ─────────────────────────────────────────────────────────────────────────────
+export function useCalcFields(datasetId?: string) {
+    return useQuery({
+        queryKey: ['calc-fields', datasetId],
+        queryFn: () => calcFieldApi.list(datasetId).then((r) => r.data),
+        staleTime: 1000 * 30,
+    });
+}
+
+export function useCreateCalcField() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: CalcFieldCreate) => calcFieldApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['calc-fields'] }),
+    });
+}
+
+export function useDeleteCalcField() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => calcFieldApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['calc-fields'] }),
     });
 }

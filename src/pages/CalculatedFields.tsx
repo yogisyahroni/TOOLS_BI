@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import type { CalculatedField } from '@/types/data';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { useCalcFields, useCreateCalcField, useDeleteCalcField } from '@/hooks/useApi';
 
 const FORMULA_TEMPLATES = [
   { label: 'SUM(column)', formula: 'SUM(column_name)', desc: 'Sum of all values' },
@@ -22,8 +22,6 @@ const FORMULA_TEMPLATES = [
 
 function evaluateFormula(formula: string, row: Record<string, any>, allRows: Record<string, any>[]): any {
   const f = formula.trim();
-
-  // Aggregation functions
   const aggMatch = f.match(/^(SUM|AVG|COUNT|MIN|MAX)\((\w+)\)$/i);
   if (aggMatch) {
     const [, fn, col] = aggMatch;
@@ -36,15 +34,11 @@ function evaluateFormula(formula: string, row: Record<string, any>, allRows: Rec
       case 'MAX': return vals.length ? Math.max(...vals) : 0;
     }
   }
-
-  // ROUND
   const roundMatch = f.match(/^ROUND\((.+),\s*(\d+)\)$/i);
   if (roundMatch) {
     const inner = evaluateFormula(roundMatch[1], row, allRows);
     return Number(Number(inner).toFixed(Number(roundMatch[2])));
   }
-
-  // CONCAT
   const concatMatch = f.match(/^CONCAT\((.+)\)$/i);
   if (concatMatch) {
     const parts = concatMatch[1].split(',').map(p => {
@@ -54,8 +48,6 @@ function evaluateFormula(formula: string, row: Record<string, any>, allRows: Rec
     });
     return parts.join('');
   }
-
-  // IF
   const ifMatch = f.match(/^IF\((.+?)\s*(>|<|>=|<=|=|!=)\s*(.+?),\s*(.+?),\s*(.+?)\)$/i);
   if (ifMatch) {
     const [, col, op, threshold, trueVal, falseVal] = ifMatch;
@@ -73,8 +65,6 @@ function evaluateFormula(formula: string, row: Record<string, any>, allRows: Rec
     }
     return cond ? clean(trueVal) : clean(falseVal);
   }
-
-  // Arithmetic: col_a + col_b, col_a * 2, etc.
   const arithMatch = f.match(/^(\w+)\s*([+\-*/])\s*(.+)$/);
   if (arithMatch) {
     const [, left, op, right] = arithMatch;
@@ -89,8 +79,6 @@ function evaluateFormula(formula: string, row: Record<string, any>, allRows: Rec
       }
     }
   }
-
-  // Percentage: (col_a / col_b) * 100
   const pctMatch = f.match(/^\((\w+)\s*\/\s*(\w+)\)\s*\*\s*(\d+)$/);
   if (pctMatch) {
     const [, a, b, mult] = pctMatch;
@@ -98,23 +86,25 @@ function evaluateFormula(formula: string, row: Record<string, any>, allRows: Rec
     const bv = Number(row[b] ?? 1);
     return bv !== 0 ? (av / bv) * Number(mult) : 0;
   }
-
-  // Direct column ref
   if (row[f] !== undefined) return row[f];
-
   return 'N/A';
 }
 
+// BUG-M8 fix: Calculated fields now persist to backend via /api/v1/calc-fields
 export default function CalculatedFields() {
-  const { dataSets, calculatedFields, addCalculatedField, removeCalculatedField } = useDataStore();
+  const { dataSets } = useDataStore();
   const { toast } = useToast();
   const [selectedDataSet, setSelectedDataSet] = useState('');
   const [fieldName, setFieldName] = useState('');
   const [formula, setFormula] = useState('');
   const [preview, setPreview] = useState<any[] | null>(null);
 
+  const { data: allFields = [], isLoading } = useCalcFields(selectedDataSet || undefined);
+  const createMut = useCreateCalcField();
+  const deleteMut = useDeleteCalcField();
+
   const dataset = dataSets.find(ds => ds.id === selectedDataSet);
-  const dsFields = calculatedFields.filter(f => f.dataSetId === selectedDataSet);
+  const dsFields = useMemo(() => allFields.filter(f => !selectedDataSet || f.datasetId === selectedDataSet), [allFields, selectedDataSet]);
 
   const handlePreview = () => {
     if (!dataset || !formula.trim()) return;
@@ -134,17 +124,13 @@ export default function CalculatedFields() {
       toast({ title: 'Fill all fields', variant: 'destructive' });
       return;
     }
-    addCalculatedField({
-      id: Date.now().toString(),
-      dataSetId: selectedDataSet,
-      name: fieldName,
-      formula,
-      createdAt: new Date(),
+    createMut.mutate({ datasetId: selectedDataSet, name: fieldName, formula }, {
+      onSuccess: () => {
+        toast({ title: 'Calculated field saved', description: fieldName });
+        setFieldName(''); setFormula(''); setPreview(null);
+      },
+      onError: () => toast({ title: 'Failed to save field', variant: 'destructive' }),
     });
-    toast({ title: 'Calculated field saved', description: fieldName });
-    setFieldName('');
-    setFormula('');
-    setPreview(null);
   };
 
   return (
@@ -162,7 +148,6 @@ export default function CalculatedFields() {
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Formula Builder */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="lg:col-span-2 space-y-4">
           <div className="bg-card rounded-xl p-6 border border-border shadow-card space-y-4">
             <h3 className="font-semibold text-foreground">New Calculated Field</h3>
@@ -203,13 +188,12 @@ export default function CalculatedFields() {
               <Button onClick={handlePreview} variant="outline" size="sm" disabled={!dataset || !formula}>
                 <Play className="w-4 h-4 mr-1" /> Preview
               </Button>
-              <Button onClick={handleSave} size="sm" className="gradient-primary text-primary-foreground" disabled={!fieldName || !formula || !selectedDataSet}>
-                <Plus className="w-4 h-4 mr-1" /> Save Field
+              <Button onClick={handleSave} size="sm" disabled={createMut.isPending || !fieldName || !formula || !selectedDataSet} className="gradient-primary text-primary-foreground">
+                <Plus className="w-4 h-4 mr-1" /> {createMut.isPending ? 'Saving…' : 'Save Field'}
               </Button>
             </div>
           </div>
 
-          {/* Preview */}
           {preview && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
               <div className="p-3 border-b border-border">
@@ -240,10 +224,9 @@ export default function CalculatedFields() {
             </motion.div>
           )}
 
-          {/* Saved Fields */}
-          {dsFields.length > 0 && (
+          {!isLoading && dsFields.length > 0 && (
             <div className="bg-card rounded-xl p-5 border border-border shadow-card">
-              <h3 className="font-semibold text-foreground mb-3">Saved Fields</h3>
+              <h3 className="font-semibold text-foreground mb-3">Saved Fields ({dsFields.length})</h3>
               <div className="space-y-2">
                 {dsFields.map(f => (
                   <div key={f.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
@@ -251,7 +234,7 @@ export default function CalculatedFields() {
                       <p className="text-sm font-semibold text-foreground">{f.name}</p>
                       <p className="text-xs text-muted-foreground font-mono">{f.formula}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => { removeCalculatedField(f.id); toast({ title: 'Deleted' }); }}>
+                    <Button variant="ghost" size="sm" onClick={() => { deleteMut.mutate(f.id); toast({ title: 'Deleted' }); }}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>
@@ -261,7 +244,6 @@ export default function CalculatedFields() {
           )}
         </motion.div>
 
-        {/* Formula Reference */}
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
           <div className="bg-card rounded-xl p-5 border border-border shadow-card">
             <div className="flex items-center gap-2 mb-3">
