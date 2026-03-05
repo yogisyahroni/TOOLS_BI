@@ -10,6 +10,7 @@ import (
 	"datalens/internal/config"
 	"datalens/internal/handlers"
 	"datalens/internal/middleware"
+	"datalens/internal/migrations"
 	"datalens/internal/models"
 	"datalens/internal/realtime"
 	"datalens/internal/scheduler"
@@ -53,6 +54,14 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to run database migrations")
 	}
 	log.Info().Msg("Database migrated")
+
+	// PERF-06: Create missing performance indexes after AutoMigrate.
+	// Uses CREATE INDEX IF NOT EXISTS — idempotent and safe to run every startup.
+	if err := migrations.AddPerformanceIndexes(db); err != nil {
+		log.Warn().Err(err).Msg("Performance index migration had warnings (non-fatal)")
+	} else {
+		log.Info().Msg("Performance indexes ensured")
+	}
 
 	// --- Redis ---
 	rdb := initRedis(cfg)
@@ -161,10 +170,14 @@ func main() {
 	// Apply auth to all remaining routes
 	api := v1.Use(authRequired)
 
+	// PERF-08: Strict rate limiter for expensive endpoints (5 req/min per IP).
+	// Upload can exhaust CPU/memory; external DB query can exhaust connection pool.
+	uploadRateLimit := middleware.RateLimiter(rdb, 5, 60) // 5 req/min
+
 	// Dataset routes
 	datasets := api.Group("/datasets")
 	datasets.Get("/", datasetH.ListDatasets)
-	datasets.Post("/upload", datasetH.UploadDataset)
+	datasets.Post("/upload", uploadRateLimit, datasetH.UploadDataset)
 	datasets.Get("/:id", datasetH.GetDataset)
 	datasets.Get("/:id/data", datasetH.QueryDatasetData)
 	datasets.Get("/:id/stats", datasetH.GetDatasetStats)
@@ -264,7 +277,7 @@ func main() {
 	conns.Post("/:id/test", schemaH.TestConnection)
 	conns.Get("/:id/schema", schemaH.GetSchema)
 	conns.Post("/:id/sync", schemaH.SyncSchema)
-	conns.Post("/:id/query", schemaH.QueryConnection)
+	conns.Post("/:id/query", uploadRateLimit, schemaH.QueryConnection) // PERF-08: rate-limit external DB queries
 	conns.Delete("/:id", schemaH.DeleteConnection)
 
 	// File Import routes (.pbix / .twb / .twbx / .pptx)

@@ -23,22 +23,42 @@ func NewChartHandler(db *gorm.DB, hub *realtime.Hub) *ChartHandler {
 	return &ChartHandler{db: db, hub: hub}
 }
 
-// ListCharts returns all saved charts for a user, filtered by optional datasetId.
-// GET /api/v1/charts?datasetId=...
+// ListCharts returns paginated saved charts for a user.
+// PERF-04 fix: added pagination (page/limit) to prevent unbounded data responses.
+// GET /api/v1/charts?datasetId=...&page=1&limit=20
 func (h *ChartHandler) ListCharts(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	datasetID := c.Query("datasetId")
 
-	query := h.db.Where("user_id = ?", userID).Order("created_at desc")
+	// PERF-04 fix: enforce pagination with max 100 per page
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 20)
+	if limit > 100 {
+		limit = 100
+	}
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	query := h.db.Model(&models.SavedChart{}).Where("user_id = ?", userID).Order("created_at desc")
 	if datasetID != "" {
 		query = query.Where("dataset_id = ?", datasetID)
 	}
 
+	var total int64
+	query.Count(&total)
+
 	var charts []models.SavedChart
-	if err := query.Find(&charts).Error; err != nil {
+	if err := query.Offset(offset).Limit(limit).Find(&charts).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch charts"})
 	}
-	return c.JSON(fiber.Map{"data": charts})
+	return c.JSON(fiber.Map{
+		"data":  charts,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	})
 }
 
 // GetChart returns a single saved chart.
