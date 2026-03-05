@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Upload, GitBranch, FileText, Shield, Settings,
-  ChevronLeft, ChevronRight, Database, Sparkles, Code2,
+  ChevronLeft, ChevronRight, Database, Sparkles, Code2, LogOut,
   Search, LayoutGrid, PaintBucket, MessageSquare, BookOpen, Target,
   Table2, Bell, Network, Calculator, Bookmark, Paintbrush, Layers,
   Globe, Link2, StickyNote, Variable, Clock, ShieldCheck, Code, FileDown, RefreshCw,
   Activity, Workflow, PlugZap, FolderInput, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/authStore';
 
 // ─── Menu structure with groups ───────────────────────────────────────────────
 interface MenuItem { icon: React.ElementType; label: string; path: string; badge?: string }
@@ -104,6 +105,17 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  const userInitials = user?.displayName
+    ? user.displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+    : (user?.email?.[0] ?? 'U').toUpperCase();
 
   const toggleGroup = (title: string) => {
     setCollapsedGroups(prev => {
@@ -252,18 +264,41 @@ export function Sidebar() {
         }
       </button>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border shrink-0">
+      {/* Footer — user info + logout */}
+      <div className="p-3 border-t border-sidebar-border shrink-0">
         <AnimatePresence mode="wait">
           {!collapsed && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full gradient-accent flex items-center justify-center">
-                <span className="text-xs font-bold text-foreground">AI</span>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex items-center gap-2"
+            >
+              <div className="w-8 h-8 rounded-full gradient-accent flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-foreground">{userInitials}</span>
               </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">AI Powered</p>
-                <p className="text-xs text-muted-foreground">Protected Mode</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {user?.displayName || user?.email || 'User'}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </div>
+              <button
+                onClick={handleLogout}
+                title="Logout"
+                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+          {collapsed && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center">
+              <button
+                onClick={handleLogout}
+                title="Logout"
+                className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
