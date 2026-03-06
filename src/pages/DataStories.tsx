@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { BookOpen, Sparkles, Loader2, Trash2, Eye, Plus } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { BookOpen, Sparkles, Loader2, Trash2, Eye, Plus, Share2, Download } from 'lucide-react';
+import { usePDF } from 'react-to-pdf';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -22,6 +24,8 @@ export default function DataStories() {
   const deleteMut = useDeleteStory();
   const generateMut = useGenerateReport();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { toPDF, targetRef } = usePDF({ filename: 'DataStory.pdf' });
 
   // AI generate mode
   const [selectedDsId, setSelectedDsId] = useState('');
@@ -34,6 +38,23 @@ export default function DataStories() {
 
   // View dialog
   const [viewStory, setViewStory] = useState<DataStory | null>(null);
+
+  useEffect(() => {
+    const sId = searchParams.get('storyId');
+    if (sId && stories.length > 0) {
+      const found = stories.find(s => s.id === sId);
+      if (found && (!viewStory || viewStory.id !== found.id)) {
+        setViewStory(found);
+      }
+    }
+  }, [searchParams, stories]);
+
+  const handleShare = (e: React.MouseEvent, storyId: string) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/stories?storyId=${storyId}`;
+    navigator.clipboard.writeText(url);
+    toast({ title: 'Link copied', description: 'Story link copied to clipboard.' });
+  };
 
   const handleGenerateAI = async () => {
     if (!selectedDsId) { toast({ title: 'Select a dataset first', variant: 'destructive' }); return; }
@@ -196,11 +217,24 @@ export default function DataStories() {
                         <Eye className="w-4 h-4" />
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
-                      <DialogHeader><DialogTitle>{viewStory?.title}</DialogTitle></DialogHeader>
-                      <div className="whitespace-pre-wrap text-foreground/90 leading-relaxed prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: viewStory?.content || '' }} />
+                    <DialogContent className="max-w-4xl max-h-[85vh] overflow-auto flex flex-col">
+                      <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b border-border mr-10">
+                        <DialogTitle className="text-2xl font-bold">{viewStory?.title}</DialogTitle>
+                        <Button variant="outline" size="sm" onClick={() => toPDF()} className="hidden md:flex">
+                          <Download className="w-4 h-4 mr-2" /> Export to PDF
+                        </Button>
+                      </DialogHeader>
+                      <div className="flex-1 p-2" ref={targetRef}>
+                        <div className="p-4 md:p-8 bg-background rounded-lg">
+                          <h1 className="text-3xl font-bold mb-6 text-foreground print:text-black">{viewStory?.title}</h1>
+                          <div className="whitespace-pre-wrap text-foreground/90 leading-relaxed prose prose-sm md:prose-base dark:prose-invert max-w-none print:prose-neutral" dangerouslySetInnerHTML={{ __html: viewStory?.content || '' }} />
+                        </div>
+                      </div>
                     </DialogContent>
                   </Dialog>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={(e) => handleShare(e, story.id)}>
+                    <Share2 className="w-4 h-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
                     disabled={deleteMut.isPending}
                     onClick={() => deleteMut.mutate(story.id, { onSuccess: () => toast({ title: 'Story deleted' }) })}>
