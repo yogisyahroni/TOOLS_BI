@@ -72,14 +72,14 @@ export interface AIConfig {
 export interface SavedChart {
   id: string;
   title: string;
-  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar' | 'funnel' | 'treemap';
+  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'gauge' | 'sunburst' | 'sankey' | 'combo';
   dataSetId: string;
   xAxis: string;
   yAxis: string;
   groupBy?: string;
 }
 
-export type WidgetType = 'bar' | 'line' | 'pie' | 'area' | 'stat' | 'text' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'waterfall' | 'heatmap' | 'boxplot' | 'horizontal_bar';
+export type WidgetType = 'bar' | 'line' | 'pie' | 'area' | 'stat' | 'text' | 'action' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'waterfall' | 'heatmap' | 'boxplot' | 'horizontal_bar' | 'gauge' | 'sunburst' | 'sankey' | 'combo';
 
 export interface Widget {
   id: string;
@@ -90,6 +90,13 @@ export interface Widget {
   yAxis: string;
   groupBy?: string; // Menambahkan groupBy opsional (banyak digunakan di Heatmap dsb)
   width: 'half' | 'full' | 'third';
+  // Phase 14: Action Widgets
+  actionConfig?: {
+    url: string;
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    headers?: { key: string; value: string }[];
+    bodyTemplate?: string;
+  };
 }
 
 export interface DashboardConfig {

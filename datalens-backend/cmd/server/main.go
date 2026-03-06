@@ -15,6 +15,7 @@ import (
 	"datalens/internal/models"
 	"datalens/internal/realtime"
 	"datalens/internal/scheduler"
+	"datalens/internal/services"
 	"datalens/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
@@ -145,6 +146,11 @@ func main() {
 	drillConfigH := handlers.NewDrillConfigHandler(db)
 	embedH := handlers.NewEmbedHandler(db)
 	queryH := handlers.NewQueryHandler(db)
+	actionH := handlers.NewActionHandler(db)
+	commentH := handlers.NewCommentHandler(db, hub)
+
+	airbyteSvc := services.NewAirbyteService()
+	connectorH := handlers.NewConnectorHandler(airbyteSvc)
 
 	// --- Fiber App ---
 	app := fiber.New(fiber.Config{
@@ -254,6 +260,23 @@ func main() {
 	// Query routes
 	queries := api.Group("/query")
 	queries.Post("/auto-join", queryH.AutoJoinQuery)
+
+	// Action routes
+	actions := api.Group("/actions")
+	actions.Post("/execute", actionH.ExecuteAction)
+
+	// Comment routes
+	comments := api.Group("/comments")
+	comments.Get("/", commentH.GetComments)
+	comments.Post("/", commentH.CreateComment)
+	comments.Delete("/:id", commentH.DeleteComment)
+
+	// Connector routes (Airbyte Mock Integration)
+	connectors := api.Group("/connectors")
+	connectors.Get("/catalog", connectorH.GetCatalog)
+	connectors.Get("/active", connectorH.GetActive)
+	connectors.Post("/setup", connectorH.SetupConnection)
+	connectors.Post("/:id/sync", connectorH.TriggerSync)
 
 	// Alert routes
 	alerts := api.Group("/alerts")
@@ -590,6 +613,7 @@ func autoMigrate(db *gorm.DB) error {
 		&models.FormatRule{},   // BUG-M4: conditional formatting rules persisted to DB
 		&models.DrillConfig{},  // BUG-M2: drill hierarchy configs
 		&models.EmbedToken{},   // BUG-M5: secure embed tokens
+		&models.Comment{},      // Phase 15: Multiplayer comments
 	); err != nil {
 		return err
 	}

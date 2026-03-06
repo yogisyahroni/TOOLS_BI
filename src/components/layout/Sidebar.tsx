@@ -27,6 +27,7 @@ const menuGroups: MenuGroup[] = [
     title: 'Data Sources',
     items: [
       { icon: PlugZap, label: 'External Databases', path: '/connections', badge: 'NEW' },
+      { icon: Link2, label: 'Universial Connectors', path: '/connectors', badge: 'BETA' },
       { icon: FolderInput, label: 'Import File', path: '/import' },
       { icon: Upload, label: 'Upload Data', path: '/upload' },
       { icon: Database, label: 'Datasets', path: '/datasets' },

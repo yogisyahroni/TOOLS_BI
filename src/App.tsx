@@ -45,7 +45,7 @@ import ReportTemplates from "./pages/ReportTemplates";
 import Connections from "./pages/Connections";
 import ImportPage from "./pages/ImportPage";
 import NotFound from "./pages/NotFound";
-
+import DataConnectors from './pages/DataConnectors';
 
 
 const queryClient = new QueryClient({
@@ -69,6 +69,7 @@ function ProtectedLayout() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/upload" element={<UploadData />} />
         <Route path="/datasets" element={<Datasets />} />
+        <Route path="/connectors" element={<DataConnectors />} />
         <Route path="/explorer" element={<DataExplorer />} />
         <Route path="/ask-data" element={<AskData />} />
         <Route path="/pivot" element={<PivotTable />} />

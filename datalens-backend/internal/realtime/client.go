@@ -12,12 +12,13 @@ const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = 30 * time.Second
-	maxMessageSize = 512 * 1024 // 512 KB
+	maxMessageSize = 10 * 1024 * 1024 // 10 MB to allow large Yjs initial syncs
 )
 
 // Client is a single WebSocket connection to the hub.
 type Client struct {
 	UserID string
+	RoomID string
 	conn   *websocket.Conn
 	send   chan Event
 	hub    *Hub
@@ -26,8 +27,9 @@ type Client struct {
 func newClient(conn *websocket.Conn, userID string, hub *Hub) *Client {
 	return &Client{
 		UserID: userID,
+		RoomID: "",
 		conn:   conn,
-		send:   make(chan Event, 256),
+		send:   make(chan Event, 512),
 		hub:    hub,
 	}
 }
@@ -61,10 +63,23 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		// Handle client-sent messages (e.g., subscribe to dataset events)
-		var incoming map[string]interface{}
+
+		// Parse incoming event
+		var incoming Event
 		if err := json.Unmarshal(msg, &incoming); err == nil {
-			log.Debug().Str("userId", c.UserID).Interface("msg", incoming).Msg("WS message received")
+			// Enrich payload with sender's userID so clients know who it's from
+			if payloadMap, ok := incoming.Payload.(map[string]interface{}); ok {
+				payloadMap["userId"] = c.UserID
+				incoming.Payload = payloadMap
+			}
+
+			// Forward to Hub for routing
+			c.hub.clientMessages <- clientMessage{
+				client: c,
+				event:  incoming,
+			}
+		} else {
+			log.Warn().Err(err).Str("userId", c.UserID).Msg("Failed to unmarshal WS message")
 		}
 	}
 }

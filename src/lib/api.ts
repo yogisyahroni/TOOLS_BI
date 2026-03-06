@@ -21,6 +21,10 @@ export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8
 // ---------------------------------------------------------------------------
 let accessToken: string | null = null;
 
+export function getAccessToken() {
+    return accessToken;
+}
+
 export function setAccessToken(token: string) {
     accessToken = token;
 }
@@ -838,4 +842,97 @@ export interface AutoJoinResult {
 
 export const queryApi = {
     autoJoin: (payload: AutoJoinPayload) => api.post<AutoJoinResult>('/query/auto-join', payload),
+};
+
+// ── Action / Webhook API (Phase 14) ──────────────────────────────────────────
+
+export interface ActionPayload {
+    url: string;
+    method: string;
+    headers?: Record<string, string>;
+    body?: string;
+}
+
+export interface ConnectorSource {
+    sourceDefinitionId: string;
+    name: string;
+    dockerRepository: string;
+    dockerImageTag: string;
+    documentationUrl: string;
+    icon: string;
+}
+
+export interface ActiveConnection {
+    connectionId: string;
+    sourceId: string;
+    sourceName: string;
+    status: string;
+    syncStatus: string;
+    createdAt: string;
+}
+
+export interface ConnectionStatus {
+    status: string;
+    message: string;
+}
+
+export interface ExecuteActionResult {
+    status: number;
+    headers: Record<string, string[]>;
+    data: any;
+}
+
+export const actionApi = {
+    execute: async (payload: ActionPayload) => {
+        const { data } = await api.post('/actions/execute', payload);
+        return data;
+    },
+};
+
+export const connectorApi = {
+    getCatalog: async () => {
+        const { data } = await api.get<ConnectorSource[]>('/connectors/catalog');
+        return data;
+    },
+    getActive: async () => {
+        const { data } = await api.get<ActiveConnection[]>('/connectors/active');
+        return data;
+    },
+    setup: async (payload: { sourceId: string; credentials: Record<string, any> }) => {
+        const { data } = await api.post<ActiveConnection>('/connectors/setup', payload);
+        return data;
+    },
+    triggerSync: async (connectionId: string) => {
+        const { data } = await api.post<ConnectionStatus>(`/connectors/${connectionId}/sync`);
+        return data;
+    }
+};
+
+// ── Comments API (Phase 15) ──────────────────────────────────────────────────
+
+export interface Comment {
+    id: string;
+    dashboardId: string;
+    widgetId?: string;
+    userId: string;
+    user?: { id: string; username: string; email: string };
+    content: string;
+    posX?: number;
+    posY?: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateCommentPayload {
+    dashboardId: string;
+    widgetId?: string;
+    content: string;
+    posX?: number;
+    posY?: number;
+}
+
+export const commentApi = {
+    getAll: (dashboardId: string) => api.get<{ data: Comment[] }>(`/comments?dashboardId=${dashboardId}`),
+    create: (payload: CreateCommentPayload) => api.post<Comment>('/comments', payload),
+    delete: (id: string) => api.delete(`/comments/${id}`),
 };

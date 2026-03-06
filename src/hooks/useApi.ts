@@ -656,10 +656,94 @@ export function useRevokeEmbedToken() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 10 Hooks — Auto-Join Query Engine
 // ─────────────────────────────────────────────────────────────────────────────
-import { queryApi, AutoJoinPayload } from '@/lib/api';
+import { queryApi, AutoJoinPayload, actionApi, connectorApi } from '@/lib/api';
+import { UseMutationOptions, UseQueryOptions } from '@tanstack/react-query';
 
 export function useAutoJoinQuery() {
     return useMutation({
         mutationFn: (payload: AutoJoinPayload) => queryApi.autoJoin(payload).then((r) => r.data),
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Action / Webhook API (Phase 14)
+// ─────────────────────────────────────────────────────────────────────────────
+import { ActionPayload } from '@/lib/api';
+
+export function useExecuteAction(options?: UseMutationOptions<any, Error, any>) {
+    return useMutation({
+        mutationFn: (payload: any) => actionApi.execute(payload),
+        ...options,
+    });
+}
+
+// ── CONNECTORS HOOKS (Phase 13) ───────────────────────────────────────────────
+
+export function useConnectorCatalog(options?: UseQueryOptions<any, Error>) {
+    return useQuery({
+        queryKey: ['connectorCatalog'],
+        queryFn: () => connectorApi.getCatalog(),
+        ...options,
+    });
+}
+
+export function useActiveConnectors(options?: UseQueryOptions<any, Error>) {
+    return useQuery({
+        queryKey: ['activeConnectors'],
+        queryFn: () => connectorApi.getActive(),
+        ...options,
+    });
+}
+
+export function useSetupConnector(options?: UseMutationOptions<any, Error, { sourceId: string; credentials: Record<string, any> }>) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (payload) => connectorApi.setup(payload),
+        onSuccess: (...args) => {
+            queryClient.invalidateQueries({ queryKey: ['activeConnectors'] });
+            if (options?.onSuccess) options.onSuccess(...args);
+        },
+        ...options,
+    });
+}
+
+export function useSyncConnector(options?: UseMutationOptions<any, Error, string>) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (connectionId: string) => connectorApi.triggerSync(connectionId),
+        onSuccess: (...args) => {
+            queryClient.invalidateQueries({ queryKey: ['activeConnectors'] });
+            if (options?.onSuccess) options.onSuccess(...args);
+        },
+        ...options,
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comments API (Phase 15)
+// ─────────────────────────────────────────────────────────────────────────────
+import { commentApi, CreateCommentPayload } from '@/lib/api';
+
+export function useComments(dashboardId: string | null) {
+    return useQuery({
+        queryKey: ['comments', dashboardId],
+        queryFn: () => dashboardId ? commentApi.getAll(dashboardId).then(res => res.data.data) : Promise.resolve([]),
+        enabled: !!dashboardId,
+    });
+}
+
+export function useCreateComment() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: CreateCommentPayload) => commentApi.create(payload).then(r => r.data),
+        onSuccess: (_, variables) => qc.invalidateQueries({ queryKey: ['comments', variables.dashboardId] }),
+    });
+}
+
+export function useDeleteComment() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => commentApi.delete(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['comments'] }),
     });
 }

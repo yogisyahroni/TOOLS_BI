@@ -1,12 +1,25 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutGrid, Plus, Trash2, GripVertical, BarChart3, X, Move, Maximize2, Minimize2,
   LineChart, PieChart, AreaChart, ScatterChart as ScatterIcon,
   Radar, TrendingUp, Grid3X3, Flame, Box, Settings, Database, Edit2, Columns, Filter,
-  Paintbrush, Layers, Variable
+  HelpCircle, ChevronRight, Share2, Users, Search, Check, Download, MousePointer2, Settings2, AlertCircle, Variable, PenTool, Braces, Link2, Sparkles, MessageSquare, Zap, Gauge, SunMedium, Network, Combine
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Bar,
+  ReferenceLine
+} from 'recharts';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +29,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
-import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField } from '@/hooks/useApi';
+import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment } from '@/hooks/useApi';
+import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { FormatRuleItem, FormatRuleCreate, DashboardParameter } from '@/lib/api';
 import { HelpTooltip } from '@/components/HelpTooltip';
@@ -42,7 +56,12 @@ const WIDGET_TYPES: { id: WidgetType; label: string; icon: any }[] = [
   { id: 'heatmap', label: 'Heatmap', icon: Flame },
   { id: 'boxplot', label: 'Box Plot', icon: Box },
   { id: 'stat', label: 'Stat', icon: LayoutGrid },
+  { id: 'gauge', label: 'Gauge', icon: Gauge },
+  { id: 'sunburst', label: 'Sunburst', icon: SunMedium },
+  { id: 'sankey', label: 'Sankey', icon: Network },
+  { id: 'combo', label: 'Combo', icon: Combine },
   { id: 'text', label: 'Text', icon: Edit2 },
+  { id: 'action', label: 'Action', icon: Zap },
 ];
 
 const FORMAT_PRESETS = [
@@ -144,6 +163,74 @@ export default function DashboardBuilder() {
   const activeDashboard = dashboards.find(d => d.id === activeDashboardId) || null;
   const selectedWidget = activeDashboard?.widgets.find(w => w.id === selectedWidgetId) || null;
 
+  // --- Multiplayer (Phase 15) ---
+  const { cursors, ydocReady, ydoc } = useMultiplayer(activeDashboardId);
+
+  // --- Comments (Phase 15) ---
+  const [isCommentMode, setIsCommentMode] = useState(false);
+  const [newCommentPos, setNewCommentPos] = useState<{ x: number, y: number } | null>(null);
+  const [newCommentText, setNewCommentText] = useState('');
+  const { data: comments = [], refetch: refetchComments } = useComments(activeDashboardId || '');
+  const createCommentMut = useCreateComment();
+  const deleteCommentMut = useDeleteComment();
+
+  useEffect(() => {
+    const handleCommentsUpdated = () => refetchComments();
+    window.addEventListener('dashboard_comments_updated', handleCommentsUpdated);
+    return () => window.removeEventListener('dashboard_comments_updated', handleCommentsUpdated);
+  }, [refetchComments]);
+
+  // --- Multiplayer Yjs Widgets Sync ---
+  useEffect(() => {
+    if (!ydocReady || !activeDashboardId) return;
+
+    const yState = ydoc.getMap<string>('dashboardState');
+
+    const observer = (event: any, transaction: any) => {
+      if (transaction.origin === 'local') return;
+
+      const widgetsJson = yState.get('widgets');
+      if (widgetsJson) {
+        try {
+          const remoteWidgets = JSON.parse(widgetsJson);
+          // Update Zustand directly without causing react infinite loops across the normal hook
+          // using the store getState() avoids stale closure issues with updaters
+          useDataStore.getState().updateDashboard(activeDashboardId, { widgets: remoteWidgets });
+        } catch (e) {
+          console.error('Failed to parse remote widgets', e);
+        }
+      }
+    };
+
+    yState.observe(observer);
+
+    // Initial load sync
+    if (!yState.has('widgets') && activeDashboard?.widgets) {
+      ydoc.transact(() => {
+        yState.set('widgets', JSON.stringify(activeDashboard.widgets));
+      }, 'local');
+    } else if (yState.has('widgets')) {
+      try {
+        const remoteWidgets = JSON.parse(yState.get('widgets')!);
+        useDataStore.getState().updateDashboard(activeDashboardId, { widgets: remoteWidgets });
+      } catch (e) {
+        // ignore error
+      }
+    }
+
+    return () => {
+      yState.unobserve(observer);
+    };
+  }, [ydocReady, activeDashboardId, ydoc]);
+
+  const syncToYjs = (widgets: Widget[]) => {
+    if (ydocReady) {
+      ydoc.transact(() => {
+        ydoc.getMap<string>('dashboardState').set('widgets', JSON.stringify(widgets));
+      }, 'local');
+    }
+  };
+
   // --- Parameters State ---
   const [paramOpen, setParamOpen] = useState(false);
   const [paramName, setParamName] = useState('');
@@ -197,6 +284,8 @@ export default function DashboardBuilder() {
   const createCalcMut = useCreateCalcField();
   const deleteCalcMut = useDeleteCalcField();
 
+  const executeActionMut = useExecuteAction();
+
   // When switching widget, repopulate drill state
   useEffect(() => {
     if (activeDatasetId && drillConfigs && drillConfigs.length > 0) {
@@ -229,31 +318,41 @@ export default function DashboardBuilder() {
       id: newId, type: 'bar', title: 'New Widget',
       dataSetId: dataSets[0]?.id || '', xAxis: '', yAxis: '', width: 'half',
     };
-    updateDashboard(activeDashboard.id, { widgets: [...activeDashboard.widgets, widget] });
+    const newWidgets = [...activeDashboard.widgets, widget];
+    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    syncToYjs(newWidgets);
     setSelectedWidgetId(newId);
     toast({ title: 'Widget added', description: 'Configure it in the properties panel.' });
   };
 
   const updateSelectedWidget = (updates: Partial<Widget>) => {
     if (!activeDashboard || !selectedWidgetId) return;
-    updateDashboard(activeDashboard.id, {
-      widgets: activeDashboard.widgets.map(w => w.id === selectedWidgetId ? { ...w, ...updates } : w)
-    });
+    const newWidgets = activeDashboard.widgets.map(w => w.id === selectedWidgetId ? { ...w, ...updates } : w);
+    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    syncToYjs(newWidgets);
   };
 
   const removeWidget = (widgetId: string) => {
     if (!activeDashboard) return;
-    updateDashboard(activeDashboard.id, { widgets: activeDashboard.widgets.filter(w => w.id !== widgetId) });
+    const newWidgets = activeDashboard.widgets.filter(w => w.id !== widgetId);
+    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    syncToYjs(newWidgets);
     if (selectedWidgetId === widgetId) setSelectedWidgetId(null);
   };
 
   const moveWidget = (widgetId: string, direction: 'up' | 'down') => {
     if (!activeDashboard) return;
-    const widgets = [...activeDashboard.widgets];
-    const idx = widgets.findIndex(w => w.id === widgetId);
-    if (direction === 'up' && idx > 0) [widgets[idx - 1], widgets[idx]] = [widgets[idx], widgets[idx - 1]];
-    if (direction === 'down' && idx < widgets.length - 1) [widgets[idx], widgets[idx + 1]] = [widgets[idx + 1], widgets[idx]];
-    updateDashboard(activeDashboard.id, { widgets });
+    const idx = activeDashboard.widgets.findIndex(w => w.id === widgetId);
+    if (idx < 0) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === activeDashboard.widgets.length - 1) return;
+
+    const newWidgets = [...activeDashboard.widgets];
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    [newWidgets[idx], newWidgets[swapIdx]] = [newWidgets[swapIdx], newWidgets[idx]];
+
+    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    syncToYjs(newWidgets);
   };
 
   const handleDeleteDashboard = (id: string) => {
@@ -382,7 +481,7 @@ export default function DashboardBuilder() {
     const ySet = new Set<string>();
     const map = new Map<string, number>();
 
-    let filteredData = processData(widget, dataset);
+    const filteredData = processData(widget, dataset);
     const currentXAxis = getWidgetXAxis(widget, dataset.id);
 
     filteredData.forEach((row: any) => {
@@ -403,7 +502,7 @@ export default function DashboardBuilder() {
     if (!dataset || !widget.xAxis || !widget.yAxis) return [];
     const groups = new Map<string, number[]>();
 
-    let filteredData = processData(widget, dataset);
+    const filteredData = processData(widget, dataset);
     const currentXAxis = getWidgetXAxis(widget, dataset.id);
 
     filteredData.forEach((row: any) => {
@@ -426,12 +525,102 @@ export default function DashboardBuilder() {
     });
   };
 
+
   const getStatValue = (widget: Widget, dataset: any) => {
     if (!dataset || !widget.yAxis) return { value: 0, count: 0, avg: 0 };
-    let filteredData = processData(widget, dataset);
+    const filteredData = processData(widget, dataset);
+
     const nums = filteredData.map((r: any) => Number(r[widget.yAxis])).filter((n: any) => !isNaN(n));
     const sum = nums.reduce((a: number, b: number) => a + b, 0);
     return { value: sum, count: nums.length, avg: nums.length ? sum / nums.length : 0 };
+  };
+
+
+  const getGaugeData = (widget: Widget, dataset: any) => {
+    if (!dataset || !widget.yAxis) return 0;
+    const stat = getStatValue(widget, dataset);
+    return stat.value;
+  };
+
+
+  const getSunburstData = (widget: Widget, dataset: any) => {
+    if (!dataset || !widget.xAxis || !widget.groupBy || !widget.yAxis) return [];
+    const filteredData = processData(widget, dataset);
+    const groups = new Map<string, Map<string, number>>();
+
+
+    filteredData.forEach((row: any) => {
+      const parent = String(row[widget.xAxis] || 'Unknown');
+      const child = String(row[widget.groupBy!] || 'Unknown');
+      const val = Number(row[widget.yAxis]) || 0;
+
+      if (!groups.has(parent)) groups.set(parent, new Map());
+      const childMap = groups.get(parent)!;
+      childMap.set(child, (childMap.get(child) || 0) + val);
+    });
+
+    return Array.from(groups.entries()).map(([parentName, childMap]) => ({
+      name: parentName,
+      children: Array.from(childMap.entries()).map(([childName, val]) => ({
+        name: childName,
+        value: val
+      }))
+    }));
+  };
+
+
+  const getSankeyData = (widget: Widget, dataset: any) => {
+    if (!dataset || !widget.xAxis || !widget.groupBy || !widget.yAxis) return { nodes: [], links: [] };
+    const filteredData = processData(widget, dataset);
+
+    const nodesSet = new Set<string>();
+    const linksMap = new Map<string, number>();
+
+
+    filteredData.forEach((row: any) => {
+      const source = String(row[widget.xAxis] || 'Unknown');
+      const target = String(row[widget.groupBy!] || 'Unknown');
+      const val = Number(row[widget.yAxis]) || 0;
+
+      nodesSet.add(source);
+      nodesSet.add(target);
+
+      const key = `${source}->${target}`;
+      linksMap.set(key, (linksMap.get(key) || 0) + val);
+    });
+
+    const nodes = Array.from(nodesSet).map(name => ({ name }));
+    const links = Array.from(linksMap.entries()).map(([key, value]) => {
+      const [source, target] = key.split('->');
+      return { source, target, value };
+    });
+
+    return { nodes, links };
+  };
+
+
+  const getComboData = (widget: Widget, dataset: any) => {
+    if (!dataset || !widget.xAxis || !widget.yAxis) return [];
+    const filteredData = processData(widget, dataset);
+    const agg = new Map<string, { bar: number, line: number }>();
+
+
+    filteredData.forEach((row: any) => {
+      const key = String(row[widget.xAxis] || 'Unknown');
+      const barVal = Number(row[widget.yAxis]) || 0;
+      const lineVal = widget.groupBy ? (Number(row[widget.groupBy]) || 0) : 0;
+
+      if (!agg.has(key)) agg.set(key, { bar: 0, line: 0 });
+      const current = agg.get(key)!;
+      current.bar += barVal;
+      current.line += lineVal;
+    });
+
+    return Array.from(agg.entries()).map(([name, vals]) => ({
+      name,
+      barValue: vals.bar,
+      lineValue: vals.line
+    })).slice(0, 50);
   };
 
   const handleChartClick = (widget: Widget, data: any) => {
@@ -497,6 +686,51 @@ export default function DashboardBuilder() {
             <span>Count: {stat.count.toLocaleString()}</span>
             <span>Avg: {stat.avg.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
+        </div>
+      );
+    }
+
+    if (widget.type === 'action') {
+      const isExecuting = executeActionMut.isPending;
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-4 overflow-auto space-y-4 bg-muted/10 rounded-lg">
+          <Zap className="w-12 h-12 text-primary opacity-80" />
+          <p className="text-sm font-medium text-center">{widget.title || "Action Button"}</p>
+          <Button
+            size="lg"
+            className="w-full max-w-[200px] shadow-lg shadow-primary/20"
+            disabled={!widget.actionConfig?.url || isExecuting}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!widget.actionConfig?.url) return toast({ title: 'URL Not Configured', variant: 'destructive' });
+
+              // Replace parameters in body
+              let parsedBody = widget.actionConfig.bodyTemplate || '';
+              params.forEach(p => {
+                const ref = `{{${p.name}}}`;
+                if (parsedBody.includes(ref)) {
+                  parsedBody = parsedBody.split(ref).join(p.defaultValue);
+                }
+              });
+
+              executeActionMut.mutate({
+                url: widget.actionConfig.url,
+                method: widget.actionConfig.method || 'POST',
+                headers: (widget.actionConfig.headers || []).filter(h => h.key && h.value).reduce((acc, h) => ({ ...acc, [h.key]: h.value }), {}),
+                body: parsedBody
+              }, {
+                onSuccess: (data) => {
+                  toast({ title: 'Action Executed', description: `Status: ${data.status}` });
+                },
+                onError: (err) => {
+                  toast({ title: 'Action Failed', description: err.message, variant: 'destructive' });
+                }
+              });
+            }}
+          >
+            {isExecuting ? 'Executing...' : 'Trigger Action'}
+          </Button>
+          {!widget.actionConfig?.url && <p className="text-xs text-destructive">URL not configured.</p>}
         </div>
       );
     }
@@ -605,18 +839,19 @@ export default function DashboardBuilder() {
           option.series = [{ data: seriesData, type: 'pie', radius: ['45%', '75%'], center: ['50%', '50%'], label: { show: false }, itemStyle: { borderRadius: 4, borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
           option.tooltip.formatter = '{b}: {c} ({d}%)';
           break;
-        case 'radar':
+        case 'radar': {
           const maxVal = Math.max(...data.map(v => Number(v.value) || 0)) * 1.1;
           option.radar = { indicator: data.map(d => ({ name: String(d.name), max: maxVal })), axisName: { color: 'hsl(var(--muted-foreground))', fontSize: 10 } };
           option.series = [{ type: 'radar', data: [{ value: data.map(d => d.value), name: widget.yAxis }], areaStyle: { opacity: 0.3 }, itemStyle: { color: 'hsl(var(--primary))' }, lineStyle: { color: 'hsl(var(--primary))', width: 2 } }];
           break;
+        }
         case 'funnel':
           option.series = [{ type: 'funnel', left: '10%', top: 20, bottom: 20, width: '80%', data: seriesData.sort((a, b) => b.value - a.value), label: { show: true, position: 'inside', formatter: '{b}' }, itemStyle: { borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
           break;
         case 'treemap':
           option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: 'hsl(var(--background))' } }];
           break;
-        case 'waterfall':
+        case 'waterfall': {
           const wfData = getWaterfallData(data);
           const baseSeries = wfData.map(d => ({ value: d.start, itemStyle: { color: 'transparent' } }));
           const valSeries = wfData.map((d, i) => ({ value: Number(d.value) || 0, itemStyle: { color: getCellColor(widget, d, i), borderRadius: [3, 3, 0, 0] } }));
@@ -624,12 +859,85 @@ export default function DashboardBuilder() {
             { type: 'bar', stack: 'total', data: baseSeries, tooltip: { show: false } },
             { type: 'bar', stack: 'total', data: valSeries }
           ];
+
           option.tooltip.formatter = (params: any) => {
             const dataIndex = params[params.length - 1].dataIndex;
             const d = wfData[dataIndex];
             return `<b>${d.name}</b><br/>Value: ${d.value >= 0 ? '+' : ''}${d.value}<br/>Total: ${d.end}`;
           };
           break;
+        }
+        case 'gauge': {
+          const gaugeVal = getGaugeData(widget, ds);
+          const gaugeMax = gaugeVal > 0 ? Math.pow(10, Math.ceil(Math.log10(gaugeVal))) : 100;
+          option = {
+            tooltip: { formatter: '{a} <br/>{b} : {c}' },
+            series: [{
+              name: widget.title || 'KPI',
+              type: 'gauge',
+              max: gaugeMax,
+              progress: { show: true, width: 18, itemStyle: { color: 'hsl(var(--primary))' } },
+              axisLine: { lineStyle: { width: 18, color: [[1, 'hsl(var(--muted))']] } },
+              axisTick: { show: false },
+              splitLine: { show: false },
+              axisLabel: { show: false },
+              detail: { valueAnimation: true, fontSize: 30, color: 'hsl(var(--foreground))', formatter: '{value}' },
+              data: [{ value: gaugeVal, name: widget.yAxis }]
+            }]
+          };
+          break;
+        }
+        case 'sunburst': {
+          const sunburstData = getSunburstData(widget, ds);
+          option.series = [{
+            type: 'sunburst',
+            data: sunburstData,
+            radius: [0, '90%'],
+            itemStyle: { borderRadius: 4, borderWidth: 2, borderColor: 'hsl(var(--background))' },
+            label: { show: false }
+          }];
+          break;
+        }
+        case 'sankey': {
+          const sankeyData = getSankeyData(widget, ds);
+          option.series = [{
+            type: 'sankey',
+            data: sankeyData.nodes,
+            links: sankeyData.links,
+            emphasis: { focus: 'adjacency' },
+            nodeAlign: 'justify',
+            lineStyle: { color: 'source', curveness: 0.5 },
+            itemStyle: { borderColor: 'hsl(var(--background))', borderWidth: 1 }
+          }];
+          break;
+        }
+        case 'combo': {
+          const comboData = getComboData(widget, ds);
+          const comboNames = comboData.map(d => d.name);
+          option.xAxis = { type: 'category', data: comboNames, axisLabel: axisLabelStyle, axisPointer: { type: 'shadow' } };
+          option.yAxis = [
+            { type: 'value', name: widget.yAxis, axisLabel: axisLabelStyle, splitLine: splitLineStyle },
+            { type: 'value', name: widget.groupBy || '', axisLabel: axisLabelStyle, splitLine: { show: false } }
+          ];
+          option.series = [
+            {
+              name: widget.yAxis,
+              type: 'bar',
+
+              data: comboData.map((d, i) => ({ value: d.barValue, name: d.name, itemStyle: { color: getCellColor(widget, d as any, i), borderRadius: [3, 3, 0, 0] } }))
+            },
+            {
+              name: widget.groupBy || 'Secondary',
+              type: 'line',
+              yAxisIndex: 1,
+              data: comboData.map(d => ({ value: d.lineValue, name: d.name })),
+              itemStyle: { color: 'hsl(var(--destructive))' },
+              lineStyle: { width: 3 },
+              symbolSize: 6
+            }
+          ];
+          break;
+        }
         default:
           return null;
       }
@@ -705,7 +1013,6 @@ export default function DashboardBuilder() {
     }
     return groups;
   };
-
   const widgetColumnGroups = getWidgetColumns();
   // Flat list for straightforward lookups (like formatting, which currently only applies to base)
   const widgetColumns = widgetColumnGroups.length > 0 ? widgetColumnGroups[0].columns : [];
@@ -895,7 +1202,20 @@ export default function DashboardBuilder() {
         </div>
 
         {/* MIDDLE PANEL: Main Canvas */}
-        <div className="flex-1 overflow-y-auto p-6 relative">
+        <div
+          className="flex-1 overflow-y-auto p-6 relative"
+          onClick={(e) => {
+            if (!isCommentMode || !activeDashboardId) return;
+            if ((e.target as HTMLElement).closest('.comment-pin') || (e.target as HTMLElement).closest('.comment-popover')) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            // Optional: You could adjust to scroll offset if scrolling happens on this container
+            const x = e.clientX - rect.left + e.currentTarget.scrollLeft;
+            const y = e.clientY - rect.top + e.currentTarget.scrollTop;
+            setNewCommentPos({ x, y });
+            setNewCommentText('');
+          }}
+          style={{ cursor: isCommentMode ? 'crosshair' : 'default' }}
+        >
           {activeFilter && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
               className="mb-4 bg-primary/10 border border-primary/30 rounded-lg px-4 py-3 flex items-center justify-between shadow-lg sticky top-0 z-10 backdrop-blur-md">
@@ -909,18 +1229,101 @@ export default function DashboardBuilder() {
           )}
 
           {!activeDashboard ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground relative z-10">
               <Columns className="w-16 h-16 mb-4 opacity-20" />
               <p className="text-lg font-medium">No Dashboard Active</p>
               <p className="text-sm">Select or create one to start building.</p>
             </div>
           ) : (
             <>
+              {/* Contextual Comments Render */}
+              {comments.map((comment: any) => (
+                <div key={comment.id} className="absolute comment-pin z-40 transition-transform hover:scale-110" style={{ left: comment.positionX, top: comment.positionY }}>
+                  <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white shadow-lg cursor-pointer ring-2 ring-background group relative">
+                    <MessageSquare className="w-3 h-3" />
+                    <div className="hidden group-hover:block absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-card border border-border rounded-lg shadow-xl p-3 z-50 text-left cursor-default">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-foreground">{comment.user?.name || 'User'}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-sm text-foreground/90">{comment.content}</p>
+                      {/* Optional delete button if owner: */}
+                      <div className="mt-2 flex justify-end gap-1">
+                        <Button size="icon" variant="ghost" className="h-5 w-5 hover:text-destructive" onClick={(e) => {
+                          e.stopPropagation();
+                          deleteCommentMut.mutate(comment.id);
+                        }}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {isCommentMode && newCommentPos && (
+                <div className="absolute comment-popover z-50 bg-card border border-border shadow-xl rounded-lg p-3 w-64" style={{ left: newCommentPos.x + 10, top: newCommentPos.y + 10 }}>
+                  <textarea
+                    autoFocus
+                    placeholder="Type your comment..."
+                    value={newCommentText}
+                    onChange={e => setNewCommentText(e.target.value)}
+                    className="w-full h-20 text-sm bg-background/50 border border-input rounded flex p-2 mb-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary resize-none placeholder:text-muted-foreground text-foreground"
+                  />
+                  <div className="flex justify-end gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setNewCommentPos(null)} className="h-7 text-xs">Cancel</Button>
+                    <Button size="sm" onClick={() => {
+                      if (!newCommentText.trim() || !activeDashboardId) return;
+                      createCommentMut.mutate({
+                        dashboardId: activeDashboardId,
+                        content: newCommentText.trim(),
+                        posX: newCommentPos.x,
+                        posY: newCommentPos.y,
+                      });
+                      setNewCommentPos(null);
+                    }} className="h-7 text-xs bg-primary text-primary-foreground shadow-sm hover:bg-primary/90" disabled={createCommentMut.isPending}>
+                      {createCommentMut.isPending ? 'Posting...' : 'Post'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Live Cursors Overlay */}
+              <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+                {Object.values(cursors).map(c => (
+                  <motion.div
+                    key={c.userId}
+                    className="absolute flex flex-col items-start drop-shadow-md"
+                    animate={{ x: c.x, y: c.y }}
+                    transition={{ type: 'spring', damping: 30, stiffness: 300, mass: 0.5 }}
+                  >
+                    <svg width="24" height="36" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="absolute -top-2 -left-2 drop-shadow-sm">
+                      <path d="M5.65376 2.15376C5.4041 1.9041 5 2.0809 5 2.43431V28.5657C5 28.9191 5.4041 29.0959 5.65376 28.8462L11 23.5H19.5657C19.9191 23.5 20.0959 23.0959 19.8462 22.8462L5.65376 2.15376Z" fill={c.color} />
+                    </svg>
+                    <div className="mt-5 ml-4 px-2 py-0.5 rounded text-[11px] text-white font-medium whitespace-nowrap shadow-sm opacity-90" style={{ backgroundColor: c.color }}>
+                      {c.userName}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
               <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-xl font-bold">{activeDashboard.name}</h2>
-                <Button onClick={handleAddWidgetPlaceholder} className="bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30">
-                  <Plus className="w-4 h-4 mr-2" /> Add Blank Widget
-                </Button>
+                <h2 className="text-xl font-bold text-foreground">{activeDashboard.name}</h2>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={isCommentMode ? 'default' : 'outline'}
+                    onClick={() => {
+                      setIsCommentMode(!isCommentMode);
+                      setNewCommentPos(null);
+                    }}
+                    className={isCommentMode ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-all font-medium" : "text-primary border-primary/30 hover:bg-primary/20 transition-all font-medium"}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" /> {isCommentMode ? 'Exit Comments' : 'Comments'}
+                  </Button>
+                  <Button onClick={handleAddWidgetPlaceholder} className="bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30">
+                    <Plus className="w-4 h-4 mr-2" /> Add Blank Widget
+                  </Button>
+                </div>
               </div>
 
               {activeDashboard.widgets.length === 0 ? (
@@ -952,7 +1355,7 @@ export default function DashboardBuilder() {
                           </div>
                         </div>
 
-                        <div className={`p-4 ${widget.type === 'stat' ? 'h-[180px]' : widget.type === 'text' ? 'h-[140px]' : 'h-[300px]'}`}>
+                        <div className={`p-4 ${widget.type === 'stat' ? 'h-[180px]' : (widget.type === 'text' || widget.type === 'action') ? 'h-[180px]' : 'h-[300px]'}`}>
                           {renderWidgetChart(widget)}
                         </div>
                       </motion.div>
@@ -1021,67 +1424,148 @@ export default function DashboardBuilder() {
                     </div>
 
                     <div className="space-y-3">
-                      <Label className="text-xs text-muted-foreground uppercase tracking-wider">Data Map</Label>
-                      <div>
-                        <Label className="text-xs mb-1 block">Dataset</Label>
-                        <Select value={selectedWidget.dataSetId} onValueChange={v => updateSelectedWidget({ dataSetId: v, xAxis: '', yAxis: '', groupBy: '' })}>
-                          <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-
-                      {selectedWidget.type !== 'text' && selectedWidget.dataSetId && (
+                      {selectedWidget.type === 'action' ? (
                         <>
-                          {(!['stat'].includes(selectedWidget.type)) && (
-                            <div>
-                              <Label className="text-xs mb-1 block">X-Axis (Dimension)</Label>
-                              <Select value={selectedWidget.xAxis || ''} onValueChange={v => updateSelectedWidget({ xAxis: v })}>
-                                <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
-                                <SelectContent>
-                                  {widgetColumnGroups.map(g => (
-                                    <SelectGroup key={g.datasetName}>
-                                      <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                      {g.columns.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                    </SelectGroup>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
+                          <Label className="text-xs text-muted-foreground uppercase tracking-wider">Target Endpoint</Label>
                           <div>
-                            <Label className="text-xs mb-1 block">{selectedWidget.type === 'stat' ? 'Metric' : 'Y-Axis (Measure)'}</Label>
-                            <Select value={selectedWidget.yAxis || ''} onValueChange={v => updateSelectedWidget({ yAxis: v })}>
-                              <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <Label className="text-xs mb-1 block">URL</Label>
+                            <Input
+                              placeholder="https://api.example.com/webhook"
+                              value={selectedWidget.actionConfig?.url || ''}
+                              onChange={e => {
+                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST', bodyTemplate: '' };
+                                updateSelectedWidget({ actionConfig: { ...conf, url: e.target.value } });
+                              }}
+                              className="bg-muted/50"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs mb-1 block">Method</Label>
+                            <Select
+                              value={selectedWidget.actionConfig?.method || 'POST'}
+                              onValueChange={(v: any) => {
+                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST', bodyTemplate: '' };
+                                updateSelectedWidget({ actionConfig: { ...conf, method: v } });
+                              }}
+                            >
+                              <SelectTrigger className="bg-muted/50"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                {widgetColumnGroups.map(g => {
-                                  const numCols = g.columns.filter(c => c.type === 'number');
-                                  if (numCols.length === 0) return null;
-                                  return (
-                                    <SelectGroup key={g.datasetName}>
-                                      <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                      {numCols.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                    </SelectGroup>
-                                  );
-                                })}
+                                <SelectItem value="GET">GET</SelectItem>
+                                <SelectItem value="POST">POST</SelectItem>
+                                <SelectItem value="PUT">PUT</SelectItem>
+                                <SelectItem value="DELETE">DELETE</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
-
-                          {selectedWidget.type === 'heatmap' && (
-                            <div>
-                              <Label className="text-xs mb-1 block">Group By (Y-Axis Dimension)</Label>
-                              <Select value={selectedWidget.groupBy || ''} onValueChange={v => updateSelectedWidget({ groupBy: v })}>
-                                <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
-                                <SelectContent>
-                                  {widgetColumnGroups.map(g => (
-                                    <SelectGroup key={g.datasetName}>
-                                      <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                      {g.columns.filter(c => c.name !== selectedWidget.xAxis).map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                    </SelectGroup>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <Label className="text-xs block">Headers (Auth, etc.)</Label>
+                              <Button variant="ghost" size="sm" className="h-4 text-[10px] px-1" onClick={() => {
+                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST', headers: [] };
+                                const headers = [...(conf.headers || []), { key: '', value: '' }];
+                                updateSelectedWidget({ actionConfig: { ...conf, headers } });
+                              }}><Plus className="w-3 h-3 mr-1" />Add</Button>
                             </div>
+                            <div className="space-y-2">
+                              {(selectedWidget.actionConfig?.headers || []).map((h, i) => (
+                                <div key={i} className="flex gap-2 items-center">
+                                  <Input placeholder="Key" value={h.key} className="h-8 text-xs bg-muted/50" onChange={e => {
+                                    const headers = [...(selectedWidget.actionConfig?.headers || [])];
+                                    headers[i].key = e.target.value;
+                                    updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
+                                  }} />
+                                  <Input placeholder="Value" value={h.value} className="h-8 text-xs bg-muted/50" onChange={e => {
+                                    const headers = [...(selectedWidget.actionConfig?.headers || [])];
+                                    headers[i].value = e.target.value;
+                                    updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
+                                  }} />
+                                  <X className="w-4 h-4 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => {
+                                    const headers = [...(selectedWidget.actionConfig?.headers || [])];
+                                    headers.splice(i, 1);
+                                    updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
+                                  }} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs mb-1 block">JSON Body <span className="text-[10px] text-muted-foreground">(Use {'{{parameter_name}}'} for variables)</span></Label>
+                            <textarea
+                              className="flex min-h-[100px] w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary font-mono"
+                              placeholder='{"status": "approved", "account": "{{user_id}}"}'
+                              value={selectedWidget.actionConfig?.bodyTemplate || ''}
+                              onChange={e => {
+                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST' };
+                                updateSelectedWidget({ actionConfig: { ...conf, bodyTemplate: e.target.value } });
+                              }}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Label className="text-xs text-muted-foreground uppercase tracking-wider">Data Map</Label>
+                          <div>
+                            <Label className="text-xs mb-1 block">Dataset</Label>
+                            <Select value={selectedWidget.dataSetId} onValueChange={v => updateSelectedWidget({ dataSetId: v, xAxis: '', yAxis: '', groupBy: '' })}>
+                              <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
+                              <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+
+                          {selectedWidget.type !== 'text' && selectedWidget.dataSetId && (
+                            <>
+                              {(!['stat'].includes(selectedWidget.type)) && (
+                                <div>
+                                  <Label className="text-xs mb-1 block">X-Axis (Dimension)</Label>
+                                  <Select value={selectedWidget.xAxis || ''} onValueChange={v => updateSelectedWidget({ xAxis: v })}>
+                                    <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
+                                    <SelectContent>
+                                      {widgetColumnGroups.map(g => (
+                                        <SelectGroup key={g.datasetName}>
+                                          <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
+                                          {g.columns.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
+                                        </SelectGroup>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+                              <div>
+                                <Label className="text-xs mb-1 block">{selectedWidget.type === 'stat' ? 'Metric' : 'Y-Axis (Measure)'}</Label>
+                                <Select value={selectedWidget.yAxis || ''} onValueChange={v => updateSelectedWidget({ yAxis: v })}>
+                                  <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
+                                  <SelectContent>
+                                    {widgetColumnGroups.map(g => {
+                                      const numCols = g.columns.filter(c => c.type === 'number');
+                                      if (numCols.length === 0) return null;
+                                      return (
+                                        <SelectGroup key={g.datasetName}>
+                                          <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
+                                          {numCols.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
+                                        </SelectGroup>
+                                      );
+                                    })}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {selectedWidget.type === 'heatmap' && (
+                                <div>
+                                  <Label className="text-xs mb-1 block">Group By (Y-Axis Dimension)</Label>
+                                  <Select value={selectedWidget.groupBy || ''} onValueChange={v => updateSelectedWidget({ groupBy: v })}>
+                                    <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
+                                    <SelectContent>
+                                      {widgetColumnGroups.map(g => (
+                                        <SelectGroup key={g.datasetName}>
+                                          <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
+                                          {g.columns.filter(c => c.name !== selectedWidget.xAxis).map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
+                                        </SelectGroup>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+                            </>
                           )}
                         </>
                       )}
