@@ -136,11 +136,66 @@ export default function DBDiagram() {
       </motion.div>
 
       {dataSets.length === 0 ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl p-16 border border-border shadow-card text-center">
-          <Database className="w-20 h-20 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-foreground mb-2">Belum ada dataset</h3>
-          <p className="text-muted-foreground mb-4">Upload dataset terlebih dahulu untuk melihat diagram database</p>
-          <Button onClick={() => window.location.href = '/upload'}>Upload Data</Button>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-card rounded-xl border border-border shadow-card overflow-hidden"
+          style={{ height: '70vh' }}
+        >
+          <div className="flex flex-col items-center justify-center h-full gap-6 relative">
+            {/* Animated background grid */}
+            <div className="absolute inset-0 opacity-5 pointer-events-none"
+              style={{
+                backgroundImage: 'linear-gradient(hsl(var(--primary)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary)) 1px, transparent 1px)',
+                backgroundSize: '40px 40px',
+              }}
+            />
+            {/* Pulsing circles */}
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                className="absolute rounded-full border border-primary/20"
+                style={{ width: 120 + i * 80, height: 120 + i * 80 }}
+                animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.1, 0.3] }}
+                transition={{ duration: 3, repeat: Infinity, delay: i * 0.8, ease: 'easeInOut' }}
+              />
+            ))}
+            {/* Central icon */}
+            <motion.div
+              className="relative z-10 w-24 h-24 rounded-2xl gradient-primary flex items-center justify-center shadow-glow"
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <Database className="w-12 h-12 text-primary-foreground" />
+            </motion.div>
+            {/* Text */}
+            <div className="relative z-10 text-center">
+              <motion.h3
+                className="text-xl font-semibold text-foreground mb-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                No Datasets Yet
+              </motion.h3>
+              <motion.p
+                className="text-muted-foreground mb-5 text-sm max-w-xs mx-auto"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+              >
+                Upload a dataset first, then come back here to visualize your database schema and draw relationships.
+              </motion.p>
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+                <Button
+                  onClick={() => window.location.href = '/upload'}
+                  className="gradient-primary text-primary-foreground shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                >
+                  Upload Dataset
+                </Button>
+              </motion.div>
+            </div>
+          </div>
         </motion.div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
