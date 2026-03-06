@@ -6,16 +6,7 @@ import {
   Radar, TrendingUp, Grid3X3, Flame, Box, Settings, Database, Edit2, Columns, Filter,
   Paintbrush, Layers, Variable
 } from 'lucide-react';
-import {
-  BarChart, Bar, LineChart as ReLineChart, Line,
-  PieChart as RePieChart, Pie, Cell,
-  AreaChart as ReAreaChart, Area,
-  ScatterChart, Scatter,
-  RadarChart, Radar as ReRadar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  FunnelChart, Funnel, LabelList, Treemap,
-  ComposedChart, ReferenceLine
-} from 'recharts';
+import ReactECharts from 'echarts-for-react';
 import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -549,59 +540,109 @@ export default function DashboardBuilder() {
     const data = getStandardChartData(widget, ds);
     if (!data.length) return <p className="text-muted-foreground text-sm text-center mt-8">Incomplete configuration</p>;
 
-    const tooltipStyle = { backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--popover-foreground))' };
-    const commonProps = { data, margin: { top: 10, right: 10, left: 0, bottom: 20 }, onClick: (d: any) => handleChartClick(widget, d) };
+    const getEchartsOption = () => {
+      const isHorizontal = widget.type === 'horizontal_bar';
+      const categoryNames = data.map(d => String(d.name));
+      const seriesData = data.map((d, i) => ({
+        value: Number(d.value) || 0,
+        name: String(d.name),
+        itemStyle: {
+          color: getCellColor(widget, d, i),
+          borderWidth: activeFilter?.value === String(d.name) ? 2 : 0,
+          borderColor: activeFilter?.value === String(d.name) ? 'hsl(var(--foreground))' : 'transparent'
+        }
+      }));
 
-    switch (widget.type) {
-      case 'bar':
-        return (<ResponsiveContainer width="100%" height="100%"><BarChart {...commonProps}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} /><YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} /><Tooltip contentStyle={tooltipStyle} /><Bar dataKey="value" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} cursor="pointer">{data.map((d, i) => <Cell key={i} fill={getCellColor(widget, d, i)} />)}</Bar></BarChart></ResponsiveContainer>);
-      case 'horizontal_bar':
-        return (<ResponsiveContainer width="100%" height="100%"><BarChart {...commonProps} layout="vertical" margin={{ top: 10, right: 10, left: 40, bottom: 10 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={10} /><YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" fontSize={10} width={60} /><Tooltip contentStyle={tooltipStyle} /><Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} cursor="pointer">{data.map((d, i) => <Cell key={i} fill={getCellColor(widget, d, i)} />)}</Bar></BarChart></ResponsiveContainer>);
-      case 'line':
-        return (<ResponsiveContainer width="100%" height="100%"><ReLineChart {...commonProps}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} /><YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} /><Tooltip contentStyle={tooltipStyle} /><Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} cursor="pointer" /></ReLineChart></ResponsiveContainer>);
-      case 'area':
-        return (<ResponsiveContainer width="100%" height="100%"><ReAreaChart {...commonProps}><defs><linearGradient id={`wg-${widget.id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} /><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} /><YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} /><Tooltip contentStyle={tooltipStyle} /><Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill={`url(#wg-${widget.id})`} cursor="pointer" /></ReAreaChart></ResponsiveContainer>);
-      case 'scatter':
-        return (<ResponsiveContainer width="100%" height="100%"><ScatterChart {...commonProps} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} /><YAxis dataKey="value" stroke="hsl(var(--muted-foreground))" fontSize={10} /><Tooltip contentStyle={tooltipStyle} /><Scatter data={data} fill="hsl(var(--primary))" cursor="pointer" /></ScatterChart></ResponsiveContainer>);
-      case 'pie':
-        return (<ResponsiveContainer width="100%" height="100%"><RePieChart><Pie data={data} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name }) => name} cursor="pointer" onClick={(d) => handleChartClick(widget, d)}>{data.map((d, i) => <Cell key={i} fill={getCellColor(widget, d, i)} stroke={activeFilter?.value === d.name ? 'hsl(var(--foreground))' : 'none'} strokeWidth={activeFilter?.value === d.name ? 2 : 0} />)}</Pie><Tooltip contentStyle={tooltipStyle} /></RePieChart></ResponsiveContainer>);
-      case 'radar':
-        return (<ResponsiveContainer width="100%" height="100%"><RadarChart cx="50%" cy="50%" outerRadius="65%" data={data}><PolarGrid stroke="hsl(var(--border))" /><PolarAngleAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} /><PolarRadiusAxis stroke="hsl(var(--muted-foreground))" fontSize={10} /><ReRadar dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} /><Tooltip contentStyle={tooltipStyle} /></RadarChart></ResponsiveContainer>);
-      case 'funnel':
-        return (<ResponsiveContainer width="100%" height="100%"><FunnelChart margin={{ top: 10, right: 10, left: 10, bottom: 10 }}><Tooltip contentStyle={tooltipStyle} /><Funnel dataKey="value" data={[...data].sort((a, b) => b.value - a.value)} isAnimationActive onClick={(d) => handleChartClick(widget, { activePayload: [{ payload: d }] })} cursor="pointer">{data.map((d, i) => <Cell key={i} fill={getCellColor(widget, d, i)} />)}<LabelList position="center" fill="hsl(var(--foreground))" stroke="none" dataKey="name" fontSize={11} /></Funnel></FunnelChart></ResponsiveContainer>);
-      case 'treemap':
-        return (<ResponsiveContainer width="100%" height="100%"><Treemap data={data} dataKey="value" aspectRatio={4 / 3} stroke="hsl(var(--border))" fill="hsl(var(--primary))" content={<TreemapContent />} onClick={(d: any) => handleChartClick(widget, { activePayload: [{ payload: d }] })} /></ResponsiveContainer>);
-      case 'waterfall':
-        const wfData = getWaterfallData(data);
-        return (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={wfData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} angle={-45} textAnchor="end" />
-              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
-              <Tooltip contentStyle={tooltipStyle} content={({ payload }) => {
-                if (!payload?.[0]) return null;
-                const d = payload[0].payload;
-                return (
-                  <div className="bg-popover border border-border rounded-lg p-2 text-xs shadow-lg">
-                    <p className="font-semibold">{d.name}</p>
-                    <p>Value: {d.value >= 0 ? '+' : ''}{d.value}</p>
-                    <p>Running Total: {d.end}</p>
-                  </div>
-                );
-              }} />
-              <Bar dataKey="start" stackId="wf" fill="transparent" />
-              <Bar dataKey="value" stackId="wf" radius={[2, 2, 0, 0]} cursor="pointer" onClick={(d) => handleChartClick(widget, { activePayload: [{ payload: d }] })}>
-                {wfData.map((d, i) => (
-                  <Cell key={i} fill={getCellColor(widget, d, i)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        );
-      default:
-        return <p className="text-muted-foreground text-center mt-8">Chart type not supported</p>;
-    }
+      const axisLabelStyle = { fontSize: 10, color: 'hsl(var(--muted-foreground))' };
+      const splitLineStyle = { lineStyle: { color: 'hsl(var(--border))', type: 'dashed' as const } };
+
+      let option: any = {
+        grid: { top: 30, right: 20, bottom: 30, left: isHorizontal ? 80 : 40, containLabel: true },
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: 'hsl(var(--popover))',
+          borderColor: 'hsl(var(--border))',
+          textStyle: { color: 'hsl(var(--popover-foreground))', fontSize: 12 },
+          borderRadius: 8
+        },
+      };
+
+      if (['bar', 'line', 'area', 'scatter', 'horizontal_bar', 'waterfall'].includes(widget.type)) {
+        option.xAxis = isHorizontal
+          ? { type: 'value', axisLabel: axisLabelStyle, splitLine: splitLineStyle }
+          : { type: 'category', data: categoryNames, axisLabel: { ...axisLabelStyle, interval: 0, rotate: categoryNames.length > 5 ? 45 : 0 } };
+        option.yAxis = isHorizontal
+          ? { type: 'category', data: categoryNames, axisLabel: { ...axisLabelStyle, width: 60, overflow: 'truncate' } }
+          : { type: 'value', axisLabel: axisLabelStyle, splitLine: splitLineStyle };
+      }
+
+      switch (widget.type) {
+        case 'bar':
+        case 'horizontal_bar':
+          option.series = [{ data: seriesData, type: 'bar', itemStyle: { borderRadius: isHorizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] } }];
+          break;
+        case 'line':
+          option.series = [{ data: seriesData, type: 'line', symbolSize: 6, lineStyle: { width: 3 }, itemStyle: { color: 'hsl(var(--primary))' } }];
+          break;
+        case 'area':
+          option.series = [{ data: seriesData, type: 'line', areaStyle: { opacity: 0.2 }, symbolSize: 6, lineStyle: { width: 2 }, itemStyle: { color: 'hsl(var(--primary))' } }];
+          break;
+        case 'scatter':
+          option.xAxis = { type: 'category', data: categoryNames, axisLabel: axisLabelStyle };
+          option.series = [{ data: data.map((d, i) => ({ value: [d.name, d.value], itemStyle: { color: getCellColor(widget, d, i) } })), type: 'scatter', symbolSize: 12 }];
+          break;
+        case 'pie':
+          option.series = [{ data: seriesData, type: 'pie', radius: ['45%', '75%'], center: ['50%', '50%'], label: { show: false }, itemStyle: { borderRadius: 4, borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
+          option.tooltip.formatter = '{b}: {c} ({d}%)';
+          break;
+        case 'radar':
+          const maxVal = Math.max(...data.map(v => Number(v.value) || 0)) * 1.1;
+          option.radar = { indicator: data.map(d => ({ name: String(d.name), max: maxVal })), axisName: { color: 'hsl(var(--muted-foreground))', fontSize: 10 } };
+          option.series = [{ type: 'radar', data: [{ value: data.map(d => d.value), name: widget.yAxis }], areaStyle: { opacity: 0.3 }, itemStyle: { color: 'hsl(var(--primary))' }, lineStyle: { color: 'hsl(var(--primary))', width: 2 } }];
+          break;
+        case 'funnel':
+          option.series = [{ type: 'funnel', left: '10%', top: 20, bottom: 20, width: '80%', data: seriesData.sort((a, b) => b.value - a.value), label: { show: true, position: 'inside', formatter: '{b}' }, itemStyle: { borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
+          break;
+        case 'treemap':
+          option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: 'hsl(var(--background))' } }];
+          break;
+        case 'waterfall':
+          const wfData = getWaterfallData(data);
+          const baseSeries = wfData.map(d => ({ value: d.start, itemStyle: { color: 'transparent' } }));
+          const valSeries = wfData.map((d, i) => ({ value: Number(d.value) || 0, itemStyle: { color: getCellColor(widget, d, i), borderRadius: [3, 3, 0, 0] } }));
+          option.series = [
+            { type: 'bar', stack: 'total', data: baseSeries, tooltip: { show: false } },
+            { type: 'bar', stack: 'total', data: valSeries }
+          ];
+          option.tooltip.formatter = (params: any) => {
+            const dataIndex = params[params.length - 1].dataIndex;
+            const d = wfData[dataIndex];
+            return `<b>${d.name}</b><br/>Value: ${d.value >= 0 ? '+' : ''}${d.value}<br/>Total: ${d.end}`;
+          };
+          break;
+        default:
+          return null;
+      }
+      return option;
+    };
+
+    const echartsOption = getEchartsOption();
+    if (!echartsOption) return <p className="text-muted-foreground text-center mt-8">Chart type not supported</p>;
+
+    const onEvents = {
+      click: (e: any) => {
+        handleChartClick(widget, { activePayload: [{ payload: { name: e.name || e.data?.name, value: e.value } }] });
+      }
+    };
+
+    return (
+      <ReactECharts
+        option={echartsOption}
+        style={{ height: '100%', width: '100%' }}
+        onEvents={onEvents}
+        notMerge={true}
+      />
+    );
   };
 
   // Helper to fetch columns for the currently selected widget, including related datasets if semantic layer is active.
