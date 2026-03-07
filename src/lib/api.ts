@@ -12,7 +12,7 @@
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1';
 
 // ---------------------------------------------------------------------------
 // Access token: kept in memory only (never in localStorage — XSS-safe).
