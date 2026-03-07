@@ -258,35 +258,93 @@ function VisualETLInner() {
           })}
         </motion.div>
 
-        {/* Canvas */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          ref={reactFlowWrapper}
-          className="bg-card rounded-xl border border-border shadow-card overflow-hidden flex-1"
-          style={{ height: '70vh' }}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeDoubleClick={onNodeDoubleClick}
-            nodeTypes={nodeTypes}
-            fitView
-            proOptions={{ hideAttribution: true }}
-            defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(var(--muted-foreground) / 0.15)" />
-            <Controls showInteractive={false} className="!bg-card !border-border !shadow-card [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-muted" />
-            <MiniMap nodeColor="hsl(var(--primary) / 0.3)" maskColor="hsl(var(--background) / 0.8)" className="!bg-card !border-border" />
-            <Panel position="top-right" className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-2">
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>{nodes.length} nodes</span>
-                <span>{edges.length} connections</span>
-                {isRunning && <span className="text-yellow-500 animate-pulse">● Running</span>}
-              </div>
-            </Panel>
-          </ReactFlow>
-        </motion.div>
+        {/* Canvas & Bottom Panel Container */}
+        <div className="flex-1 flex flex-col gap-4 h-[calc(100vh-140px)]">
+          {/* Main Visual Node Canvas */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            ref={reactFlowWrapper}
+            className="bg-card rounded-xl border border-border shadow-card overflow-hidden flex-1 relative"
+            style={{ minHeight: '300px' }}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeDoubleClick={onNodeDoubleClick}
+              nodeTypes={nodeTypes}
+              fitView
+              proOptions={{ hideAttribution: true }}
+              defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(var(--muted-foreground) / 0.15)" />
+              <Controls showInteractive={false} className="!bg-card !border-border !shadow-card [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-muted" />
+              <MiniMap nodeColor="hsl(var(--primary) / 0.3)" maskColor="hsl(var(--background) / 0.8)" className="!bg-card !border-border" />
+              <Panel position="top-right" className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-2">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{nodes.length} nodes</span>
+                  <span>{edges.length} connections</span>
+                  {isRunning && <span className="text-yellow-500 animate-pulse">● Live Preview Active</span>}
+                </div>
+              </Panel>
+            </ReactFlow>
+          </motion.div>
+
+          {/* Bottom Table Data Preview Panel */}
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="bg-card rounded-xl border border-border shadow-card flex flex-col overflow-hidden shrink-0"
+            style={{ height: '35vh', minHeight: '250px' }}>
+
+            <div className="px-4 py-2.5 border-b border-border bg-muted/20 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Database className="w-4 h-4 text-primary" />
+                Data Preview {nodes.find(n => n.selected) ? `— ${(nodes.find(n => n.selected)?.data as any)?.label}` : ''}
+              </h3>
+              {nodes.find(n => n.selected) && (nodes.find(n => n.selected)?.data as any)?.preview?.length > 0 && (
+                <span className="text-xs text-muted-foreground bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  {(nodes.find(n => n.selected)?.data as any).preview.length} rows loaded
+                </span>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-auto bg-background/50">
+              {!nodes.find(n => n.selected) ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <Layers className="w-8 h-8 mb-2 opacity-50" />
+                  <p className="text-sm">Select a node to view its data preview</p>
+                </div>
+              ) : !(nodes.find(n => n.selected)?.data as any)?.preview || (nodes.find(n => n.selected)?.data as any).preview.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <Database className="w-8 h-8 mb-2 opacity-50" />
+                  <p className="text-sm">No preview data available. Click <strong className="text-foreground">Run Preview</strong> to generate data.</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-xs text-muted-foreground bg-muted/50 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                      <th className="px-4 py-2 font-medium border-b border-border/50 text-center w-12">#</th>
+                      {Object.keys((nodes.find(n => n.selected)?.data as any).preview[0]).map(key => (
+                        <th key={key} className="px-4 py-2 font-semibold border-b border-border/50 text-foreground">{key}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {(nodes.find(n => n.selected)?.data as any).preview.map((row: any, i: number) => (
+                      <tr key={i} className="hover:bg-muted/40 transition-colors">
+                        <td className="px-4 py-2 text-muted-foreground text-center text-xs border-r border-border/20">{i + 1}</td>
+                        {Object.values(row).map((val: any, j: number) => (
+                          <td key={j} className="px-4 py-2 text-foreground/80">{String(val)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </motion.div>
+        </div>
       </div>
 
       {/* Node Config Dialog */}
