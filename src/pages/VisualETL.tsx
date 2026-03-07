@@ -348,8 +348,8 @@ function NodeConfigForm({ nodeType, config, dataSets, columns = [], onSave }: { 
               <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
               <SelectContent>
                 {columns?.map((col: any) => {
-                  const val = col.accessorKey || col.key || typeof col === 'string' ? col : '';
-                  const label = col.header || typeof col === 'string' ? col : val;
+                  const val = col.id || col.accessorKey || col.key || (typeof col === 'string' ? col : '');
+                  const label = col.name || col.header || (typeof col === 'string' ? col : val);
                   if (!val) return null;
                   return <SelectItem key={val} value={val}>{label}</SelectItem>;
                 })}
