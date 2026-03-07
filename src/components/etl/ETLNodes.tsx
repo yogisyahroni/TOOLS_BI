@@ -67,15 +67,13 @@ function ETLNode({ data, selected }: NodeProps) {
         </div>
       )}
 
-      {/* Data preview */}
+      {/* Data preview indicator */}
       {nodeData.preview && nodeData.preview.length > 0 && (
-        <div className="px-3 pb-2 border-t border-border/30 mt-1">
-          <p className="text-[10px] text-muted-foreground font-medium mb-0.5">Preview ({nodeData.preview.length} rows)</p>
-          <div className="bg-card/50 rounded p-1 max-h-[60px] overflow-hidden">
-            {nodeData.preview.slice(0, 2).map((row, i) => (
-              <p key={i} className="text-[9px] text-muted-foreground truncate">{JSON.stringify(row).slice(0, 60)}</p>
-            ))}
-          </div>
+        <div className="px-3 pb-2 pt-1 border-t border-border/30">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-medium">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            {nodeData.preview.length} rows ready
+          </span>
         </div>
       )}
 
