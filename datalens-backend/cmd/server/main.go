@@ -346,6 +346,7 @@ func main() {
 	conns.Post("/:id/test", schemaH.TestConnection)
 	conns.Get("/:id/schema", schemaH.GetSchema)
 	conns.Post("/:id/sync", schemaH.SyncSchema)
+	conns.Post("/:id/create-dataset", schemaH.CreateDataset)
 	conns.Post("/:id/query", uploadRateLimit, schemaH.QueryConnection) // PERF-08: rate-limit external DB queries
 	conns.Delete("/:id", schemaH.DeleteConnection)
 
