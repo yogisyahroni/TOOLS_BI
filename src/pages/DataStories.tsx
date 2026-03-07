@@ -64,8 +64,9 @@ export default function DataStories() {
       await createMut.mutateAsync({ title: result.title, content: result.content, datasetId: selectedDsId });
       toast({ title: 'Story generated!', description: 'AI data story created and saved.' });
       setStoryFocus('');
-    } catch {
-      toast({ title: 'Error', description: 'Failed to generate story.', variant: 'destructive' });
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Failed to generate story.';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
 

@@ -40,8 +40,9 @@ export default function Reports() {
     try {
       await generateMut.mutateAsync({ datasetId: selectedDsId });
       toast({ title: 'Report generated!', description: 'AI report created and saved.' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to generate report.', variant: 'destructive' });
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Failed to generate report.';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
 
