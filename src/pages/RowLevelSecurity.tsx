@@ -9,9 +9,39 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useRLSRules, useCreateRLSRule, useDeleteRLSRule, useToggleRLSRule, useDatasets } from '@/hooks/useApi';
+import { useRLSRules, useCreateRLSRule, useDeleteRLSRule, useToggleRLSRule, useDatasets, useDatasetData } from '@/hooks/useApi';
 
 // BUG-M6 fix: RLS rules now persist to backend via /api/v1/rls-rules
+
+function RLSRuleItem({ r, dataSets, toggleMut, deleteMut }: any) {
+  const ds = dataSets.find((d: any) => d.id === r.datasetId);
+  const allowedVals = Array.isArray(r.allowedValues) ? r.allowedValues : [];
+  const { data: __datasetDataRes } = useDatasetData(r.datasetId || '', { limit: 10000 });
+  const datasetWithData = React.useMemo(() => {
+    if (!ds) return null;
+    return { ...ds, data: __datasetDataRes?.data || [] };
+  }, [ds, __datasetDataRes]);
+
+  const count = datasetWithData ? datasetWithData.data.filter((row: any) => allowedVals.includes(String(row[r.columnName]))).length : 0;
+
+  return (
+    <div key={r.id} className="p-4 rounded-lg bg-muted/30 border border-border/50">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <p className="font-semibold text-foreground text-sm">{r.role}</p>
+          <p className="text-xs text-muted-foreground">{ds?.name ?? r.datasetId}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch checked={r.enabled} onCheckedChange={enabled => toggleMut.mutate({ id: r.id, enabled })} />
+          <Button variant="ghost" size="sm" onClick={() => deleteMut.mutate(r.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground"><span className="font-mono text-primary">{r.columnName}</span> IN [{allowedVals.join(', ')}]</p>
+      <p className="text-xs text-muted-foreground mt-1">Accessible rows: <span className="text-primary font-semibold">{count}</span></p>
+    </div>
+  );
+}
+
 export default function RowLevelSecurity() {
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
@@ -42,17 +72,6 @@ export default function RowLevelSecurity() {
       onSuccess: () => { toast({ title: 'RLS rule added' }); setRole(''); setVals(''); },
       onError: () => toast({ title: 'Failed to create rule', variant: 'destructive' }),
     });
-  };
-
-  const filteredCount = (datasetId: string, columnName: string, allowedValues: string[]) => {
-    const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(datasetId || '', { limit: 10000 });
-  const ds = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === datasetId);
-    if (!meta) return null;
-    return { ...meta, data: __datasetDataRes?.data || [] };
-  }, [dataSets, datasetId, __datasetDataRes]);
-    if (!ds) return 0;
-    return ds.data.filter(row => allowedValues.includes(String(row[columnName]))).length;
   };
 
   return (
@@ -108,26 +127,9 @@ export default function RowLevelSecurity() {
               </div>
             ) : (
               <div className="space-y-3">
-                {rules.map(r => {
-                  const ds = dataSets.find(d => d.id === r.datasetId);
-                  const allowedVals = Array.isArray(r.allowedValues) ? r.allowedValues : [];
-                  return (
-                    <div key={r.id} className="p-4 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <p className="font-semibold text-foreground text-sm">{r.role}</p>
-                          <p className="text-xs text-muted-foreground">{ds?.name ?? r.datasetId}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Switch checked={r.enabled} onCheckedChange={enabled => toggleMut.mutate({ id: r.id, enabled })} />
-                          <Button variant="ghost" size="sm" onClick={() => deleteMut.mutate(r.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground"><span className="font-mono text-primary">{r.columnName}</span> IN [{allowedVals.join(', ')}]</p>
-                      <p className="text-xs text-muted-foreground mt-1">Accessible rows: <span className="text-primary font-semibold">{filteredCount(r.datasetId, r.columnName, allowedVals)}</span></p>
-                    </div>
-                  );
-                })}
+                {rules.map(r => (
+                  <RLSRuleItem key={r.id} r={r} dataSets={dataSets} toggleMut={toggleMut} deleteMut={deleteMut} />
+                ))}
               </div>
             )}
           </div>

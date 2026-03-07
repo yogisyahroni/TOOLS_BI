@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutGrid, Plus, Trash2, GripVertical, BarChart3, X, Move, Maximize2, Minimize2,
+  LayoutGrid, Plus, Trash2, GripVertical, BarChart3, X, Move, Maximize2, Minimize2, Loader2,
   LineChart, PieChart, AreaChart, ScatterChart as ScatterIcon,
   Radar, TrendingUp, Grid3X3, Flame, Box, Settings, Database, Edit2, Columns, Filter,
   HelpCircle, ChevronRight, Share2, Users, Search, Check, Download, MousePointer2, Settings2, AlertCircle, Variable, PenTool, Braces, Link2, Sparkles, MessageSquare, Zap, Gauge, SunMedium, Network, Combine
@@ -34,6 +34,16 @@ import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { FormatRuleItem, FormatRuleCreate, DashboardParameter } from '@/lib/api';
 import { HelpTooltip } from '@/components/HelpTooltip';
+
+function WidgetChartRenderer({ widget, metaDs, renderFn }: { widget: any, metaDs: any, renderFn: (w: any, ds: any, isLoading: boolean) => React.ReactNode }) {
+  const { data: __datasetDataRes, isLoading } = useDatasetData(widget.dataSetId || '', { limit: 10000 });
+  const ds = React.useMemo(() => {
+    if (!metaDs) return null;
+    return { ...metaDs, data: __datasetDataRes?.data || [] };
+  }, [metaDs, __datasetDataRes]);
+
+  return <>{renderFn(widget, ds, isLoading)}</>;
+}
 
 const COLORS = [
   'hsl(174, 72%, 46%)', 'hsl(199, 89%, 48%)', 'hsl(142, 76%, 36%)',
@@ -150,7 +160,7 @@ function HeatmapCell({ data, xLabels, yLabels }: { data: number[][]; xLabels: st
 }
 
 export default function DashboardBuilder() {
-  const {  dashboards, addDashboard, updateDashboard, removeDashboard  } = useDataStore();
+  const { dashboards, addDashboard, updateDashboard, removeDashboard } = useDataStore();
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
 
@@ -673,13 +683,8 @@ export default function DashboardBuilder() {
     return COLORS[index % COLORS.length];
   };
 
-  const renderWidgetChart = (widget: Widget) => {
-    const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(widget.dataSetId || '', { limit: 10000 });
-  const ds = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === widget.dataSetId);
-    if (!meta) return null;
-    return { ...meta, data: __datasetDataRes?.data || [] };
-  }, [dataSets, widget.dataSetId, __datasetDataRes]);
+  const renderWidgetChart = (widget: Widget, ds: any, isLoading: boolean) => {
+    if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
     if (!ds) return <p className="text-muted-foreground text-center mt-8 text-sm">Dataset not found</p>;
 
     if (widget.type === 'stat') {
@@ -977,12 +982,7 @@ export default function DashboardBuilder() {
     const groups: { datasetName: string, columns: any[] }[] = [];
 
     // Base dataset
-    const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedWidget.dataSetId || '', { limit: 10000 });
-  const baseDs = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === selectedWidget.dataSetId);
-    if (!meta) return null;
-    return { ...meta, data: __datasetDataRes?.data || [] };
-  }, [dataSets, selectedWidget.dataSetId, __datasetDataRes]);
+    const baseDs = dataSets.find(d => d.id === selectedWidget.dataSetId);
     if (baseDs) {
       groups.push({ datasetName: `${baseDs.name} (Base)`, columns: baseDs.columns });
 
@@ -994,12 +994,7 @@ export default function DashboardBuilder() {
       });
 
       relatedIds.forEach(targetId => {
-        const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(targetId || '', { limit: 10000 });
-  const targetDs = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === targetId);
-    if (!meta) return null;
-    return { ...meta, data: __datasetDataRes?.data || [] };
-  }, [dataSets, targetId, __datasetDataRes]);
+        const targetDs = dataSets.find(d => d.id === targetId);
         if (targetDs) {
           // Identify fields that are from related datasets with format datasetId.columnName
           const mappedColumns = targetDs.columns.map(c => ({
@@ -1372,7 +1367,11 @@ export default function DashboardBuilder() {
                         </div>
 
                         <div className={`p-4 ${widget.type === 'stat' ? 'h-[180px]' : (widget.type === 'text' || widget.type === 'action') ? 'h-[180px]' : 'h-[300px]'}`}>
-                          {renderWidgetChart(widget)}
+                          <WidgetChartRenderer
+                            widget={widget}
+                            metaDs={dataSets.find(d => d.id === widget.dataSetId)}
+                            renderFn={renderWidgetChart}
+                          />
                         </div>
                       </motion.div>
                     ))}

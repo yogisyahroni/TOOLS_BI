@@ -14,6 +14,41 @@ import { HelpTooltip } from '@/components/HelpTooltip';
 
 function genId() { return Math.random().toString(36).substring(2, 15); }
 
+function RelationshipCard({ rel, dataSets, index, onRemove }: { rel: DataRelationship, dataSets: any[], index: number, onRemove: (id: string) => void }) {
+  const { data: __datasetDataRes } = useDatasetData(rel.sourceDataSetId || '', { limit: 10000 });
+  const src = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === rel.sourceDataSetId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, rel.sourceDataSetId, __datasetDataRes]);
+
+  const { data: __targetRelDataRes } = useDatasetData(rel.targetDataSetId || '', { limit: 10000 });
+  const tgt = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === rel.targetDataSetId);
+    if (!meta) return null;
+    return { ...meta, data: __targetRelDataRes?.data || [] };
+  }, [dataSets, rel.targetDataSetId, __targetRelDataRes]);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
+      className="bg-card rounded-xl p-4 border border-border shadow-card flex items-center gap-4">
+      <div className="flex items-center gap-2 flex-1">
+        <div className="px-3 py-1.5 rounded-lg bg-primary/10 text-sm text-primary font-medium">{src?.name}.{rel.sourceColumn}</div>
+        <div className="flex items-center gap-1 text-muted-foreground text-xs">
+          <ArrowRight className="w-4 h-4" />
+          <span className="bg-muted px-2 py-0.5 rounded">{rel.type}</span>
+          <ArrowRight className="w-4 h-4" />
+        </div>
+        <div className="px-3 py-1.5 rounded-lg bg-info/10 text-sm text-info font-medium">{tgt?.name}.{rel.targetColumn}</div>
+      </div>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+        onClick={() => onRemove(rel.id)}>
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </motion.div>
+  );
+}
+
 export default function DataModeling() {
   const { relationships, addRelationship, removeRelationship } = useDataStore();
   const { data: dataSets = [] } = useDatasets();
@@ -152,38 +187,15 @@ export default function DataModeling() {
         </motion.div>
       ) : (
         <div className="space-y-3">
-          {relationships.map((rel, i) => {
-            const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(rel.sourceDataSetId || '', { limit: 10000 });
-            const src = React.useMemo(() => {
-              const meta = dataSets.find(d => d.id === rel.sourceDataSetId);
-              if (!meta) return null;
-              return { ...meta, data: __datasetDataRes?.data || [] };
-            }, [dataSets, rel.sourceDataSetId, __datasetDataRes]);
-            const { data: __targetRelDataRes, isLoading: __isTargetRelDataLoading } = useDatasetData(rel.targetDataSetId || '', { limit: 10000 });
-            const tgt = React.useMemo(() => {
-              const meta = dataSets.find(d => d.id === rel.targetDataSetId);
-              if (!meta) return null;
-              return { ...meta, data: __targetRelDataRes?.data || [] };
-            }, [dataSets, rel.targetDataSetId, __targetRelDataRes]);
-            return (
-              <motion.div key={rel.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                className="bg-card rounded-xl p-4 border border-border shadow-card flex items-center gap-4">
-                <div className="flex items-center gap-2 flex-1">
-                  <div className="px-3 py-1.5 rounded-lg bg-primary/10 text-sm text-primary font-medium">{src?.name}.{rel.sourceColumn}</div>
-                  <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                    <ArrowRight className="w-4 h-4" />
-                    <span className="bg-muted px-2 py-0.5 rounded">{rel.type}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </div>
-                  <div className="px-3 py-1.5 rounded-lg bg-info/10 text-sm text-info font-medium">{tgt?.name}.{rel.targetColumn}</div>
-                </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => { removeRelationship(rel.id); toast({ title: 'Relationship removed' }); }}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </motion.div>
-            );
-          })}
+          {relationships.map((rel, i) => (
+            <RelationshipCard
+              key={rel.id}
+              rel={rel}
+              dataSets={dataSets}
+              index={i}
+              onRemove={(id) => { removeRelationship(id); toast({ title: 'Relationship removed' }); }}
+            />
+          ))}
         </div>
       )}
     </div>
