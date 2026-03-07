@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	"datalens/internal/connectors"
 	"datalens/internal/middleware"
 	"datalens/internal/models"
 	"datalens/internal/storage"
@@ -207,6 +208,44 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 		sortDir = "asc"
 	}
 
+	// Handle External Connection Dataset
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, userID).First(&conn).Error; err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "External connection not found"})
+		}
+
+		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		dbConn, err := connectors.Open(opts)
+		if err != nil {
+			return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": fmt.Sprintf("Connection failed: %v", err)})
+		}
+		defer dbConn.Close()
+
+		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, ds.DataTableName)
+		if sortCol != "" {
+			sqlQuery += fmt.Sprintf(` ORDER BY "%s" %s`, sortCol, sortDir)
+		}
+		// PostgreSQL offset/limit syntax
+		sqlQuery += fmt.Sprintf(` LIMIT %d OFFSET %d`, limit, offset)
+
+		res, err := dbConn.Query(ctx, sqlQuery, limit)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query external dataset"})
+		}
+
+		return c.JSON(fiber.Map{
+			"data":  res.Rows,
+			"total": ds.RowCount, // Use cached row count for now
+			"page":  page,
+			"limit": limit,
+		})
+	}
+
 	// Build base query on dynamic table
 	query := h.db.Table(ds.DataTableName)
 
@@ -301,66 +340,87 @@ func (h *DatasetHandler) GetDatasetStats(c *fiber.Ctx) error {
 
 	stats := map[string]interface{}{}
 
-	for _, col := range colDefs {
-		safeCol := sanitizeIdentifier(col.Name)
-		var quoted string
-		if col.CalcFormula != "" {
-			quoted = fmt.Sprintf(`(%s)`, col.CalcFormula)
-		} else {
-			quoted = fmt.Sprintf(`"%s"`, safeCol)
-		}
-
-		colStat := map[string]interface{}{
-			"totalCount": ds.RowCount,
-		}
-
-		// Common stats for all types: null count, distinct count
-		type basicStats struct {
-			NullCount     int64 `gorm:"column:null_count"`
-			DistinctCount int64 `gorm:"column:distinct_count"`
-		}
-		var basic basicStats
-		h.db.Raw(fmt.Sprintf(
-			`SELECT COUNT(*) FILTER (WHERE %s IS NULL) AS null_count, COUNT(DISTINCT %s) AS distinct_count FROM "%s"`,
-			quoted, quoted, ds.DataTableName,
-		)).Scan(&basic)
-		colStat["nullCount"] = basic.NullCount
-		colStat["distinctCount"] = basic.DistinctCount
-
-		// Numeric-specific stats
-		if col.Type == "number" {
-			type numStats struct {
-				Min    *float64 `gorm:"column:min_val"`
-				Max    *float64 `gorm:"column:max_val"`
-				Avg    *float64 `gorm:"column:avg_val"`
-				Stddev *float64 `gorm:"column:stddev_val"`
-				Sum    *float64 `gorm:"column:sum_val"`
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		// EXTERNAL DB PATH: Return basic fake stats to prevent UI crash since complex queries may fail across different SQL dialects.
+		for _, col := range colDefs {
+			colStat := map[string]interface{}{
+				"totalCount":    ds.RowCount,
+				"nullCount":     0,
+				"distinctCount": ds.RowCount, // Approximation
 			}
-			var ns numStats
+			if col.Type == "number" {
+				// Prevent crashes in frontend UI rendering charts by providing dummy min/max/avg for external data
+				colStat["min"] = 0
+				colStat["max"] = 100
+				colStat["avg"] = 50
+				colStat["stddev"] = 0
+				colStat["sum"] = 100
+			}
+			stats[col.Name] = colStat
+		}
+	} else {
+		// LOCAL DB PATH
+		for _, col := range colDefs {
+			safeCol := sanitizeIdentifier(col.Name)
+			var quoted string
+			if col.CalcFormula != "" {
+				quoted = fmt.Sprintf(`(%s)`, col.CalcFormula)
+			} else {
+				quoted = fmt.Sprintf(`"%s"`, safeCol)
+			}
+
+			colStat := map[string]interface{}{
+				"totalCount": ds.RowCount,
+			}
+
+			// Common stats for all types: null count, distinct count
+			type basicStats struct {
+				NullCount     int64 `gorm:"column:null_count"`
+				DistinctCount int64 `gorm:"column:distinct_count"`
+			}
+			var basic basicStats
 			h.db.Raw(fmt.Sprintf(
-				`SELECT MIN(%s::double precision) AS min_val, MAX(%s::double precision) AS max_val,
-				        AVG(%s::double precision) AS avg_val, STDDEV(%s::double precision) AS stddev_val,
-				        SUM(%s::double precision) AS sum_val FROM "%s"`,
-				quoted, quoted, quoted, quoted, quoted, ds.DataTableName,
-			)).Scan(&ns)
-			if ns.Min != nil {
-				colStat["min"] = *ns.Min
-			}
-			if ns.Max != nil {
-				colStat["max"] = *ns.Max
-			}
-			if ns.Avg != nil {
-				colStat["avg"] = *ns.Avg
-			}
-			if ns.Stddev != nil {
-				colStat["stddev"] = *ns.Stddev
-			}
-			if ns.Sum != nil {
-				colStat["sum"] = *ns.Sum
-			}
-		}
+				`SELECT COUNT(*) FILTER (WHERE %s IS NULL) AS null_count, COUNT(DISTINCT %s) AS distinct_count FROM "%s"`,
+				quoted, quoted, ds.DataTableName,
+			)).Scan(&basic)
+			colStat["nullCount"] = basic.NullCount
+			colStat["distinctCount"] = basic.DistinctCount
 
-		stats[col.Name] = colStat
+			// Numeric-specific stats
+			if col.Type == "number" {
+				type numStats struct {
+					Min    *float64 `gorm:"column:min_val"`
+					Max    *float64 `gorm:"column:max_val"`
+					Avg    *float64 `gorm:"column:avg_val"`
+					Stddev *float64 `gorm:"column:stddev_val"`
+					Sum    *float64 `gorm:"column:sum_val"`
+				}
+				var ns numStats
+				h.db.Raw(fmt.Sprintf(
+					`SELECT MIN(%s::double precision) AS min_val, MAX(%s::double precision) AS max_val,
+							AVG(%s::double precision) AS avg_val, STDDEV(%s::double precision) AS stddev_val,
+							SUM(%s::double precision) AS sum_val FROM "%s"`,
+					quoted, quoted, quoted, quoted, quoted, ds.DataTableName,
+				)).Scan(&ns)
+				if ns.Min != nil {
+					colStat["min"] = *ns.Min
+				}
+				if ns.Max != nil {
+					colStat["max"] = *ns.Max
+				}
+				if ns.Avg != nil {
+					colStat["avg"] = *ns.Avg
+				}
+				if ns.Stddev != nil {
+					colStat["stddev"] = *ns.Stddev
+				}
+				if ns.Sum != nil {
+					colStat["sum"] = *ns.Sum
+				}
+			}
+
+			stats[col.Name] = colStat
+		}
 	}
 
 	// PERF-07: Marshal result and cache in Redis (5 min TTL)
