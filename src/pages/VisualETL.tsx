@@ -64,7 +64,17 @@ function VisualETLInner() {
   const sourceNode = nodes.find((n) => (n.data as any).nodeType === 'source');
   const sourceDatasetId = (sourceNode?.data as any)?.config?.dataSetId ?? '';
   const selectedDataset = dataSets.find((ds: any) => ds.id === sourceDatasetId);
-  const datasetColumns = selectedDataset?.columns || [];
+
+  let datasetColumns: any[] = [];
+  try {
+    if (typeof selectedDataset?.columns === 'string') {
+      datasetColumns = JSON.parse(selectedDataset.columns);
+    } else if (Array.isArray(selectedDataset?.columns)) {
+      datasetColumns = selectedDataset.columns;
+    }
+  } catch (err) {
+    datasetColumns = [];
+  }
 
   const onConnect = useCallback((params: Connection) => {
     setEdges(eds => addEdge({
