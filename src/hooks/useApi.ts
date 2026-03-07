@@ -330,6 +330,15 @@ export function useRunPipeline() {
     });
 }
 
+export function useUpdatePipeline() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, payload }: { id: string; payload: Partial<PipelineCreate> }) =>
+            pipelineApi.update(id, payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['pipelines'] }),
+    });
+}
+
 export function useDeletePipeline() {
     const qc = useQueryClient();
     return useMutation({

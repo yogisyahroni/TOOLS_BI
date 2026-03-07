@@ -15,7 +15,14 @@ import { AIChatPanel } from '@/components/AIChatPanel';
 import type { ETLPipeline as ETLPipelineType, ETLStep } from '@/types/data';
 import { cn } from '@/lib/utils';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useDatasets } from '@/hooks/useApi';
+import {
+  useDatasets,
+  usePipelines,
+  useCreatePipeline,
+  useUpdatePipeline,
+  useDeletePipeline,
+  useRunPipeline
+} from '@/hooks/useApi';
 import { datasetApi } from '@/lib/api';
 
 function generateId() {
@@ -313,7 +320,14 @@ function StepConfigEditor({
 }
 
 export default function ETLPipelinePage() {
-  const { pipelines, addPipeline, updatePipeline, removePipeline, addDataSet } = useDataStore();
+  const { data: pipelinesData = [] } = usePipelines();
+  const pipelines = pipelinesData as any[];
+  const createPipelineMut = useCreatePipeline();
+  const updatePipelineMut = useUpdatePipeline();
+  const deletePipelineMut = useDeletePipeline();
+  const runPipelineMut = useRunPipeline();
+
+  const { addDataSet } = useDataStore(); // Just to keep saveOutput functioning for now
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [newPipelineName, setNewPipelineName] = useState('');
@@ -321,62 +335,94 @@ export default function ETLPipelinePage() {
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<Record<string, Record<string, any>[]>>({});
 
-  const createPipeline = () => {
+  const createPipeline = async () => {
     if (!newPipelineName.trim() || !selectedSource) {
       toast({ title: 'Missing information', description: 'Please provide a pipeline name and select a source dataset.', variant: 'destructive' });
       return;
     }
-    const pipeline: ETLPipelineType = {
-      id: generateId(), name: newPipelineName, steps: [], sourceDataSetId: selectedSource, status: 'idle',
-    };
-    addPipeline(pipeline);
-    setNewPipelineName('');
-    setSelectedSource('');
-    toast({ title: 'Pipeline created', description: `${pipeline.name} has been created.` });
+    try {
+      await createPipelineMut.mutateAsync({
+        name: newPipelineName,
+        sourceDatasetId: selectedSource,
+        steps: [],
+      } as any);
+      setNewPipelineName('');
+      setSelectedSource('');
+      toast({ title: 'Pipeline created', description: `${newPipelineName} has been created.` });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to create pipeline', variant: 'destructive' });
+    }
   };
 
-  const addStep = (pipelineId: string, type: ETLStep['type']) => {
+  const addStep = async (pipelineId: string, type: ETLStep['type']) => {
     const pipeline = pipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
-    const newStep: ETLStep = { id: generateId(), type, config: {}, order: pipeline.steps.length };
-    updatePipeline(pipelineId, { steps: [...pipeline.steps, newStep] });
-    setExpandedSteps(prev => new Set(prev).add(newStep.id));
+    const currentSteps = (pipeline.steps as ETLStep[]) || [];
+    const newStep: ETLStep = { id: generateId(), type, config: {}, order: currentSteps.length };
+    const newSteps = [...currentSteps, newStep];
+    try {
+      await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: newSteps as any } });
+      setExpandedSteps(prev => new Set(prev).add(newStep.id));
+    } catch {
+      toast({ title: 'Error', description: 'Failed to add step', variant: 'destructive' });
+    }
   };
 
-  const updateStepConfig = (pipelineId: string, stepId: string, config: Record<string, any>) => {
+  const updateStepConfig = async (pipelineId: string, stepId: string, config: Record<string, any>) => {
     const pipeline = pipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
-    updatePipeline(pipelineId, {
-      steps: pipeline.steps.map(s => s.id === stepId ? { ...s, config } : s),
-    });
+    const currentSteps = (pipeline.steps as ETLStep[]) || [];
+    const newSteps = currentSteps.map(s => s.id === stepId ? { ...s, config } : s);
+    try {
+      await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: newSteps as any } });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update step config', variant: 'destructive' });
+    }
   };
 
-  const removeStep = (pipelineId: string, stepId: string) => {
+  const removeStep = async (pipelineId: string, stepId: string) => {
     const pipeline = pipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
-    updatePipeline(pipelineId, { steps: pipeline.steps.filter(s => s.id !== stepId) });
+    const currentSteps = (pipeline.steps as ETLStep[]) || [];
+    const newSteps = currentSteps.filter(s => s.id !== stepId);
+    try {
+      await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: newSteps as any } });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to remove step', variant: 'destructive' });
+    }
+  };
+
+  const handleRemovePipeline = async (pipelineId: string) => {
+    try {
+      await deletePipelineMut.mutateAsync(pipelineId);
+      toast({ title: 'Pipeline deleted', description: 'The pipeline has been removed.' });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete pipeline', variant: 'destructive' });
+    }
   };
 
   const runPipeline = async (pipelineId: string) => {
     const pipeline = pipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
-    const sourceDs = dataSets.find(ds => ds.id === pipeline.sourceDataSetId);
+    const sourceDatasetId = pipeline.sourceDataSetId || pipeline.sourceDatasetId;
+    const sourceDs = dataSets.find(ds => ds.id === sourceDatasetId);
     if (!sourceDs) {
       toast({ title: 'Error', description: 'Source dataset not found', variant: 'destructive' });
       return;
     }
 
-    updatePipeline(pipelineId, { status: 'running' });
-
     try {
+      // 1. Run pipeline on backend
+      await runPipelineMut.mutateAsync(pipelineId);
+
+      // 2. Run local executePipeline to get preview output data on frontend
       const response = await datasetApi.data(sourceDs.id, { limit: 50000 });
       const sourceData = response.data.data || [];
-      const result = executePipeline(sourceData, pipeline.steps);
+      const result = executePipeline(sourceData, (pipeline.steps as ETLStep[]) || []);
       setPreviewData(prev => ({ ...prev, [pipelineId]: result }));
-      updatePipeline(pipelineId, { status: 'completed', lastRun: new Date() });
-      toast({ title: 'Pipeline completed', description: `${result.length} rows output.` });
+
+      toast({ title: 'Pipeline completed', description: `${result.length} rows processed via backend.` });
     } catch (err: any) {
-      updatePipeline(pipelineId, { status: 'error' });
       toast({ title: 'Pipeline error', description: err.message || 'An error occurred during execution', variant: 'destructive' });
     }
   };
@@ -404,7 +450,7 @@ export default function ETLPipelinePage() {
     toast({ title: 'Output saved', description: `Saved as "${pipeline.name}_output" dataset.` });
   };
 
-  const handleAIResponse = (response: string) => {
+  const handleAIResponse = async (response: string) => {
     try {
       // Try to parse JSON array of steps from AI
       const jsonMatch = response.match(/\[[\s\S]*\]/);
@@ -418,14 +464,16 @@ export default function ETLPipelinePage() {
       }
 
       const lastPipeline = pipelines[pipelines.length - 1];
+      const currentSteps = (lastPipeline.steps as ETLStep[]) || [];
       const newSteps: ETLStep[] = steps.map((s, i) => ({
         id: generateId(),
         type: s.type,
         config: s.config || {},
-        order: lastPipeline.steps.length + i,
+        order: currentSteps.length + i,
       }));
 
-      updatePipeline(lastPipeline.id, { steps: [...lastPipeline.steps, ...newSteps] });
+      const finalSteps = [...currentSteps, ...newSteps];
+      await updatePipelineMut.mutateAsync({ id: lastPipeline.id, payload: { steps: finalSteps as any } });
       toast({ title: 'AI Steps Added', description: `${newSteps.length} steps added to ${lastPipeline.name}` });
     } catch {
       // AI responded with text, not steps - that's OK
@@ -501,10 +549,12 @@ When the user asks in natural language, generate the appropriate steps. Return J
             </motion.div>
           ) : (
             <div className="space-y-4">
-              {pipelines.map((pipeline, index) => {
-                const sourceDs = dataSets.find(ds => ds.id === pipeline.sourceDataSetId);
+              {pipelines.map((pipeline: any, index: number) => {
+                const sourceDatasetId = pipeline.sourceDataSetId || pipeline.sourceDatasetId;
+                const sourceDs = dataSets.find(ds => ds.id === sourceDatasetId);
                 const sourceColumns = sourceDs?.columns.map(c => ({ name: c.name, type: c.type })) || [];
                 const preview = previewData[pipeline.id];
+                const pipelineSteps = (pipeline.steps as ETLStep[]) || [];
 
                 return (
                   <motion.div key={pipeline.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
@@ -516,12 +566,12 @@ When the user asks in natural language, generate the appropriate steps. Return J
                         </div>
                         <div>
                           <h3 className="font-semibold text-foreground">{pipeline.name}</h3>
-                          <p className="text-xs text-muted-foreground">Source: {sourceDs?.name || 'Unknown'} • {pipeline.steps.length} steps</p>
+                          <p className="text-xs text-muted-foreground">Source: {sourceDs?.name || 'Unknown'} • {pipelineSteps.length} steps</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(pipeline.status)}
-                        <Button size="sm" onClick={() => runPipeline(pipeline.id)} disabled={pipeline.status === 'running' || pipeline.steps.length === 0} className="gradient-primary text-primary-foreground">
+                        <Button size="sm" onClick={() => runPipeline(pipeline.id)} disabled={pipeline.status === 'running' || pipelineSteps.length === 0} className="gradient-primary text-primary-foreground">
                           <Play className="w-4 h-4 mr-1" /> Run
                         </Button>
                         {preview && (
@@ -529,7 +579,7 @@ When the user asks in natural language, generate the appropriate steps. Return J
                             <Save className="w-4 h-4 mr-1" /> Save Output
                           </Button>
                         )}
-                        <Button size="sm" variant="destructive" onClick={() => removePipeline(pipeline.id)}>
+                        <Button size="sm" variant="destructive" onClick={() => handleRemovePipeline(pipeline.id)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -545,9 +595,9 @@ When the user asks in natural language, generate the appropriate steps. Return J
                     </div>
 
                     {/* Steps */}
-                    {pipeline.steps.length > 0 && (
+                    {pipelineSteps.length > 0 && (
                       <div className="border-t border-border">
-                        {pipeline.steps.map((step, si) => {
+                        {pipelineSteps.map((step, si) => {
                           const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
                           const isExpanded = expandedSteps.has(step.id);
                           return (
