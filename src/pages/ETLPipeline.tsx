@@ -15,13 +15,15 @@ import { AIChatPanel } from '@/components/AIChatPanel';
 import type { ETLPipeline as ETLPipelineType, ETLStep } from '@/types/data';
 import { cn } from '@/lib/utils';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import Papa from 'papaparse';
 import {
   useDatasets,
   usePipelines,
   useCreatePipeline,
   useUpdatePipeline,
   useDeletePipeline,
-  useRunPipeline
+  useRunPipeline,
+  useUploadDataset
 } from '@/hooks/useApi';
 import { datasetApi } from '@/lib/api';
 
@@ -326,6 +328,7 @@ export default function ETLPipelinePage() {
   const updatePipelineMut = useUpdatePipeline();
   const deletePipelineMut = useDeletePipeline();
   const runPipelineMut = useRunPipeline();
+  const uploadDatasetMut = useUploadDataset();
 
   const { addDataSet } = useDataStore(); // Just to keep saveOutput functioning for now
   const { data: dataSets = [] } = useDatasets();
@@ -427,27 +430,31 @@ export default function ETLPipelinePage() {
     }
   };
 
-  const saveOutput = (pipelineId: string) => {
+  const saveOutput = async (pipelineId: string) => {
     const data = previewData[pipelineId];
     const pipeline = pipelines.find(p => p.id === pipelineId);
-    if (!data || !pipeline) return;
+    if (!data || !pipeline || data.length === 0) return;
 
-    const cols = data.length > 0 ? Object.keys(data[0]) : [];
-    addDataSet({
-      id: generateId(),
-      name: `${pipeline.name}_output`,
-      fileName: `${pipeline.name}_output.csv`,
-      columns: cols.map(c => ({
-        name: c,
-        type: typeof data[0]?.[c] === 'number' ? 'number' as const : 'string' as const,
-        nullable: false,
-      })),
-      data,
-      uploadedAt: new Date(),
-      rowCount: data.length,
-      size: JSON.stringify(data).length,
-    });
-    toast({ title: 'Output saved', description: `Saved as "${pipeline.name}_output" dataset.` });
+    try {
+      // 1. Generate CSV from JSON data
+      const csvStr = Papa.unparse(data);
+
+      // 2. Create a Blob and File from CSV string
+      const blob = new Blob([csvStr], { type: 'text/csv' });
+      const filename = `${pipeline.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_output.csv`;
+      const file = new File([blob], filename, { type: 'text/csv' });
+
+      // 3. Prepare FormData
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // 4. Upload to backend
+      await uploadDatasetMut.mutateAsync(formData);
+
+      toast({ title: 'Output saved', description: `Saved as "${filename}" dataset.` });
+    } catch (error) {
+      toast({ title: 'Failed to save', description: 'Could not upload the processed dataset.', variant: 'destructive' });
+    }
   };
 
   const handleAIResponse = async (response: string) => {
