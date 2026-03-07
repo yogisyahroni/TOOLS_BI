@@ -216,7 +216,7 @@ function StepConfigEditor({
               <Label className="text-xs text-muted-foreground">Agg Column</Label>
               <Select value={config._aggCol || ''} onValueChange={v => onUpdate({ ...config, _aggCol: v })}>
                 <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-                <SelectContent>{columns.filter(c => c.type === 'number').map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>

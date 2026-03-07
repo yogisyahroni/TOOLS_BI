@@ -268,6 +268,7 @@ function VisualETLInner() {
             nodeType={configDialog.nodeType}
             config={configDialog.config}
             dataSets={dataSets}
+            columns={dataSets.find(ds => ds.id === nodes.find(n => (n.data as any).nodeType === 'source')?.data?.config?.dataSetId)?.columns || []}
             onSave={updateNodeConfig}
           />
         </DialogContent>
@@ -277,40 +278,40 @@ function VisualETLInner() {
 }
 
 // Dynamic config form based on node type
-function NodeConfigForm({ nodeType, config, dataSets, onSave }: { nodeType: string; config: Record<string, any>; dataSets: any[]; onSave: (c: Record<string, any>) => void }) {
+function NodeConfigForm({ nodeType, config, dataSets, columns = [], onSave }: { nodeType: string; config: Record<string, any>; dataSets: any[]; columns?: any[]; onSave: (c: Record<string, any>) => void }) {
   const [form, setForm] = useState<Record<string, any>>(config);
 
   const fields = useMemo(() => {
     switch (nodeType) {
       case 'source': return [{ key: 'dataSetId', label: 'Dataset', type: 'dataset' }];
       case 'filter': return [
-        { key: 'column', label: 'Column', type: 'text' },
+        { key: 'column', label: 'Column', type: 'column' },
         { key: 'operator', label: 'Operator', type: 'select', options: ['=', '!=', '>', '<', '>=', '<=', 'contains', 'startsWith'] },
         { key: 'value', label: 'Value', type: 'text' },
       ];
       case 'transform': return [
-        { key: 'column', label: 'Column', type: 'text' },
+        { key: 'column', label: 'Column', type: 'column' },
         { key: 'operation', label: 'Operation', type: 'select', options: ['uppercase', 'lowercase', 'trim', 'round', 'abs', 'toNumber', 'toString', 'toDate'] },
       ];
       case 'aggregate': return [
-        { key: 'groupBy', label: 'Group By', type: 'text' },
-        { key: 'column', label: 'Aggregate Column', type: 'text' },
+        { key: 'groupBy', label: 'Group By', type: 'column' },
+        { key: 'column', label: 'Aggregate Column', type: 'column' },
         { key: 'function', label: 'Function', type: 'select', options: ['sum', 'avg', 'count', 'min', 'max', 'median'] },
       ];
       case 'sort': return [
-        { key: 'column', label: 'Column', type: 'text' },
+        { key: 'column', label: 'Column', type: 'column' },
         { key: 'direction', label: 'Direction', type: 'select', options: ['asc', 'desc'] },
       ];
       case 'select': return [{ key: 'columns', label: 'Columns (comma-separated)', type: 'text' }];
       case 'join': return [
         { key: 'targetDataSetId', label: 'Join Dataset', type: 'dataset' },
         { key: 'joinType', label: 'Join Type', type: 'select', options: ['inner', 'left', 'right', 'full'] },
-        { key: 'leftKey', label: 'Left Key', type: 'text' },
-        { key: 'rightKey', label: 'Right Key', type: 'text' },
+        { key: 'leftKey', label: 'Left Key', type: 'column' },
+        { key: 'rightKey', label: 'Right Key (Target)', type: 'text' },
       ];
       case 'deduplicate': return [{ key: 'columns', label: 'Columns (comma-separated)', type: 'text' }];
       case 'split': return [
-        { key: 'column', label: 'Split Column', type: 'text' },
+        { key: 'column', label: 'Split Column', type: 'column' },
         { key: 'condition', label: 'Condition', type: 'text' },
       ];
       case 'custom': return [{ key: 'expression', label: 'JS Expression', type: 'textarea' }];
@@ -336,6 +337,19 @@ function NodeConfigForm({ nodeType, config, dataSets, onSave }: { nodeType: stri
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 {field.options?.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {field.type === 'column' && (
+            <Select value={form[field.key] || ''} onValueChange={v => setForm({ ...form, [field.key]: v })}>
+              <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+              <SelectContent>
+                {columns?.map((col: any) => {
+                  const val = col.accessorKey || col.key || typeof col === 'string' ? col : '';
+                  const label = col.header || typeof col === 'string' ? col : val;
+                  if (!val) return null;
+                  return <SelectItem key={val} value={val}>{label}</SelectItem>;
+                })}
               </SelectContent>
             </Select>
           )}
