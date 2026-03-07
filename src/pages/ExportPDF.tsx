@@ -1,3 +1,5 @@
+import React from 'react';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 import { useState } from 'react';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
@@ -10,7 +12,8 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ExportPDF() {
-  const { dataSets, reports, dashboards } = useDataStore();
+  const {  reports, dashboards  } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [exportType, setExportType] = useState<'dataset' | 'report' | 'dashboard'>('dataset');
   const [selectedId, setSelectedId] = useState('');
@@ -31,7 +34,12 @@ export default function ExportPDF() {
     const exportTitle = title || items.find(i => i.id === selectedId)?.name || 'Export';
 
     if (exportType === 'dataset') {
-      const ds = dataSets.find(d => d.id === selectedId);
+      const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedId || '', { limit: 10000 });
+  const ds = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === selectedId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedId, __datasetDataRes]);
       if (!ds) return;
       content = `# ${exportTitle}\n\nGenerated: ${new Date().toLocaleString()}\n\n## Data Summary\n- Rows: ${ds.rowCount}\n- Columns: ${ds.columns.length}\n- Size: ${(ds.size / 1024).toFixed(1)} KB\n\n## Columns\n${ds.columns.map(c => `- **${c.name}** (${c.type})`).join('\n')}\n\n## Data Preview\n\n| ${ds.columns.map(c => c.name).join(' | ')} |\n| ${ds.columns.map(() => '---').join(' | ')} |\n${ds.data.slice(0, 100).map(r => `| ${ds.columns.map(c => r[c.name] ?? '').join(' | ')} |`).join('\n')}\n`;
       if (includeSummary) {

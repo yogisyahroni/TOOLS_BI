@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
-import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment } from '@/hooks/useApi';
+import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment, useDatasets, useDatasetData } from '@/hooks/useApi';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { FormatRuleItem, FormatRuleCreate, DashboardParameter } from '@/lib/api';
@@ -150,7 +150,8 @@ function HeatmapCell({ data, xLabels, yLabels }: { data: number[][]; xLabels: st
 }
 
 export default function DashboardBuilder() {
-  const { dataSets, dashboards, addDashboard, updateDashboard, removeDashboard } = useDataStore();
+  const {  dashboards, addDashboard, updateDashboard, removeDashboard  } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
 
   const [activeDashboardId, setActiveDashboardId] = useState('');
@@ -673,7 +674,12 @@ export default function DashboardBuilder() {
   };
 
   const renderWidgetChart = (widget: Widget) => {
-    const ds = dataSets.find(d => d.id === widget.dataSetId);
+    const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(widget.dataSetId || '', { limit: 10000 });
+  const ds = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === widget.dataSetId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, widget.dataSetId, __datasetDataRes]);
     if (!ds) return <p className="text-muted-foreground text-center mt-8 text-sm">Dataset not found</p>;
 
     if (widget.type === 'stat') {
@@ -971,7 +977,12 @@ export default function DashboardBuilder() {
     const groups: { datasetName: string, columns: any[] }[] = [];
 
     // Base dataset
-    const baseDs = dataSets.find(d => d.id === selectedWidget.dataSetId);
+    const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedWidget.dataSetId || '', { limit: 10000 });
+  const baseDs = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === selectedWidget.dataSetId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedWidget.dataSetId, __datasetDataRes]);
     if (baseDs) {
       groups.push({ datasetName: `${baseDs.name} (Base)`, columns: baseDs.columns });
 
@@ -983,7 +994,12 @@ export default function DashboardBuilder() {
       });
 
       relatedIds.forEach(targetId => {
-        const targetDs = dataSets.find(d => d.id === targetId);
+        const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(targetId || '', { limit: 10000 });
+  const targetDs = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === targetId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, targetId, __datasetDataRes]);
         if (targetDs) {
           // Identify fields that are from related datasets with format datasetId.columnName
           const mappedColumns = targetDs.columns.map(c => ({

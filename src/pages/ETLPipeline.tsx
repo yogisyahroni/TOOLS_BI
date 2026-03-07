@@ -15,6 +15,7 @@ import { AIChatPanel } from '@/components/AIChatPanel';
 import type { ETLPipeline as ETLPipelineType, ETLStep } from '@/types/data';
 import { cn } from '@/lib/utils';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { useDatasets } from '@/hooks/useApi';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -311,7 +312,8 @@ function StepConfigEditor({
 }
 
 export default function ETLPipelinePage() {
-  const { dataSets, pipelines, addPipeline, updatePipeline, removePipeline, addDataSet } = useDataStore();
+  const { pipelines, addPipeline, updatePipeline, removePipeline, addDataSet } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [newPipelineName, setNewPipelineName] = useState('');
   const [selectedSource, setSelectedSource] = useState('');
@@ -405,7 +407,7 @@ export default function ETLPipelinePage() {
       const jsonMatch = response.match(/\[[\s\S]*\]/);
       if (!jsonMatch) return;
       const steps: any[] = JSON.parse(jsonMatch[0]);
-      
+
       // Find the last pipeline or create message
       if (pipelines.length === 0) {
         toast({ title: 'Create a pipeline first', description: 'Please create a pipeline then AI will add steps.', variant: 'destructive' });

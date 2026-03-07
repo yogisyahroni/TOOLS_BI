@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Globe, Map as MapIcon, BarChart2, Layers } from 'lucide-react';
@@ -14,6 +15,7 @@ import DeckGL from '@deck.gl/react';
 import { ScatterplotLayer } from '@deck.gl/layers';
 import MapGL from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 
 const PALETTE = [
   'hsl(199 89% 48%)', 'hsl(142 76% 36%)', 'hsl(38 92% 50%)', 'hsl(0 72% 51%)',
@@ -108,7 +110,7 @@ function DeckGLMap({
 }
 
 export default function GeoVisualization() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const [selectedDataSet, setSelectedDataSet] = useState('');
 
   // Coordinate config
@@ -119,7 +121,12 @@ export default function GeoVisualization() {
 
   const [tab, setTab] = useState<'map' | 'bar'>('map');
 
-  const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataSet);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataSet, __datasetDataRes]);
 
   const geoData = useMemo(() => {
     if (!dataset || !latCol || !lngCol || !valueCol) return [];

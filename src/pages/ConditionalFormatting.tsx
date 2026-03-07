@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Paintbrush, Plus, Trash2 } from 'lucide-react';
@@ -8,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useFormatRules, useCreateFormatRule, useDeleteFormatRule } from '@/hooks/useApi';
+import { useFormatRules, useCreateFormatRule, useDeleteFormatRule, useDatasets } from '@/hooks/useApi';
 import type { FormatRuleItem, FormatRuleCreate } from '@/lib/api';
 
 const CONDITIONS = [
@@ -49,7 +50,7 @@ function matchesRule(value: any, rule: FormatRuleItem): boolean {
 
 // BUG-M4 fix: Conditional Formatting rules now persist to backend via /api/v1/format-rules
 export default function ConditionalFormatting() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [selectedDataSet, setSelectedDataSet] = useState('');
   const [newCol, setNewCol] = useState('');
@@ -62,7 +63,12 @@ export default function ConditionalFormatting() {
   const createMut = useCreateFormatRule();
   const deleteMut = useDeleteFormatRule();
 
-  const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataSet);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataSet, __datasetDataRes]);
   const rules = useMemo(() => allRules.filter(r => !selectedDataSet || r.datasetId === selectedDataSet), [allRules, selectedDataSet]);
 
   const addRule = () => {

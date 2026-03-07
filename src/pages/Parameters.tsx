@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState } from 'react';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
@@ -9,12 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter } from '@/hooks/useApi';
+import { useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDatasets } from '@/hooks/useApi';
 import type { DashboardParameter } from '@/lib/api';
 
 // BUG-M1 fix: Parameters now persist to backend via /api/v1/parameters
 export default function Parameters() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [name, setName] = useState('');
   const [type, setType] = useState<'number' | 'text' | 'list'>('number');
@@ -27,7 +28,12 @@ export default function Parameters() {
   const deleteMut = useDeleteParameter();
   const updateMut = useUpdateParameter();
 
-  const dataset = dataSets.find(ds => ds.id === dsId);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(dsId || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === dsId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, dsId, __datasetDataRes]);
 
   const addParam = () => {
     if (!name) { toast({ title: 'Enter parameter name', variant: 'destructive' }); return; }

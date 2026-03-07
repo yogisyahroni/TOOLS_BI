@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Bookmark, Plus, Trash2, Eye, Filter, Loader2 } from 'lucide-react';
@@ -8,10 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useBookmarks, useCreateBookmark, useDeleteBookmark } from '@/hooks/useApi';
+import { useBookmarks, useCreateBookmark, useDeleteBookmark, useDatasets } from '@/hooks/useApi';
 
 export default function Bookmarks() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -28,7 +29,12 @@ export default function Bookmarks() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filters, setFilters] = useState<{ column: string; value: string }[]>([]);
 
-  const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataSet);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataSet, __datasetDataRes]);
 
   const addFilter = () => {
     if (!filterCol || !filterVal) return;

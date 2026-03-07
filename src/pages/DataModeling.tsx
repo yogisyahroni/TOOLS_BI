@@ -1,3 +1,5 @@
+import React from 'react';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Network, Plus, Trash2, ArrowRight } from 'lucide-react';
@@ -13,7 +15,8 @@ import { HelpTooltip } from '@/components/HelpTooltip';
 function genId() { return Math.random().toString(36).substring(2, 15); }
 
 export default function DataModeling() {
-  const { dataSets, relationships, addRelationship, removeRelationship } = useDataStore();
+  const { relationships, addRelationship, removeRelationship } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({
@@ -22,8 +25,18 @@ export default function DataModeling() {
     type: 'one-to-many' as DataRelationship['type']
   });
 
-  const srcDs = dataSets.find(d => d.id === form.sourceDataSetId);
-  const tgtDs = dataSets.find(d => d.id === form.targetDataSetId);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(form.sourceDataSetId || '', { limit: 10000 });
+  const srcDs = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === form.sourceDataSetId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, form.sourceDataSetId, __datasetDataRes]);
+  const { data: __targetDatasetDataRes, isLoading: __isTargetDataLoading } = useDatasetData(form.targetDataSetId || '', { limit: 10000 });
+  const tgtDs = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === form.targetDataSetId);
+    if (!meta) return null;
+    return { ...meta, data: __targetDatasetDataRes?.data || [] };
+  }, [dataSets, form.targetDataSetId, __targetDatasetDataRes]);
 
   const handleCreate = () => {
     if (!form.sourceDataSetId || !form.targetDataSetId || !form.sourceColumn || !form.targetColumn) return;
@@ -140,8 +153,18 @@ export default function DataModeling() {
       ) : (
         <div className="space-y-3">
           {relationships.map((rel, i) => {
-            const src = dataSets.find(d => d.id === rel.sourceDataSetId);
-            const tgt = dataSets.find(d => d.id === rel.targetDataSetId);
+            const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(rel.sourceDataSetId || '', { limit: 10000 });
+            const src = React.useMemo(() => {
+              const meta = dataSets.find(d => d.id === rel.sourceDataSetId);
+              if (!meta) return null;
+              return { ...meta, data: __datasetDataRes?.data || [] };
+            }, [dataSets, rel.sourceDataSetId, __datasetDataRes]);
+            const { data: __targetRelDataRes, isLoading: __isTargetRelDataLoading } = useDatasetData(rel.targetDataSetId || '', { limit: 10000 });
+            const tgt = React.useMemo(() => {
+              const meta = dataSets.find(d => d.id === rel.targetDataSetId);
+              if (!meta) return null;
+              return { ...meta, data: __targetRelDataRes?.data || [] };
+            }, [dataSets, rel.targetDataSetId, __targetRelDataRes]);
             return (
               <motion.div key={rel.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                 className="bg-card rounded-xl p-4 border border-border shadow-card flex items-center gap-4">

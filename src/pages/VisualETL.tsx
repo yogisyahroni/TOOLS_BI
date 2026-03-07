@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import ETLNode from '@/components/etl/ETLNodes';
-import { useCreatePipeline, useRunPipeline } from '@/hooks/useApi';
+import { useCreatePipeline, useRunPipeline, useDatasets } from '@/hooks/useApi';
 
 const nodeTypes = { etlNode: ETLNode };
 
@@ -43,7 +43,7 @@ let nodeId = 0;
 function genNodeId() { return `etl_node_${++nodeId}_${Date.now()}`; }
 
 function VisualETLInner() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);

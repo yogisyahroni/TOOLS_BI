@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Calculator, Plus, Trash2, Play, Sparkles, AlertTriangle } from 'lucide-react';
@@ -7,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useCalcFields, useCreateCalcField, useDeleteCalcField } from '@/hooks/useApi';
+import { useCalcFields, useCreateCalcField, useDeleteCalcField, useDatasets } from '@/hooks/useApi';
 
 const FORMULA_TEMPLATES = [
   { label: 'SUM(column)', formula: 'SUM(column_name)', desc: 'Sum of all values' },
@@ -92,7 +93,7 @@ function evaluateFormula(formula: string, row: Record<string, any>, allRows: Rec
 
 // BUG-M8 fix: Calculated fields now persist to backend via /api/v1/calc-fields
 export default function CalculatedFields() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [selectedDataSet, setSelectedDataSet] = useState('');
   const [fieldName, setFieldName] = useState('');
@@ -103,7 +104,12 @@ export default function CalculatedFields() {
   const createMut = useCreateCalcField();
   const deleteMut = useDeleteCalcField();
 
-  const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataSet);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataSet, __datasetDataRes]);
   const dsFields = useMemo(() => allFields.filter(f => !selectedDataSet || f.datasetId === selectedDataSet), [allFields, selectedDataSet]);
 
   const handlePreview = () => {

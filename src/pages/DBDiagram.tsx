@@ -13,12 +13,12 @@ import { Button } from '@/components/ui/button';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useToast } from '@/hooks/use-toast';
 import TableNode from '@/components/diagram/TableNode';
-import { useRelationships, useCreateRelationship, useDeleteRelationship } from '@/hooks/useApi';
+import { useRelationships, useCreateRelationship, useDeleteRelationship, useDatasets } from '@/hooks/useApi';
 
 const nodeTypes = { tableNode: TableNode };
 
 export default function DBDiagram() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
 
   // BUG-H2 FIX: load relationships from backend instead of useDataStore local state

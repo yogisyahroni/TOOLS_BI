@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { StickyNote, Plus, Trash2, Loader2 } from 'lucide-react';
@@ -8,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useAnnotations, useCreateAnnotation, useDeleteAnnotation } from '@/hooks/useApi';
+import { useAnnotations, useCreateAnnotation, useDeleteAnnotation, useDatasets } from '@/hooks/useApi';
 
 const ANNO_COLORS = [
   { label: 'Red', value: 'hsl(0 72% 51%)' },
@@ -18,7 +19,7 @@ const ANNO_COLORS = [
 ];
 
 export default function Annotations() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [dsId, setDsId] = useState('');
   const [xCol, setXCol] = useState('');
@@ -32,7 +33,12 @@ export default function Annotations() {
   const createMut = useCreateAnnotation();
   const deleteMut = useDeleteAnnotation(dsId || undefined);
 
-  const dataset = dataSets.find(ds => ds.id === dsId);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(dsId || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === dsId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, dsId, __datasetDataRes]);
 
   const chartData = useMemo(() => {
     if (!dataset || !xCol || !yCol) return [];

@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
@@ -6,18 +7,24 @@ import { useDataStore } from '@/stores/dataStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 
 const COLORS = ['hsl(199 89% 48%)', 'hsl(142 76% 36%)', 'hsl(38 92% 50%)', 'hsl(0 72% 51%)', 'hsl(262 83% 58%)', 'hsl(180 70% 45%)'];
 
 export default function CrossFilter() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const [dsId, setDsId] = useState('');
   const [col1, setCol1] = useState('');
   const [col2, setCol2] = useState('');
   const [col3, setCol3] = useState('');
   const [activeFilter, setActiveFilter] = useState<{ column: string; value: string } | null>(null);
 
-  const dataset = dataSets.find(ds => ds.id === dsId);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(dsId || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === dsId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, dsId, __datasetDataRes]);
 
   const filteredData = useMemo(() => {
     if (!dataset) return [];

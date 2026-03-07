@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ShieldCheck, Plus, Trash2 } from 'lucide-react';
@@ -8,11 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useRLSRules, useCreateRLSRule, useDeleteRLSRule, useToggleRLSRule } from '@/hooks/useApi';
+import { useRLSRules, useCreateRLSRule, useDeleteRLSRule, useToggleRLSRule, useDatasets } from '@/hooks/useApi';
 
 // BUG-M6 fix: RLS rules now persist to backend via /api/v1/rls-rules
 export default function RowLevelSecurity() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [dsId, setDsId] = useState('');
   const [role, setRole] = useState('');
@@ -24,7 +25,12 @@ export default function RowLevelSecurity() {
   const deleteMut = useDeleteRLSRule();
   const toggleMut = useToggleRLSRule();
 
-  const dataset = dataSets.find(ds => ds.id === dsId);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(dsId || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === dsId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, dsId, __datasetDataRes]);
 
   const addRule = () => {
     if (!dsId || !role || !col || !vals) { toast({ title: 'Fill all fields', variant: 'destructive' }); return; }
@@ -39,7 +45,12 @@ export default function RowLevelSecurity() {
   };
 
   const filteredCount = (datasetId: string, columnName: string, allowedValues: string[]) => {
-    const ds = dataSets.find(d => d.id === datasetId);
+    const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(datasetId || '', { limit: 10000 });
+  const ds = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === datasetId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, datasetId, __datasetDataRes]);
     if (!ds) return 0;
     return ds.data.filter(row => allowedValues.includes(String(row[columnName]))).length;
   };

@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useEmbedTokens, useGenerateEmbedToken, useRevokeEmbedToken } from '@/hooks/useApi';
+import { useEmbedTokens, useGenerateEmbedToken, useRevokeEmbedToken, useDatasets, useDatasetData } from '@/hooks/useApi';
 import { API_BASE } from '@/lib/api';
 
 const EXPIRE_OPTIONS = [

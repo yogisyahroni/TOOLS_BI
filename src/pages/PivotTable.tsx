@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Table2, Download } from 'lucide-react';
@@ -8,11 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 
 type AggFunc = 'sum' | 'avg' | 'count' | 'min' | 'max';
 
 export default function PivotTable() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [dsId, setDsId] = useState('');
   const [rowField, setRowField] = useState('');
@@ -20,7 +22,12 @@ export default function PivotTable() {
   const [valueField, setValueField] = useState('');
   const [aggFunc, setAggFunc] = useState<AggFunc>('sum');
 
-  const dataset = dataSets.find(d => d.id === dsId);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(dsId || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === dsId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, dsId, __datasetDataRes]);
   const strCols = dataset?.columns.filter(c => c.type === 'string') || [];
   const numCols = dataset?.columns.filter(c => c.type === 'number') || [];
 

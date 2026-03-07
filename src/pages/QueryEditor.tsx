@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Code2, Play, Clock, Download, Trash2, Save, Table as TableIcon } from 'lucide-react';
@@ -9,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 
 interface QueryResult {
   columns: string[];
@@ -112,7 +114,7 @@ function executeQuery(query: string, data: Record<string, any>[]): QueryResult {
 }
 
 export default function QueryEditor() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [selectedDataSet, setSelectedDataSet] = useState('');
   const [query, setQuery] = useState("SELECT * FROM dataset LIMIT 100");
@@ -121,7 +123,12 @@ export default function QueryEditor() {
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [queryName, setQueryName] = useState('');
 
-  const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataSet);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataSet, __datasetDataRes]);
 
   const handleRun = () => {
     if (!dataset) {

@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Layers, ChevronRight, ArrowLeft, Save, RotateCcw } from 'lucide-react';
@@ -8,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Badge } from '@/components/ui/badge';
-import { useDrillConfig, useSaveDrillConfig } from '@/hooks/useApi';
+import { useDrillConfig, useSaveDrillConfig, useDatasets } from '@/hooks/useApi';
 import { useToast } from '@/hooks/use-toast';
 
 const COLORS = [
@@ -22,7 +23,7 @@ interface DrillLevel {
 }
 
 export default function DrillDown() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [selectedDataSet, setSelectedDataSet] = useState('');
   const [levels, setLevels] = useState<DrillLevel[]>([]);
@@ -50,7 +51,12 @@ export default function DrillDown() {
     }
   }, [selectedDataSet, savedConfigs]);
 
-  const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataSet);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataSet, __datasetDataRes]);
   const stringCols = dataset?.columns.filter(c => c.type === 'string') || [];
   const numCols = dataset?.columns.filter(c => c.type === 'number') || [];
 

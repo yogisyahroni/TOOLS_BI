@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, AlertTriangle, CheckCircle, BarChart3, Hash, Type, Calendar, ToggleLeft } from 'lucide-react';
@@ -7,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Progress } from '@/components/ui/progress';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 
 interface ColumnProfile {
   name: string;
@@ -100,10 +102,15 @@ function qualityScore(profiles: ColumnProfile[]): number {
 const typeIcons: Record<string, any> = { number: Hash, string: Type, date: Calendar, boolean: ToggleLeft };
 
 export default function DataProfiling() {
-  const { dataSets } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const [selectedId, setSelectedId] = useState('');
 
-  const dataset = dataSets.find(d => d.id === selectedId);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedId || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(d => d.id === selectedId);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedId, __datasetDataRes]);
 
   const profiles = useMemo(() => {
     if (!dataset) return [];

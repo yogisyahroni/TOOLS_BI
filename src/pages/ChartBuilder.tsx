@@ -1,3 +1,5 @@
+import React from 'react';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -99,7 +101,8 @@ function HeatmapCell({ data, xLabels, yLabels }: { data: number[][]; xLabels: st
 }
 
 export default function ChartBuilder() {
-  const { dataSets, savedCharts, addSavedChart, removeSavedChart } = useDataStore();
+  const {  savedCharts, addSavedChart, removeSavedChart  } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -110,7 +113,12 @@ export default function ChartBuilder() {
   const [chartTitle, setChartTitle] = useState('Untitled Chart');
   const [groupBy, setGroupBy] = useState('');
 
-  const dataset = dataSets.find(ds => ds.id === selectedDataSet);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataSet);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataSet, __datasetDataRes]);
   const columns = dataset?.columns || [];
   const numericColumns = columns.filter(c => c.type === 'number');
 

@@ -1,3 +1,5 @@
+import React from 'react';
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -96,7 +98,8 @@ function StageIndicator({ currentStage }: { currentStage: Stage }) {
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AIReports() {
-  const { dataSets, addReport, privacySettings, aiConfig, templates } = useDataStore();
+  const {  addReport, privacySettings, aiConfig, templates  } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [selectedDataset, setSelectedDataset] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -113,7 +116,12 @@ export default function AIReports() {
 
   const allTemplates = [...builtinTemplates, ...templates];
   const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId);
-  const dataset = dataSets.find(ds => ds.id === selectedDataset);
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataset || '', { limit: 10000 });
+  const dataset = React.useMemo(() => {
+    const meta = dataSets.find(ds => ds.id === selectedDataset);
+    if (!meta) return null;
+    return { ...meta, data: __datasetDataRes?.data || [] };
+  }, [dataSets, selectedDataset, __datasetDataRes]);
 
   // Auto-scroll streaming output box
   useEffect(() => {

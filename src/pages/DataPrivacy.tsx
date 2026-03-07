@@ -1,3 +1,4 @@
+import { useDatasets, useDatasetData } from '@/hooks/useApi';
 import { motion } from 'framer-motion';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Shield, Lock, Eye, EyeOff, Trash2, Clock, Database } from 'lucide-react';
@@ -10,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 export default function DataPrivacy() {
-  const { privacySettings, updatePrivacySettings, dataSets } = useDataStore();
+  const { privacySettings, updatePrivacySettings } = useDataStore();
+  const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
 
   const handleSettingChange = (key: keyof typeof privacySettings, value: any) => {
