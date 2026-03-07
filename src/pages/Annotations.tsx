@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useAnnotations, useCreateAnnotation, useDeleteAnnotation, useDatasets } from '@/hooks/useApi';
+import { useAnnotations, useCreateAnnotation, useDeleteAnnotation, useDatasets, useDatasetData } from '@/hooks/useApi';
 
 const ANNO_COLORS = [
   { label: 'Red', value: 'hsl(0 72% 51%)' },

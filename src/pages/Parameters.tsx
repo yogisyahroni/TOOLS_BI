@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDatasets } from '@/hooks/useApi';
+import { useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDatasets, useDatasetData } from '@/hooks/useApi';
 import type { DashboardParameter } from '@/lib/api';
 
 // BUG-M1 fix: Parameters now persist to backend via /api/v1/parameters

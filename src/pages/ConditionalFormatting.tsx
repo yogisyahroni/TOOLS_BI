@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useFormatRules, useCreateFormatRule, useDeleteFormatRule, useDatasets } from '@/hooks/useApi';
+import { useFormatRules, useCreateFormatRule, useDeleteFormatRule, useDatasets, useDatasetData } from '@/hooks/useApi';
 import type { FormatRuleItem, FormatRuleCreate } from '@/lib/api';
 
 const CONDITIONS = [

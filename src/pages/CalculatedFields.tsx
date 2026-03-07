@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useCalcFields, useCreateCalcField, useDeleteCalcField, useDatasets } from '@/hooks/useApi';
+import { useCalcFields, useCreateCalcField, useDeleteCalcField, useDatasets, useDatasetData } from '@/hooks/useApi';
 
 const FORMULA_TEMPLATES = [
   { label: 'SUM(column)', formula: 'SUM(column_name)', desc: 'Sum of all values' },

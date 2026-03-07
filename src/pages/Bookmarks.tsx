@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useBookmarks, useCreateBookmark, useDeleteBookmark, useDatasets } from '@/hooks/useApi';
+import { useBookmarks, useCreateBookmark, useDeleteBookmark, useDatasets, useDatasetData } from '@/hooks/useApi';
 
 export default function Bookmarks() {
   const { data: dataSets = [] } = useDatasets();

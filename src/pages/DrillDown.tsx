@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Badge } from '@/components/ui/badge';
-import { useDrillConfig, useSaveDrillConfig, useDatasets } from '@/hooks/useApi';
+import { useDrillConfig, useSaveDrillConfig, useDatasets, useDatasetData } from '@/hooks/useApi';
 import { useToast } from '@/hooks/use-toast';
 
 const COLORS = [
