@@ -1,10 +1,9 @@
 import React from 'react';
-import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useDatasets, useDatasetData, useReports, useDashboards } from '@/hooks/useApi';
 import { useState } from 'react';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
 import { FileDown, Download } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -12,8 +11,9 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ExportPDF() {
-  const { reports, dashboards } = useDataStore();
   const { data: dataSets = [] } = useDatasets();
+  const { data: reports = [] } = useReports();
+  const { data: dashboards = [] } = useDashboards();
   const { toast } = useToast();
   const [exportType, setExportType] = useState<'dataset' | 'report' | 'dashboard'>('dataset');
   const [selectedId, setSelectedId] = useState('');
@@ -64,7 +64,7 @@ export default function ExportPDF() {
     } else {
       const dash = dashboards.find(d => d.id === selectedId);
       if (!dash) return;
-      content = `# ${exportTitle}\n\nGenerated: ${new Date().toLocaleString()}\n\n## Dashboard: ${dash.name}\n\n### Widgets (${dash.widgets.length})\n${dash.widgets.map(w => `- **${w.title}** — ${w.type} chart (${w.width})`).join('\n')}`;
+      content = `# ${exportTitle}\n\nGenerated: ${new Date().toLocaleString()}\n\n## Dashboard: ${dash.name}\n\n### Widgets (${dash.widgets.length})\n${dash.widgets.map((w: any) => `- **${w.title}** — ${w.type} chart (${w.width})`).join('\n')}`;
     }
 
     const blob = new Blob([content], { type: 'text/markdown' });

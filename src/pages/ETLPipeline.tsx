@@ -5,7 +5,6 @@ import {
   ArrowRight, CheckCircle, AlertCircle, Clock, Settings2,
   ChevronDown, ChevronUp, Download, Save,
 } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -330,7 +329,6 @@ export default function ETLPipelinePage() {
   const runPipelineMut = useRunPipeline();
   const uploadDatasetMut = useUploadDataset();
 
-  const { addDataSet } = useDataStore(); // Just to keep saveOutput functioning for now
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [newPipelineName, setNewPipelineName] = useState('');

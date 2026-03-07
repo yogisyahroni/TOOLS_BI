@@ -88,6 +88,71 @@ func (h *AIHandler) resolveUserConfig(userID string) (resolvedConfig, error) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Chat — Generic chat via backend proxy
+// POST /api/v1/ai/chat
+// ─────────────────────────────────────────────────────────────────────────────
+func (h *AIHandler) Chat(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+
+	var req struct {
+		Messages []map[string]string `json:"messages"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
+	}
+
+	cfg, err := h.resolveUserConfig(userID)
+	if err != nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	reqBody := map[string]interface{}{
+		"model":      cfg.Model,
+		"messages":   req.Messages,
+		"max_tokens": cfg.MaxTokens,
+	}
+
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = providerBaseURL(cfg.Provider)
+	}
+
+	data, _ := json.Marshal(reqBody)
+	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+
+	resp, err := (&http.Client{}).Do(httpReq)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return c.Status(resp.StatusCode).JSON(fiber.Map{"error": string(body)})
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	// extract content just to be sure we return standard structure
+	content := ""
+	if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
+		if choice, ok := choices[0].(map[string]interface{}); ok {
+			if msg, ok := choice["message"].(map[string]interface{}); ok {
+				content, _ = msg["content"].(string)
+			}
+		}
+	}
+
+	return c.JSON(fiber.Map{"content": content})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AskData — non-streaming NL→SQL (backwards compat)
 // POST /api/v1/ask-data
 // ─────────────────────────────────────────────────────────────────────────────

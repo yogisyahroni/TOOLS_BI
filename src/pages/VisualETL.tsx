@@ -12,7 +12,6 @@ import {
   Database, Filter, Shuffle, Layers, ArrowUpDown, Columns3, FileOutput, Code2, GitMerge, Eraser, Split,
   Loader2,
 } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';

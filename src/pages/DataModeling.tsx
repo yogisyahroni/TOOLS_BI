@@ -1,33 +1,32 @@
 import React from 'react';
-import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useDatasets, useDatasetData, useRelationships, useCreateRelationship, useDeleteRelationship } from '@/hooks/useApi';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Network, Plus, Trash2, ArrowRight } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import type { DataRelationship } from '@/types/data';
+import type { DataRelationship } from '@/lib/api';
 import { HelpTooltip } from '@/components/HelpTooltip';
 
 function genId() { return Math.random().toString(36).substring(2, 15); }
 
 function RelationshipCard({ rel, dataSets, index, onRemove }: { rel: DataRelationship, dataSets: any[], index: number, onRemove: (id: string) => void }) {
-  const { data: __datasetDataRes } = useDatasetData(rel.sourceDataSetId || '', { limit: 10000 });
+  const { data: __datasetDataRes } = useDatasetData(rel.sourceDatasetId || '', { limit: 10000 });
   const src = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === rel.sourceDataSetId);
+    const meta = dataSets.find(d => d.id === rel.sourceDatasetId);
     if (!meta) return null;
     return { ...meta, data: __datasetDataRes?.data || [] };
-  }, [dataSets, rel.sourceDataSetId, __datasetDataRes]);
+  }, [dataSets, rel.sourceDatasetId, __datasetDataRes]);
 
-  const { data: __targetRelDataRes } = useDatasetData(rel.targetDataSetId || '', { limit: 10000 });
+  const { data: __targetRelDataRes } = useDatasetData(rel.targetDatasetId || '', { limit: 10000 });
   const tgt = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === rel.targetDataSetId);
+    const meta = dataSets.find(d => d.id === rel.targetDatasetId);
     if (!meta) return null;
     return { ...meta, data: __targetRelDataRes?.data || [] };
-  }, [dataSets, rel.targetDataSetId, __targetRelDataRes]);
+  }, [dataSets, rel.targetDatasetId, __targetRelDataRes]);
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
@@ -36,7 +35,7 @@ function RelationshipCard({ rel, dataSets, index, onRemove }: { rel: DataRelatio
         <div className="px-3 py-1.5 rounded-lg bg-primary/10 text-sm text-primary font-medium">{src?.name}.{rel.sourceColumn}</div>
         <div className="flex items-center gap-1 text-muted-foreground text-xs">
           <ArrowRight className="w-4 h-4" />
-          <span className="bg-muted px-2 py-0.5 rounded">{rel.type}</span>
+          <span className="bg-muted px-2 py-0.5 rounded">{rel.relType}</span>
           <ArrowRight className="w-4 h-4" />
         </div>
         <div className="px-3 py-1.5 rounded-lg bg-info/10 text-sm text-info font-medium">{tgt?.name}.{rel.targetColumn}</div>
@@ -50,38 +49,44 @@ function RelationshipCard({ rel, dataSets, index, onRemove }: { rel: DataRelatio
 }
 
 export default function DataModeling() {
-  const { relationships, addRelationship, removeRelationship } = useDataStore();
+  const { data: relationshipsData = [] } = useRelationships();
+  const relationships = relationshipsData as DataRelationship[];
+  const createRelationshipMut = useCreateRelationship();
+  const deleteRelationshipMut = useDeleteRelationship();
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({
-    sourceDataSetId: '', targetDataSetId: '',
+    sourceDatasetId: '', targetDatasetId: '',
     sourceColumn: '', targetColumn: '',
-    type: 'one-to-many' as DataRelationship['type']
+    relType: 'one-to-many' as DataRelationship['relType']
   });
 
-  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(form.sourceDataSetId || '', { limit: 10000 });
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(form.sourceDatasetId || '', { limit: 10000 });
   const srcDs = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === form.sourceDataSetId);
+    const meta = dataSets.find(d => d.id === form.sourceDatasetId);
     if (!meta) return null;
     return { ...meta, data: __datasetDataRes?.data || [] };
-  }, [dataSets, form.sourceDataSetId, __datasetDataRes]);
-  const { data: __targetDatasetDataRes, isLoading: __isTargetDataLoading } = useDatasetData(form.targetDataSetId || '', { limit: 10000 });
+  }, [dataSets, form.sourceDatasetId, __datasetDataRes]);
+  const { data: __targetDatasetDataRes, isLoading: __isTargetDataLoading } = useDatasetData(form.targetDatasetId || '', { limit: 10000 });
   const tgtDs = React.useMemo(() => {
-    const meta = dataSets.find(d => d.id === form.targetDataSetId);
+    const meta = dataSets.find(d => d.id === form.targetDatasetId);
     if (!meta) return null;
     return { ...meta, data: __targetDatasetDataRes?.data || [] };
-  }, [dataSets, form.targetDataSetId, __targetDatasetDataRes]);
+  }, [dataSets, form.targetDatasetId, __targetDatasetDataRes]);
 
   const handleCreate = () => {
-    if (!form.sourceDataSetId || !form.targetDataSetId || !form.sourceColumn || !form.targetColumn) return;
-    const rel: DataRelationship = {
-      id: genId(), ...form, createdAt: new Date(),
+    if (!form.sourceDatasetId || !form.targetDatasetId || !form.sourceColumn || !form.targetColumn) return;
+    const rel: any = {
+      ...form, createdAt: new Date(),
     };
-    addRelationship(rel);
-    setForm({ sourceDataSetId: '', targetDataSetId: '', sourceColumn: '', targetColumn: '', type: 'one-to-many' });
-    setDialogOpen(false);
-    toast({ title: 'Relationship created', description: 'Datasets have been linked.' });
+    createRelationshipMut.mutate(rel, {
+      onSuccess: () => {
+        setForm({ sourceDatasetId: '', targetDatasetId: '', sourceColumn: '', targetColumn: '', relType: 'one-to-many' });
+        setDialogOpen(false);
+        toast({ title: 'Relationship created', description: 'Datasets have been linked.' });
+      }
+    });
   };
 
   return (
@@ -104,15 +109,15 @@ export default function DataModeling() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div><Label>Source Dataset</Label>
-                    <Select value={form.sourceDataSetId} onValueChange={v => setForm({ ...form, sourceDataSetId: v, sourceColumn: '' })}>
+                    <Select value={form.sourceDatasetId} onValueChange={v => setForm({ ...form, sourceDatasetId: v, sourceColumn: '' })}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                       <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div><Label>Target Dataset</Label>
-                    <Select value={form.targetDataSetId} onValueChange={v => setForm({ ...form, targetDataSetId: v, targetColumn: '' })}>
+                    <Select value={form.targetDatasetId} onValueChange={v => setForm({ ...form, targetDatasetId: v, targetColumn: '' })}>
                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>{dataSets.filter(d => d.id !== form.sourceDataSetId).map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>{dataSets.filter(d => d.id !== form.sourceDatasetId).map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -131,7 +136,7 @@ export default function DataModeling() {
                   </div>
                 </div>
                 <div><Label>Relationship Type</Label>
-                  <Select value={form.type} onValueChange={(v: DataRelationship['type']) => setForm({ ...form, type: v })}>
+                  <Select value={form.relType} onValueChange={(v: DataRelationship['relType']) => setForm({ ...form, relType: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="one-to-one">One to One</SelectItem>
@@ -153,7 +158,7 @@ export default function DataModeling() {
           <h3 className="font-semibold text-foreground mb-4">Data Model</h3>
           <div className="flex flex-wrap gap-6 items-start">
             {dataSets.map((ds, i) => {
-              const rels = relationships.filter(r => r.sourceDataSetId === ds.id || r.targetDataSetId === ds.id);
+              const rels = relationships.filter(r => r.sourceDatasetId === ds.id || r.targetDatasetId === ds.id);
               return (
                 <motion.div key={ds.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }}
                   className={`bg-muted/50 rounded-lg p-4 border min-w-[200px] ${rels.length > 0 ? 'border-primary/30' : 'border-border'}`}>
@@ -161,8 +166,8 @@ export default function DataModeling() {
                   <div className="space-y-1">
                     {ds.columns.map(col => {
                       const isKey = relationships.some(r =>
-                        (r.sourceDataSetId === ds.id && r.sourceColumn === col.name) ||
-                        (r.targetDataSetId === ds.id && r.targetColumn === col.name)
+                        (r.sourceDatasetId === ds.id && r.sourceColumn === col.name) ||
+                        (r.targetDatasetId === ds.id && r.targetColumn === col.name)
                       );
                       return (
                         <p key={col.name} className={`text-xs ${isKey ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
@@ -193,7 +198,11 @@ export default function DataModeling() {
               rel={rel}
               dataSets={dataSets}
               index={i}
-              onRemove={(id) => { removeRelationship(id); toast({ title: 'Relationship removed' }); }}
+              onRemove={(id) => {
+                deleteRelationshipMut.mutate(id, {
+                  onSuccess: () => toast({ title: 'Relationship removed' })
+                });
+              }}
             />
           ))}
         </div>

@@ -20,7 +20,7 @@ import {
   Bar,
   ReferenceLine
 } from 'recharts';
-import { useDataStore } from '@/stores/dataStore';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
-import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment, useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment, useDatasets, useDatasetData, useDashboards, useCreateDashboard, useUpdateDashboard, useDeleteDashboard } from '@/hooks/useApi';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { FormatRuleItem, FormatRuleCreate, DashboardParameter } from '@/lib/api';
@@ -160,7 +160,12 @@ function HeatmapCell({ data, xLabels, yLabels }: { data: number[][]; xLabels: st
 }
 
 export default function DashboardBuilder() {
-  const { dashboards, addDashboard, updateDashboard, removeDashboard } = useDataStore();
+  const queryClient = useQueryClient();
+  const { data: dashboardsData = [] } = useDashboards();
+  const dashboards = dashboardsData as unknown as DashboardConfig[];
+  const createDashboardMut = useCreateDashboard();
+  const updateDashboardMut = useUpdateDashboard();
+  const deleteDashboardMut = useDeleteDashboard();
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
 
@@ -171,8 +176,8 @@ export default function DashboardBuilder() {
   // Selection state for Property Right Panel
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
 
-  const activeDashboard = dashboards.find(d => d.id === activeDashboardId) || null;
-  const selectedWidget = activeDashboard?.widgets.find(w => w.id === selectedWidgetId) || null;
+  const activeDashboard: any = dashboards.find((d: any) => d.id === activeDashboardId) || null;
+  const selectedWidget: any = activeDashboard?.widgets?.find((w: any) => w.id === selectedWidgetId) || null;
 
   // --- Multiplayer (Phase 15) ---
   const { cursors, ydocReady, ydoc } = useMultiplayer(activeDashboardId);
@@ -204,9 +209,10 @@ export default function DashboardBuilder() {
       if (widgetsJson) {
         try {
           const remoteWidgets = JSON.parse(widgetsJson);
-          // Update Zustand directly without causing react infinite loops across the normal hook
-          // using the store getState() avoids stale closure issues with updaters
-          useDataStore.getState().updateDashboard(activeDashboardId, { widgets: remoteWidgets });
+          queryClient.setQueryData(['dashboards'], (old: any) => {
+            if (!old) return old;
+            return old.map((d: any) => d.id === activeDashboardId ? { ...d, widgets: remoteWidgets } : d);
+          });
         } catch (e) {
           console.error('Failed to parse remote widgets', e);
         }
@@ -223,7 +229,10 @@ export default function DashboardBuilder() {
     } else if (yState.has('widgets')) {
       try {
         const remoteWidgets = JSON.parse(yState.get('widgets')!);
-        useDataStore.getState().updateDashboard(activeDashboardId, { widgets: remoteWidgets });
+        queryClient.setQueryData(['dashboards'], (old: any) => {
+          if (!old) return old;
+          return old.map((d: any) => d.id === activeDashboardId ? { ...d, widgets: remoteWidgets } : d);
+        });
       } catch (e) {
         // ignore error
       }
@@ -313,13 +322,17 @@ export default function DashboardBuilder() {
 
   const createDashboard = () => {
     if (!newDashName.trim()) return;
-    const dash: DashboardConfig = {
-      id: Date.now().toString(), name: newDashName.trim(), widgets: [], createdAt: new Date()
-    };
-    addDashboard(dash);
-    setActiveDashboardId(dash.id);
-    setNewDashName('');
-    toast({ title: 'Dashboard created', description: newDashName });
+    createDashboardMut.mutate({
+      name: newDashName.trim(),
+      widgets: []
+    }, {
+      onSuccess: (response) => {
+        const data = response.data;
+        setActiveDashboardId(data.id);
+        setNewDashName('');
+        toast({ title: 'Dashboard created', description: data.name });
+      }
+    });
   };
 
   const handleAddWidgetPlaceholder = () => {
@@ -330,7 +343,7 @@ export default function DashboardBuilder() {
       dataSetId: dataSets[0]?.id || '', xAxis: '', yAxis: '', width: 'half',
     };
     const newWidgets = [...activeDashboard.widgets, widget];
-    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
     setSelectedWidgetId(newId);
     toast({ title: 'Widget added', description: 'Configure it in the properties panel.' });
@@ -338,15 +351,15 @@ export default function DashboardBuilder() {
 
   const updateSelectedWidget = (updates: Partial<Widget>) => {
     if (!activeDashboard || !selectedWidgetId) return;
-    const newWidgets = activeDashboard.widgets.map(w => w.id === selectedWidgetId ? { ...w, ...updates } : w);
-    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    const newWidgets = (activeDashboard.widgets as Widget[]).map(w => w.id === selectedWidgetId ? { ...(w as any), ...updates } : w);
+    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
   };
 
   const removeWidget = (widgetId: string) => {
     if (!activeDashboard) return;
     const newWidgets = activeDashboard.widgets.filter(w => w.id !== widgetId);
-    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
     if (selectedWidgetId === widgetId) setSelectedWidgetId(null);
   };
@@ -362,17 +375,20 @@ export default function DashboardBuilder() {
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
     [newWidgets[idx], newWidgets[swapIdx]] = [newWidgets[swapIdx], newWidgets[idx]];
 
-    updateDashboard(activeDashboard.id, { widgets: newWidgets });
+    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
   };
 
   const handleDeleteDashboard = (id: string) => {
-    removeDashboard(id);
-    if (activeDashboardId === id) {
-      setActiveDashboardId('');
-      setSelectedWidgetId(null);
-    }
-    toast({ title: 'Dashboard deleted' });
+    deleteDashboardMut.mutate(id, {
+      onSuccess: () => {
+        if (activeDashboardId === id) {
+          setActiveDashboardId('');
+          setSelectedWidgetId(null);
+        }
+        toast({ title: 'Dashboard deleted' });
+      }
+    });
   };
 
   // --- Data Computation ---

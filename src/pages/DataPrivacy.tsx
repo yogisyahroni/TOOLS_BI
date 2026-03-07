@@ -2,7 +2,7 @@ import { useDatasets, useDatasetData } from '@/hooks/useApi';
 import { motion } from 'framer-motion';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Shield, Lock, Eye, EyeOff, Trash2, Clock, Database } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
+import { usePrivacySettings } from '@/hooks/usePrivacySettings';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 export default function DataPrivacy() {
-  const { privacySettings, updatePrivacySettings } = useDataStore();
+  const { privacySettings, updatePrivacySettings } = usePrivacySettings();
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
 
@@ -89,7 +89,7 @@ export default function DataPrivacy() {
           className="bg-card rounded-xl p-6 border border-border shadow-card"
         >
           <h3 className="text-lg font-semibold text-foreground mb-6">Core Protection Settings</h3>
-          
+
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -194,7 +194,7 @@ export default function DataPrivacy() {
           <p className="text-sm text-muted-foreground mb-6">
             Select columns that should never be sent to AI for analysis
           </p>
-          
+
           {allColumns.length === 0 ? (
             <div className="text-center py-8">
               <Database className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
@@ -233,7 +233,7 @@ export default function DataPrivacy() {
         <h3 className="text-lg font-semibold text-foreground mb-4">
           How We Protect Your Data
         </h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             {

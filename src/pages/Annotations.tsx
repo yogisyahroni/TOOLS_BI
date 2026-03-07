@@ -2,7 +2,6 @@ import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { StickyNote, Plus, Trash2, Loader2 } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

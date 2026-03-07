@@ -1,13 +1,13 @@
-import React from 'react';
-import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useDatasets, useDatasetData, useAIConfig, useCreateReport, useReportTemplates } from '@/hooks/useApi';
 import { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, FileText, Lightbulb, TrendingUp, Target,
   Send, Loader2, AlertTriangle, Shield, Download, Layout,
   CheckCircle2, Database, Cpu, Zap, Circle,
 } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
+import { usePrivacySettings } from '@/hooks/usePrivacySettings';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -98,7 +98,10 @@ function StageIndicator({ currentStage }: { currentStage: Stage }) {
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AIReports() {
-  const {  addReport, privacySettings, aiConfig, templates  } = useDataStore();
+  const { data: templates = [] } = useReportTemplates();
+  const { privacySettings } = usePrivacySettings();
+  const { data: aiConfig } = useAIConfig();
+  const createReportMutation = useCreateReport();
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const [selectedDataset, setSelectedDataset] = useState('');
@@ -114,8 +117,19 @@ export default function AIReports() {
   const abortRef = useRef<AbortController | null>(null);
   const streamBoxRef = useRef<HTMLDivElement>(null);
 
-  const allTemplates = [...builtinTemplates, ...templates];
-  const selectedTemplate = allTemplates.find(t => t.id === selectedTemplateId);
+  const allTemplates: ReportTemplate[] = [
+    ...builtinTemplates,
+    ...templates.map((t: any) => ({
+      ...t,
+      category: t.category,
+      source: t.source,
+      pages: t.pages || [],
+      colorScheme: t.colorScheme || { primary: '#2c3e50', secondary: '#3498db', accent: '#e74c3c', background: '#ffffff' },
+      createdAt: new Date(t.createdAt),
+      isDefault: false,
+    }))
+  ];
+  const selectedTemplate = allTemplates.find((t) => t.id === selectedTemplateId);
   const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataset || '', { limit: 10000 });
   const dataset = React.useMemo(() => {
     const meta = dataSets.find(ds => ds.id === selectedDataset);
@@ -262,7 +276,7 @@ Format your response as a comprehensive markdown report with:
                 createdAt: new Date(),
               };
               setGeneratedReport(report);
-              addReport(report);
+              createReportMutation.mutate(report);
               toast({ title: '✅ Report generated!', description: 'AI report has been created and saved.' });
             } else if (eventType === 'error') {
               try { toast({ title: 'AI Error', description: JSON.parse(data), variant: 'destructive' }); } catch { /* */ }
@@ -299,7 +313,7 @@ Format your response as a comprehensive markdown report with:
           createdAt: new Date(),
         };
         setGeneratedReport(report);
-        addReport(report);
+        createReportMutation.mutate(report);
         toast({ title: 'Report generated!' });
       } catch (fallbackErr: any) {
         toast({ title: 'Error', description: fallbackErr.message || 'Failed to generate report', variant: 'destructive' });

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Code, Copy, Check, ExternalLink, Shield, Trash2, Clock, Eye } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useEmbedTokens, useGenerateEmbedToken, useRevokeEmbedToken, useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useEmbedTokens, useGenerateEmbedToken, useRevokeEmbedToken, useDatasets, useDatasetData, useDashboards, useCharts } from '@/hooks/useApi';
 import { API_BASE } from '@/lib/api';
 
 const EXPIRE_OPTIONS = [
@@ -21,7 +20,8 @@ const EXPIRE_OPTIONS = [
 ];
 
 export default function EmbedShare() {
-  const { dashboards, savedCharts } = useDataStore();
+  const { data: dashboards = [] } = useDashboards();
+  const { data: savedCharts = [] } = useCharts();
   const { toast } = useToast();
   const [type, setType] = useState<'dashboard' | 'chart'>('dashboard');
   const [selectedId, setSelectedId] = useState('');

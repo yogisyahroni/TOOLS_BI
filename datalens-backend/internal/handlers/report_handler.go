@@ -45,6 +45,30 @@ func (h *ReportHandler) GetReport(c *fiber.Ctx) error {
 	return c.JSON(report)
 }
 
+// CreateReport creates a new report manually (e.g. saving from AI stream).
+// POST /api/v1/reports
+func (h *ReportHandler) CreateReport(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	var req models.Report
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+	if req.Title == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "title is required"})
+	}
+
+	if req.ID == "" {
+		req.ID = uuid.New().String()
+	}
+	req.UserID = userID
+	req.CreatedAt = time.Now()
+
+	if err := h.db.Create(&req).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create report"})
+	}
+	return c.Status(fiber.StatusCreated).JSON(req)
+}
+
 // DeleteReport deletes a report.
 // DELETE /api/v1/reports/:id
 func (h *ReportHandler) DeleteReport(c *fiber.Ctx) error {

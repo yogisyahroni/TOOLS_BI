@@ -22,6 +22,7 @@ import {
     calcFieldApi,
     drillConfigApi,
     embedApi,
+    settingsApi,
     type DataQueryParams,
     type KPICreate,
     type AlertCreate,
@@ -34,6 +35,8 @@ import {
     type RLSRuleCreate,
     type FormatRuleCreate,
     type CalcFieldCreate,
+    type Dashboard,
+    type Report
 } from '@/lib/api';
 
 
@@ -114,6 +117,14 @@ export function useCreateDashboard() {
     });
 }
 
+export function useUpdateDashboard() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, payload }: { id: string; payload: Partial<Dashboard> }) => dashboardApi.update(id, payload),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboards'] }),
+    });
+}
+
 export function useDeleteDashboard() {
     const qc = useQueryClient();
     return useMutation({
@@ -132,11 +143,35 @@ export function useReports() {
     });
 }
 
+export function useReport(id: string) {
+    return useQuery({
+        queryKey: ['report', id],
+        queryFn: () => reportApi.get(id).then((r) => r.data),
+        enabled: !!id,
+    });
+}
+
+export function useCreateReport() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: Partial<Report>) => reportApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['reports'] }),
+    });
+}
+
 export function useDeleteReport() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (id: string) => reportApi.delete(id),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['reports'] }),
+    });
+}
+
+// Settings
+export function useAIConfig() {
+    return useQuery({
+        queryKey: ['ai-config'],
+        queryFn: () => settingsApi.getAIConfig().then(r => r.data),
     });
 }
 
@@ -294,6 +329,14 @@ export function useCreateChart() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (payload: SavedChartCreate) => chartApi.create(payload).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['charts'] }),
+    });
+}
+
+export function useUpdateChart() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, payload }: { id: string; payload: Partial<SavedChartCreate> }) => chartApi.update(id, payload).then((r) => r.data),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['charts'] }),
     });
 }

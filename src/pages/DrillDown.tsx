@@ -2,7 +2,6 @@ import React from 'react';
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Layers, ChevronRight, ArrowLeft, Save, RotateCcw } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';

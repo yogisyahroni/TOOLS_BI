@@ -239,6 +239,7 @@ func main() {
 	// Report routes
 	reports := api.Group("/reports")
 	reports.Get("/", reportH.ListReports)
+	reports.Post("/", reportH.CreateReport)
 	reports.Get("/:id", reportH.GetReport)
 	reports.Delete("/:id", reportH.DeleteReport)
 	reports.Post("/generate", aiH.GenerateReport)
@@ -249,6 +250,10 @@ func main() {
 	stories.Post("/manual", reportH.CreateStory)
 	stories.Get("/:id", reportH.GetStory)
 	stories.Delete("/:id", reportH.DeleteStory)
+
+	// AI routes
+	ai := api.Group("/ai")
+	ai.Post("/chat", aiH.Chat)
 
 	// KPI routes
 	kpis := api.Group("/kpis")

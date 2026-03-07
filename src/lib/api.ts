@@ -11,6 +11,7 @@
  */
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import type { Report } from '@/types/data';
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
@@ -158,10 +159,16 @@ export const dashboardApi = {
 // Reports
 export const reportApi = {
     list: () => api.get<{ data: Report[] }>('/reports'),
+    create: (payload: Partial<Report>) => api.post<Report>('/reports', payload),
     get: (id: string) => api.get<Report>(`/reports/${id}`),
     generate: (datasetId: string, prompt?: string) =>
         api.post<{ title: string; content: string }>('/reports/generate', { datasetId, prompt }),
     delete: (id: string) => api.delete(`/reports/${id}`),
+};
+
+// Settings
+export const settingsApi = {
+    getAIConfig: () => api.get<any>('/settings/ai-config'),
 };
 
 // Data Stories
@@ -354,13 +361,6 @@ export interface Dashboard {
     createdAt: string;
 }
 
-export interface Report {
-    id: string;
-    title: string;
-    content: string;
-    insights?: string[];
-    createdAt: string;
-}
 
 export interface DataStory {
     id: string;

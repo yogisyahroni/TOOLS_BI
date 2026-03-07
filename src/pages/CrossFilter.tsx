@@ -3,7 +3,6 @@ import { useState, useMemo } from 'react';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { motion } from 'framer-motion';
 import { Link2, X } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';

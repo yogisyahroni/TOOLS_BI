@@ -3,7 +3,6 @@ import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Code2, Play, Clock, Download, Trash2, Save, Table as TableIcon } from 'lucide-react';
 import { AIChatPanel } from '@/components/AIChatPanel';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';

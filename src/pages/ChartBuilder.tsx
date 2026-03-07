@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useDatasets, useDatasetData, useCharts, useCreateChart, useDeleteChart } from '@/hooks/useApi';
 import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -16,7 +16,7 @@ import {
   FunnelChart, Funnel, LabelList, Treemap,
   ComposedChart, ReferenceLine
 } from 'recharts';
-import { useDataStore } from '@/stores/dataStore';
+// Removed useDataStore
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -101,7 +101,9 @@ function HeatmapCell({ data, xLabels, yLabels }: { data: number[][]; xLabels: st
 }
 
 export default function ChartBuilder() {
-  const {  savedCharts, addSavedChart, removeSavedChart  } = useDataStore();
+  const { data: savedCharts = [] } = useCharts();
+  const createChartMut = useCreateChart();
+  const deleteChartMut = useDeleteChart();
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
   const chartRef = useRef<HTMLDivElement>(null);
@@ -190,16 +192,20 @@ export default function ChartBuilder() {
     });
   }, [chartType, dataset, xAxis, yAxis]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedDataSet || !xAxis || !yAxis) {
       toast({ title: 'Incomplete', description: 'Please select dataset and axes', variant: 'destructive' });
       return;
     }
-    addSavedChart({
-      id: Date.now().toString(), title: chartTitle, type: chartType as any,
-      dataSetId: selectedDataSet, xAxis, yAxis, groupBy: groupBy || undefined,
-    });
-    toast({ title: 'Chart Saved', description: `"${chartTitle}" has been saved` });
+    try {
+      await createChartMut.mutateAsync({
+        title: chartTitle, type: chartType as any,
+        datasetId: selectedDataSet, xAxis, yAxis, groupBy: groupBy || undefined,
+      });
+      toast({ title: 'Chart Saved', description: `"${chartTitle}" has been saved` });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to save chart', variant: 'destructive' });
+    }
   };
 
   const handleExport = () => {
@@ -225,9 +231,9 @@ export default function ChartBuilder() {
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
-  const loadChart = (chart: typeof savedCharts[0]) => {
+  const loadChart = (chart: any) => {
     setChartType(chart.type as ChartType);
-    setSelectedDataSet(chart.dataSetId);
+    setSelectedDataSet(chart.datasetId);
     setXAxis(chart.xAxis);
     setYAxis(chart.yAxis);
     setChartTitle(chart.title);
@@ -435,7 +441,7 @@ export default function ChartBuilder() {
                         <p className="text-xs text-muted-foreground">{chart.type} • {chart.xAxis} vs {chart.yAxis}</p>
                       </div>
                     </button>
-                    <Button variant="ghost" size="sm" onClick={() => removeSavedChart(chart.id)}>
+                    <Button variant="ghost" size="sm" onClick={() => deleteChartMut.mutate(chart.id)}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
                   </div>

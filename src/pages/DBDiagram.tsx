@@ -8,7 +8,6 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Database, Maximize } from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
 import { Button } from '@/components/ui/button';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useToast } from '@/hooks/use-toast';

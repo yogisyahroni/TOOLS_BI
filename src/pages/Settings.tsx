@@ -1,28 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import {
-  Settings, Key, Bot, Save, AlertCircle, CheckCircle, Check,
-  ChevronsUpDown, RefreshCw, Loader2, Globe, ShieldCheck, Trash2, Lock,
-} from 'lucide-react';
-import { useDataStore } from '@/stores/dataStore';
+import { Settings, Key, Bot, Save, AlertCircle, CheckCircle, Check, ChevronsUpDown, RefreshCw, Loader2, Globe, ShieldCheck, Trash2, Lock } from 'lucide-react';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from '@/components/ui/command';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useToast } from '@/hooks/use-toast';
 import type { AIProvider } from '@/types/data';
 import { cn } from '@/lib/utils';
-import { HelpTooltip } from '@/components/HelpTooltip';
 import { aiProviders, fetchOpenRouterModels, type ModelOption } from '@/lib/aiProviders';
 import { api } from '@/lib/api';
+
 
 /**
  * SECURITY ARCHITECTURE — Settings Page AI Config:
@@ -51,7 +42,6 @@ interface BackendAIConfig {
 }
 
 export default function SettingsPage() {
-  const { setAIConfig } = useDataStore();
   const { toast } = useToast();
 
   // Form state — provider/model/etc from backend; API key only in memory while typing
@@ -93,14 +83,8 @@ export default function SettingsPage() {
           setBaseUrl(data.baseUrl || '');
           setMaxTokens(data.maxTokens);
           setTemperature(data.temperature);
-          // Sync to local store for components that check aiConfig.provider/model
-          setAIConfig({
-            provider: data.provider as AIProvider,
-            model: data.model,
-            apiKey: '***', // placeholder — real key is never in browser
-            maxTokens: data.maxTokens,
-            temperature: data.temperature,
-          });
+          setMaxTokens(data.maxTokens);
+          setTemperature(data.temperature);
         }
       } catch {
         // Backend not reachable or not configured — fallback silently
@@ -141,9 +125,6 @@ export default function SettingsPage() {
 
       const { data } = await api.put<BackendAIConfig>('/settings/ai-config', body);
       setBackendConfig({ ...data, provider, model, baseUrl, maxTokens, temperature });
-
-      // Sync to local store (no raw key)
-      setAIConfig({ provider, model, apiKey: '***', maxTokens, temperature });
 
       // SECURITY: Clear API key from input immediately after successful save
       setApiKey('');

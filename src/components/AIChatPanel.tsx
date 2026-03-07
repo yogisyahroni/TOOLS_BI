@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, Loader2, Bot, User, AlertCircle, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { useDataStore } from '@/stores/dataStore';
+import { useAIConfig } from '@/hooks/useApi';
 import { callAI } from '@/lib/aiService';
 import { cn } from '@/lib/utils';
 
@@ -29,7 +29,7 @@ export function AIChatPanel({
   onAIResponse,
   className,
 }: AIChatPanelProps) {
-  const { aiConfig } = useDataStore();
+  const { data: aiConfig } = useAIConfig();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -79,7 +79,7 @@ export function AIChatPanel({
     }
   };
 
-  const configured = aiConfig && aiConfig.apiKey;
+  const configured = !!aiConfig?.provider;
 
   return (
     <div className={cn('bg-card rounded-xl border border-border shadow-card flex flex-col', className)}>

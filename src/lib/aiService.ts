@@ -1,5 +1,4 @@
-import { useDataStore } from '@/stores/dataStore';
-import { getProviderConfig } from '@/lib/aiProviders';
+import { api } from '@/lib/api';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -12,103 +11,12 @@ interface AIResponse {
 }
 
 export async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
-  const { aiConfig } = useDataStore.getState();
-
-  if (!aiConfig || !aiConfig.apiKey) {
-    return { content: '', error: 'AI belum dikonfigurasi. Silakan setup API key di halaman Settings terlebih dahulu.' };
-  }
-
-  const { provider, model, apiKey, maxTokens, temperature } = aiConfig;
-  const providerConfig = getProviderConfig(provider);
-
   try {
-    // Anthropic has unique API format
-    if (provider === 'anthropic' || providerConfig?.apiFormat === 'anthropic') {
-      const systemMsg = messages.find(m => m.role === 'system')?.content || '';
-      const userMessages = messages.filter(m => m.role !== 'system').map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
-
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens || 2048,
-          temperature: temperature ?? 0.7,
-          system: systemMsg,
-          messages: userMessages,
-        }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        return { content: '', error: `Anthropic API error (${res.status}): ${errText}` };
-      }
-
-      const data = await res.json();
-      return { content: data.content?.[0]?.text || '' };
-    }
-
-    // Google AI has unique API format
-    if (provider === 'google' || providerConfig?.apiFormat === 'google') {
-      const allContent = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: allContent }] }],
-          generationConfig: { maxOutputTokens: maxTokens || 2048, temperature: temperature ?? 0.7 },
-        }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        return { content: '', error: `Google AI error (${res.status}): ${errText}` };
-      }
-
-      const data = await res.json();
-      return { content: data.candidates?.[0]?.content?.parts?.[0]?.text || '' };
-    }
-
-    // OpenAI-compatible API (OpenAI, OpenRouter, NVIDIA, Groq, Together, Mistral, Cohere, DeepSeek, Moonshot)
-    const url = providerConfig?.baseUrl || 'https://openrouter.ai/api/v1/chat/completions';
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    };
-
-    if (provider === 'openrouter') {
-      headers['HTTP-Referer'] = window.location.origin;
-      headers['X-Title'] = 'DataLens Analytics';
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: maxTokens || 2048,
-        temperature: temperature ?? 0.7,
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      return { content: '', error: `AI API error (${res.status}): ${errText}` };
-    }
-
-    const data = await res.json();
-    return { content: data.choices?.[0]?.message?.content || '' };
+    const res = await api.post<{ content: string }>('/ai/chat', { messages });
+    return { content: res.data.content || '' };
   } catch (err: any) {
-    return { content: '', error: `Connection error: ${err.message}` };
+    const errorMsg = err.response?.data?.error || err.message || 'Unknown error occurred communicating with AI';
+    return { content: '', error: `Connection error: ${errorMsg}` };
   }
 }
 
