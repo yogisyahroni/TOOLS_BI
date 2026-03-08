@@ -3,7 +3,9 @@
  * Uses exponential backoff + JWT token via query param (browser WS cannot set Auth headers).
  */
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8080/ws';
+import { getWsUrl, getAccessToken } from './api';
+
+const WS_URL = getWsUrl();
 const MAX_RETRIES = 8;
 const BASE_DELAY_MS = 1_000;
 

@@ -97,7 +97,7 @@ export function useDeleteDataset() {
 export function useDashboards() {
     return useQuery({
         queryKey: ['dashboards'],
-        queryFn: () => dashboardApi.list().then((r) => r.data.data),
+        queryFn: () => dashboardApi.list().then((r) => r.data.data || []),
     });
 }
 

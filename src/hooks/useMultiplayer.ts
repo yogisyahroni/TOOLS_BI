@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import * as Y from 'yjs';
 import { useAuthStore } from '@/stores/authStore';
-import { getAccessToken } from '@/lib/api';
+import { getAccessToken, getWsUrl } from '@/lib/api';
 
 export interface CursorState {
     x: number;
@@ -29,10 +29,9 @@ export function useMultiplayer(dashboardId: string | null) {
     useEffect(() => {
         if (!dashboardId || !token) return;
 
-        // Build ws URL
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = import.meta.env.VITE_API_URL ? new URL(import.meta.env.VITE_API_URL).host : window.location.host;
-        const wsUrl = `${protocol}//${host}/ws?token=${token}`;
+        // Build ws URL using getWsUrl to ensure env fallback consistency
+        const baseWsUrl = getWsUrl();
+        const wsUrl = `${baseWsUrl}?token=${token}`;
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;

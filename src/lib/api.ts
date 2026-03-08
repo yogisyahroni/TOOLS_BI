@@ -12,8 +12,19 @@
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { Report } from '@/types/data';
+export type { Report };
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+export const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+
+export function getWsUrl() {
+    try {
+        const url = new URL(API_BASE);
+        const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${protocol}//${url.host}/ws`;
+    } catch {
+        return import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Access token: kept in memory only (never in localStorage — XSS-safe).

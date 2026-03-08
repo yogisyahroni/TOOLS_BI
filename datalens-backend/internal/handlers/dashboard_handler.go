@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"time"
 
 	"datalens/internal/middleware"
@@ -33,7 +34,7 @@ func (h *DashboardHandler) ListDashboards(c *fiber.Ctx) error {
 	limit := c.QueryInt("limit", 20)
 	offset := (page - 1) * limit
 
-	var dashboards []models.Dashboard
+	dashboards := make([]models.Dashboard, 0)
 	var total int64
 	q := h.db.Where("user_id = ? AND deleted_at IS NULL", userID)
 	q.Model(&models.Dashboard{}).Count(&total)
@@ -59,10 +60,17 @@ func (h *DashboardHandler) CreateDashboard(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name is required"})
 	}
 
+	// Default widgets to empty array if omitted or null
+	widgetsBytes, err := json.Marshal(body.Widgets)
+	if err != nil || string(widgetsBytes) == "null" {
+		widgetsBytes = []byte("[]")
+	}
+
 	dash := models.Dashboard{
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		Name:      body.Name,
+		Widgets:   widgetsBytes,
 		IsPublic:  body.IsPublic,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
