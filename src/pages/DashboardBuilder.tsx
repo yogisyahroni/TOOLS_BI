@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment, useDatasets, useDatasetData, useDashboards, useCreateDashboard, useUpdateDashboard, useDeleteDashboard } from '@/hooks/useApi';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
@@ -335,18 +336,21 @@ export default function DashboardBuilder() {
     });
   };
 
-  const handleAddWidgetPlaceholder = () => {
+  const [isAddingWidget, setIsAddingWidget] = useState(false);
+  const [newWidgetDatasetId, setNewWidgetDatasetId] = useState('');
+
+  const handleAddWidget = (datasetId: string) => {
     if (!activeDashboard) return;
     const newId = Date.now().toString();
     const widget: Widget = {
       id: newId, type: 'bar', title: 'New Widget',
-      dataSetId: dataSets[0]?.id || '', xAxis: '', yAxis: '', width: 'half',
+      dataSetId: datasetId, xAxis: '', yAxis: '', width: 'half',
     };
     const newWidgets = [...activeDashboard.widgets, widget];
     updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
     setSelectedWidgetId(newId);
-    toast({ title: 'Widget added', description: 'Configure it in the properties panel.' });
+    toast({ title: 'Widget Ditambahkan', description: 'Silahkan atur properti widget di panel kanan.' });
   };
 
   const updateSelectedWidget = (updates: Partial<Widget>) => {
@@ -772,7 +776,13 @@ export default function DashboardBuilder() {
 
     if (widget.type === 'heatmap') {
       const heatData = getHeatmapData(widget, ds);
-      if (!heatData.data.length) return <p className="text-muted-foreground text-sm text-center mt-8">Configure X, Y, and Group By</p>;
+      if (!heatData.data.length) return (
+        <div className="flex flex-col items-center justify-center h-full text-muted-foreground opacity-50">
+          <Flame className="w-10 h-10 mb-2" />
+          <p className="text-sm font-medium">Konfigurasi Belum Lengkap</p>
+          <p className="text-xs">Atur referensi X, Y, dan Group By</p>
+        </div>
+      );
       return <HeatmapCell {...heatData} />;
     }
 
@@ -809,7 +819,13 @@ export default function DashboardBuilder() {
     }
 
     const data = getStandardChartData(widget, ds);
-    if (!data.length) return <p className="text-muted-foreground text-sm text-center mt-8">Incomplete configuration</p>;
+    if (!data.length) return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground opacity-50">
+        <LayoutGrid className="w-10 h-10 mb-2" />
+        <p className="text-sm font-medium">Data Belum Lengkap</p>
+        <p className="text-xs">Atur opsi X / Y Axis pada panel properti widgets</p>
+      </div>
+    );
 
     const getEchartsOption = () => {
       const isHorizontal = widget.type === 'horizontal_bar';
@@ -1051,7 +1067,7 @@ export default function DashboardBuilder() {
   return (
     <div className="flex flex-col h-[calc(100vh-6rem)] -m-6 w-[calc(100%+3rem)]">
       {/* Top Header */}
-      <div className="border-b border-border bg-card px-6 py-4 flex items-center justify-between shrink-0 z-10">
+      <div className="border-b border-border bg-background/80 backdrop-blur-md px-6 py-4 flex items-center justify-between shrink-0 z-40 sticky top-0 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
             <LayoutGrid className="w-5 h-5 text-primary-foreground" />
@@ -1146,11 +1162,11 @@ export default function DashboardBuilder() {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden bg-background">
+      <div className="flex flex-1 overflow-hidden bg-muted/20">
         {/* LEFT PANEL: Data Assets */}
-        <div className="w-64 border-r border-border bg-card/50 hidden md:flex flex-col">
+        <div className="w-72 border-r border-border bg-card/80 backdrop-blur-sm hidden md:flex flex-col shadow-sm z-30">
           <div className="p-4 border-b border-border font-semibold flex items-center gap-2 text-foreground">
-            <Database className="w-4 h-4 text-primary" /> Data Assets
+            <Database className="w-4 h-4 text-primary" /> Sumber Data (Assets)
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {dataSets.map(ds => (
@@ -1230,18 +1246,21 @@ export default function DashboardBuilder() {
 
         {/* MIDDLE PANEL: Main Canvas */}
         <div
-          className="flex-1 overflow-y-auto p-6 relative"
+          className="flex-1 overflow-y-auto p-8 relative"
           onClick={(e) => {
             if (!isCommentMode || !activeDashboardId) return;
             if ((e.target as HTMLElement).closest('.comment-pin') || (e.target as HTMLElement).closest('.comment-popover')) return;
             const rect = e.currentTarget.getBoundingClientRect();
-            // Optional: You could adjust to scroll offset if scrolling happens on this container
             const x = e.clientX - rect.left + e.currentTarget.scrollLeft;
             const y = e.clientY - rect.top + e.currentTarget.scrollTop;
             setNewCommentPos({ x, y });
             setNewCommentText('');
           }}
-          style={{ cursor: isCommentMode ? 'crosshair' : 'default' }}
+          style={{
+            cursor: isCommentMode ? 'crosshair' : 'default',
+            backgroundImage: 'radial-gradient(circle at 1px 1px, hsl(var(--border)) 1px, transparent 0)',
+            backgroundSize: '24px 24px'
+          }}
         >
           {activeFilter && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
@@ -1347,26 +1366,32 @@ export default function DashboardBuilder() {
                   >
                     <MessageSquare className="w-4 h-4 mr-2" /> {isCommentMode ? 'Exit Comments' : 'Comments'}
                   </Button>
-                  <Button onClick={handleAddWidgetPlaceholder} className="bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30">
-                    <Plus className="w-4 h-4 mr-2" /> Add Blank Widget
+                  <Button onClick={() => setIsAddingWidget(true)} className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-all font-medium">
+                    <Plus className="w-4 h-4 mr-2" /> Tambah Widget Baru
                   </Button>
                 </div>
               </div>
 
               {activeDashboard.widgets.length === 0 ? (
-                <div className="rounded-xl p-12 border-2 border-border border-dashed text-center">
-                  <LayoutGrid className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
-                  <p className="text-muted-foreground mb-4">Click "Add Blank Widget" to drop a block onto the canvas.</p>
+                <div className="rounded-2xl p-16 border-2 border-border border-dashed text-center bg-card/50 backdrop-blur-sm mx-auto max-w-2xl mt-12 shadow-sm">
+                  <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+                    <LayoutGrid className="w-8 h-8 text-primary/60" />
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground mb-2">Kanvas Masih Kosong</h3>
+                  <p className="text-muted-foreground mb-6">Mulai bangun dashboard analitik Anda dengan menambahkan widget pertama.</p>
+                  <Button onClick={() => setIsAddingWidget(true)} size="lg" className="bg-primary text-primary-foreground shadow-md hover:bg-primary/90">
+                    <Plus className="w-5 h-5 mr-2" /> Tambah Widget Sekarang
+                  </Button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
                   <AnimatePresence>
                     {activeDashboard.widgets.map((widget, idx) => (
-                      <motion.div key={widget.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                      <motion.div key={widget.id} layout initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
                         onClick={() => setSelectedWidgetId(widget.id)}
-                        className={`rounded-xl border shadow-sm overflow-hidden bg-card cursor-pointer transition-all ${selectedWidgetId === widget.id ? 'ring-2 ring-primary border-transparent' : 'border-border hover:border-primary/50'} ${widget.width === 'full' ? 'md:col-span-2 lg:col-span-3' : widget.width === 'half' ? 'md:col-span-2' : ''}`}>
+                        className={`rounded-xl border shadow-sm hover:shadow-md overflow-hidden bg-card/90 backdrop-blur-sm cursor-pointer transition-all duration-200 ${selectedWidgetId === widget.id ? 'ring-2 ring-primary border-transparent shadow-lg scale-[1.01]' : 'border-border hover:border-primary/40'} ${widget.width === 'full' ? 'md:col-span-2 lg:col-span-3' : widget.width === 'half' ? 'md:col-span-2' : ''}`}>
 
-                        <div className={`p-3 border-b flex items-center justify-between ${selectedWidgetId === widget.id ? 'bg-primary/10 border-primary/20' : 'border-border'}`}>
+                        <div className={`p-4 border-b flex items-center justify-between transition-colors ${selectedWidgetId === widget.id ? 'bg-primary/5 border-primary/20' : 'border-border bg-muted/20'}`}>
                           <div className="flex items-center gap-2">
                             <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
                             <span className="font-semibold text-foreground text-sm">{widget.title || 'Untitled'}</span>
@@ -1401,14 +1426,15 @@ export default function DashboardBuilder() {
         {/* RIGHT PANEL: Widget Properties */}
         <AnimatePresence>
           {selectedWidgetId && selectedWidget && (
-            <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 320, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
-              className="border-l border-border bg-card/80 backdrop-blur-lg flex flex-col shadow-[-10px_0_20px_rgba(0,0,0,0.1)] z-20">
+            <motion.div initial={{ width: 0, opacity: 0, x: 20 }} animate={{ width: 340, opacity: 1, x: 0 }} exit={{ width: 0, opacity: 0, x: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="border-l border-border bg-card/95 backdrop-blur-xl flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.1)] z-40 relative">
 
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold">
-                  <Settings className="w-4 h-4 text-primary" /> Properties
+              <div className="p-5 border-b border-border flex items-center justify-between bg-muted/10">
+                <div className="flex items-center gap-2 font-semibold text-foreground">
+                  <Settings2 className="w-5 h-5 text-primary" /> Pengaturan Widget
                 </div>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedWidgetId(null)}>
+                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive rounded-full" onClick={() => setSelectedWidgetId(null)}>
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -1424,33 +1450,35 @@ export default function DashboardBuilder() {
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
                   <TabsContent value="basic" className="space-y-6 mt-0">
-                    <div className="space-y-3">
-                      <Label className="text-xs text-muted-foreground uppercase tracking-wider">Layout</Label>
-                      <div>
-                        <Label className="text-xs mb-1 block">Widget Title</Label>
-                        <Input value={selectedWidget.title} onChange={e => updateSelectedWidget({ title: e.target.value })} className="bg-muted/50" />
-                      </div>
-                      <div>
-                        <Label className="text-xs mb-1 block">Widget Type</Label>
-                        <div className="grid grid-cols-4 gap-1 mt-1">
-                          {WIDGET_TYPES.map(wt => (
-                            <button key={wt.id} onClick={() => updateSelectedWidget({ type: wt.id })} title={wt.label}
-                              className={`flex justify-center p-2 rounded-lg transition-all border ${selectedWidget.type === wt.id ? 'bg-primary/20 border-primary/50 text-primary' : 'bg-muted/50 border-transparent text-muted-foreground hover:bg-muted'}`}>
-                              <wt.icon className="w-4 h-4" />
-                            </button>
-                          ))}
+                    <div className="space-y-4">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><LayoutGrid className="w-3.5 h-3.5" /> Pengaturan Dasar</Label>
+                      <div className="bg-muted/20 p-4 rounded-xl border border-border space-y-4">
+                        <div>
+                          <Label className="text-xs font-medium mb-1.5 block">Judul Widget</Label>
+                          <Input value={selectedWidget.title} onChange={e => updateSelectedWidget({ title: e.target.value })} className="bg-background shadow-sm" />
                         </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs mb-1 block">Width Scale</Label>
-                        <Select value={selectedWidget.width} onValueChange={(v: any) => updateSelectedWidget({ width: v })}>
-                          <SelectTrigger className="bg-muted/50"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="third">Small (1/3)</SelectItem>
-                            <SelectItem value="half">Medium (1/2)</SelectItem>
-                            <SelectItem value="full">Large (Full Width)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div>
+                          <Label className="text-xs font-medium mb-1.5 block">Tipe Visualisasi</Label>
+                          <div className="grid grid-cols-4 gap-1.5 mt-1">
+                            {WIDGET_TYPES.map(wt => (
+                              <button key={wt.id} onClick={() => updateSelectedWidget({ type: wt.id })} title={wt.label}
+                                className={`flex justify-center p-2.5 rounded-lg transition-all border shadow-sm ${selectedWidget.type === wt.id ? 'bg-primary border-primary text-primary-foreground scale-[1.03]' : 'bg-background border-border text-muted-foreground hover:bg-muted/80 hover:scale-[1.03]'}`}>
+                                <wt.icon className="w-4 h-4" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-medium mb-1.5 block">Ukuran Lebar</Label>
+                          <Select value={selectedWidget.width} onValueChange={(v: any) => updateSelectedWidget({ width: v })}>
+                            <SelectTrigger className="bg-background shadow-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="third">Kecil (1/3)</SelectItem>
+                              <SelectItem value="half">Sedang (1/2)</SelectItem>
+                              <SelectItem value="full">Besar (Menyebar Penuh)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </div>
 
@@ -1534,70 +1562,72 @@ export default function DashboardBuilder() {
                         </>
                       ) : (
                         <>
-                          <Label className="text-xs text-muted-foreground uppercase tracking-wider">Data Map</Label>
-                          <div>
-                            <Label className="text-xs mb-1 block">Dataset</Label>
-                            <Select value={selectedWidget.dataSetId} onValueChange={v => updateSelectedWidget({ dataSetId: v, xAxis: '', yAxis: '', groupBy: '' })}>
-                              <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
-                              <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
-                            </Select>
+                          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Database className="w-3.5 h-3.5" /> Parameter Data</Label>
+                          <div className="bg-muted/20 p-4 rounded-xl border border-border space-y-4">
+                            <div>
+                              <Label className="text-xs font-medium mb-1.5 block">Sumber Dataset</Label>
+                              <Select value={selectedWidget.dataSetId} onValueChange={v => updateSelectedWidget({ dataSetId: v, xAxis: '', yAxis: '', groupBy: '' })}>
+                                <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Dataset" /></SelectTrigger>
+                                <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </div>
+
+                            {selectedWidget.type !== 'text' && selectedWidget.dataSetId && (
+                              <>
+                                {(!['stat'].includes(selectedWidget.type)) && (
+                                  <div>
+                                    <Label className="text-xs font-medium mb-1.5 block">X-Axis (Dimensi)</Label>
+                                    <Select value={selectedWidget.xAxis || ''} onValueChange={v => updateSelectedWidget({ xAxis: v })}>
+                                      <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Kolom" /></SelectTrigger>
+                                      <SelectContent>
+                                        {widgetColumnGroups.map(g => (
+                                          <SelectGroup key={g.datasetName}>
+                                            <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
+                                            {g.columns.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
+                                          </SelectGroup>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
+                                <div>
+                                  <Label className="text-xs font-medium mb-1.5 block">{selectedWidget.type === 'stat' ? 'Meteran Tunggal (Metrik)' : 'Y-Axis (Ukuran/Nilai)'}</Label>
+                                  <Select value={selectedWidget.yAxis || ''} onValueChange={v => updateSelectedWidget({ yAxis: v })}>
+                                    <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Kolom Numerik" /></SelectTrigger>
+                                    <SelectContent>
+                                      {widgetColumnGroups.map(g => {
+                                        const numCols = g.columns.filter(c => c.type === 'number');
+                                        if (numCols.length === 0) return null;
+                                        return (
+                                          <SelectGroup key={g.datasetName}>
+                                            <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
+                                            {numCols.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
+                                          </SelectGroup>
+                                        );
+                                      })}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {selectedWidget.type === 'heatmap' && (
+                                  <div>
+                                    <Label className="text-xs font-medium mb-1.5 block">Group By (Dimensi Lapis Ke-2)</Label>
+                                    <Select value={selectedWidget.groupBy || ''} onValueChange={v => updateSelectedWidget({ groupBy: v })}>
+                                      <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Kolom" /></SelectTrigger>
+                                      <SelectContent>
+                                        {widgetColumnGroups.map(g => (
+                                          <SelectGroup key={g.datasetName}>
+                                            <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
+                                            {g.columns.filter(c => c.name !== selectedWidget.xAxis).map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
+                                          </SelectGroup>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
-
-                          {selectedWidget.type !== 'text' && selectedWidget.dataSetId && (
-                            <>
-                              {(!['stat'].includes(selectedWidget.type)) && (
-                                <div>
-                                  <Label className="text-xs mb-1 block">X-Axis (Dimension)</Label>
-                                  <Select value={selectedWidget.xAxis || ''} onValueChange={v => updateSelectedWidget({ xAxis: v })}>
-                                    <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
-                                    <SelectContent>
-                                      {widgetColumnGroups.map(g => (
-                                        <SelectGroup key={g.datasetName}>
-                                          <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                          {g.columns.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                        </SelectGroup>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
-                              <div>
-                                <Label className="text-xs mb-1 block">{selectedWidget.type === 'stat' ? 'Metric' : 'Y-Axis (Measure)'}</Label>
-                                <Select value={selectedWidget.yAxis || ''} onValueChange={v => updateSelectedWidget({ yAxis: v })}>
-                                  <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
-                                  <SelectContent>
-                                    {widgetColumnGroups.map(g => {
-                                      const numCols = g.columns.filter(c => c.type === 'number');
-                                      if (numCols.length === 0) return null;
-                                      return (
-                                        <SelectGroup key={g.datasetName}>
-                                          <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                          {numCols.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                        </SelectGroup>
-                                      );
-                                    })}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-
-                              {selectedWidget.type === 'heatmap' && (
-                                <div>
-                                  <Label className="text-xs mb-1 block">Group By (Y-Axis Dimension)</Label>
-                                  <Select value={selectedWidget.groupBy || ''} onValueChange={v => updateSelectedWidget({ groupBy: v })}>
-                                    <SelectTrigger className="bg-muted/50"><SelectValue placeholder="Select" /></SelectTrigger>
-                                    <SelectContent>
-                                      {widgetColumnGroups.map(g => (
-                                        <SelectGroup key={g.datasetName}>
-                                          <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                          {g.columns.filter(c => c.name !== selectedWidget.xAxis).map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                        </SelectGroup>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
-                            </>
-                          )}
                         </>
                       )}
                     </div>
@@ -1727,6 +1757,47 @@ export default function DashboardBuilder() {
         </AnimatePresence>
 
       </div>
+
+      {/* Add Widget Dialog */}
+      <Dialog open={isAddingWidget} onOpenChange={setIsAddingWidget}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Pilih Sumber Dataset</DialogTitle>
+            <DialogDescription>
+              Tentukan dataset mana yang ingin Anda hubungkan ke Widget baru ini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Tersedia {dataSets.length} Dataset</Label>
+              <Select value={newWidgetDatasetId} onValueChange={setNewWidgetDatasetId}>
+                <SelectTrigger className="w-full shadow-sm">
+                  <SelectValue placeholder="Pilih dataset..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {dataSets.map(ds => (
+                    <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>
+                  ))}
+                  {dataSets.length === 0 && (
+                    <SelectItem value="none" disabled>Tidak ada dataset ditemukan</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsAddingWidget(false)}>Batal</Button>
+            <Button onClick={() => {
+              if (!newWidgetDatasetId) return toast({ title: 'Aksi Ditolak', description: 'Pilih dataset terlebih dahulu!', variant: 'destructive' });
+              handleAddWidget(newWidgetDatasetId);
+              setIsAddingWidget(false);
+              setNewWidgetDatasetId('');
+            }} className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-all">
+              Tambahkan Widget
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
