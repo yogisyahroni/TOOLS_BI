@@ -290,7 +290,7 @@ export default function DashboardBuilder() {
       id: newId, type: 'bar', title: 'New Widget',
       dataSetId: datasetId, xAxis: '', yAxis: '', width: 'half',
     };
-    const newWidgets = [...activeDashboard.widgets, widget];
+    const newWidgets = [...safeWidgets, widget];
     updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
     setSelectedWidgetId(newId);
@@ -299,14 +299,14 @@ export default function DashboardBuilder() {
 
   const updateSelectedWidget = (updates: Partial<Widget>) => {
     if (!activeDashboard || !selectedWidgetId) return;
-    const newWidgets = (activeDashboard.widgets as Widget[]).map(w => w.id === selectedWidgetId ? { ...(w as any), ...updates } : w);
+    const newWidgets = safeWidgets.map((w: any) => w.id === selectedWidgetId ? { ...w, ...updates } : w);
     updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
   };
 
   const removeWidget = (widgetId: string) => {
     if (!activeDashboard) return;
-    const newWidgets = activeDashboard.widgets.filter(w => w.id !== widgetId);
+    const newWidgets = safeWidgets.filter((w: any) => w.id !== widgetId);
     updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
     syncToYjs(newWidgets);
     if (selectedWidgetId === widgetId) setSelectedWidgetId(null);
@@ -314,12 +314,12 @@ export default function DashboardBuilder() {
 
   const moveWidget = (widgetId: string, direction: 'up' | 'down') => {
     if (!activeDashboard) return;
-    const idx = activeDashboard.widgets.findIndex(w => w.id === widgetId);
+    const idx = safeWidgets.findIndex((w: any) => w.id === widgetId);
     if (idx < 0) return;
     if (direction === 'up' && idx === 0) return;
-    if (direction === 'down' && idx === activeDashboard.widgets.length - 1) return;
+    if (direction === 'down' && idx === safeWidgets.length - 1) return;
 
-    const newWidgets = [...activeDashboard.widgets];
+    const newWidgets = [...safeWidgets];
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
     [newWidgets[idx], newWidgets[swapIdx]] = [newWidgets[swapIdx], newWidgets[idx]];
 
@@ -387,10 +387,9 @@ export default function DashboardBuilder() {
     return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).slice(0, 50);
   };
 
-  // Trigger AutoJoin mutations when widget configuration changes
   useEffect(() => {
     if (!activeDashboard) return;
-    activeDashboard.widgets.forEach(w => {
+    safeWidgets.forEach((w: any) => {
       if (!w.dataSetId || !w.yAxis || !w.xAxis) return;
 
       const checkMulti = (val: string) => val && val.includes('.');
