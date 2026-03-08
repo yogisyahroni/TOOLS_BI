@@ -1267,7 +1267,7 @@ export default function DashboardBuilder() {
                 </div>
               </div>
 
-              {activeDashboard.widgets.length === 0 ? (
+              {safeWidgets.length === 0 ? (
                 <div className="rounded-2xl p-16 border-2 border-border border-dashed text-center bg-card/50 backdrop-blur-sm mx-auto max-w-2xl mt-12 shadow-sm">
                   <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
                     <LayoutGrid className="w-8 h-8 text-primary/60" />
@@ -1278,7 +1278,7 @@ export default function DashboardBuilder() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
                   <AnimatePresence>
-                    {activeDashboard.widgets.map((widget, idx) => (
+                    {safeWidgets.map((widget: any, idx: number) => (
                       <motion.div key={widget.id} layout initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
                         onClick={() => setSelectedWidgetId(widget.id)}
                         className={`rounded-xl border shadow-sm hover:shadow-md overflow-hidden bg-card/90 backdrop-blur-sm cursor-pointer transition-all duration-200 ${selectedWidgetId === widget.id ? 'ring-2 ring-primary border-transparent shadow-lg scale-[1.01]' : 'border-border hover:border-primary/40'} ${widget.width === 'full' ? 'md:col-span-2 lg:col-span-3' : widget.width === 'half' ? 'md:col-span-2' : ''}`}>
