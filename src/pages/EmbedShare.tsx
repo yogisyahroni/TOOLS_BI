@@ -43,7 +43,7 @@ export default function EmbedShare() {
 
   // Public embed URL using secure token
   const getEmbedUrl = (tokenId: string) =>
-    `${window.location.origin}/api/v1/embed/view/${tokenId}`;
+    `${window.location.origin}/embed/view/${tokenId}`;
 
   const getIframeCode = (tokenId: string) =>
     `<iframe\n  src="${getEmbedUrl(tokenId)}"\n  width="${width}"\n  height="${height}"\n  frameborder="0"\n  style="border: 1px solid #e5e7eb; border-radius: 8px;"\n  allowfullscreen\n></iframe>`;

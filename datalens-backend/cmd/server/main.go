@@ -427,6 +427,7 @@ func main() {
 
 	// Public embed view endpoint — NO JWT middleware
 	app.Get("/api/v1/embed/view/:token", embedH.ViewEmbed)
+	app.Get("/api/v1/embed/view/:token/data/:datasetId", embedH.FetchEmbedData)
 
 	// --- Static Frontend (React SPA) ---
 	// Serve the built frontend from ../dist/ if it exists.

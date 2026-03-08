@@ -47,6 +47,7 @@ import ImportPage from "./pages/ImportPage";
 import NotFound from "./pages/NotFound";
 import DataConnectors from './pages/DataConnectors';
 
+import EmbedViewer from "./pages/EmbedViewer";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -117,6 +118,7 @@ const App = () => (
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/embed/view/:token" element={<EmbedViewer />} />
           {/* Standalone 404 — renders WITHOUT AppLayout/sidebar */}
           <Route path="/not-found" element={<NotFound />} />
           {/* Protected routes — all nested inside auth guard */}

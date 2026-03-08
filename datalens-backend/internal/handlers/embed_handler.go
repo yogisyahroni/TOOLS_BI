@@ -108,11 +108,54 @@ func (h *EmbedHandler) ViewEmbed(c *fiber.Ctx) error {
 	// Increment access count
 	h.db.Model(&token).UpdateColumn("access_count", gorm.Expr("access_count + 1"))
 
+	var resourceData interface{}
+	if token.ResourceType == "dashboard" {
+		var dashboard models.Dashboard
+		if err := h.db.Preload("Widgets").Where("id = ?", token.ResourceID).First(&dashboard).Error; err == nil {
+			resourceData = dashboard
+		}
+	} else if token.ResourceType == "chart" {
+		var chart models.SavedChart
+		if err := h.db.Where("id = ?", token.ResourceID).First(&chart).Error; err == nil {
+			resourceData = chart
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"resourceId":   token.ResourceID,
 		"resourceType": token.ResourceType,
 		"showToolbar":  token.ShowToolbar,
 		"width":        token.Width,
 		"height":       token.Height,
+		"resourceData": resourceData,
+	})
+}
+
+// FetchEmbedData is a PUBLIC endpoint — validates token and returns dataset data.
+// GET /api/v1/embed/view/:token/data/:datasetId
+func (h *EmbedHandler) FetchEmbedData(c *fiber.Ctx) error {
+	tokenID := c.Params("token")
+	datasetID := c.Params("datasetId")
+
+	var token models.EmbedToken
+	if err := h.db.Where("id = ? AND revoked = false", tokenID).First(&token).Error; err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "token not found or revoked"})
+	}
+
+	if token.ExpiresAt != nil && time.Now().After(*token.ExpiresAt) {
+		return c.Status(410).JSON(fiber.Map{"error": "token expired"})
+	}
+
+	// We allow fetching the dataset if it belongs to the same user who created the token.
+	var dataset models.Dataset
+	if err := h.db.Where("id = ? AND user_id = ?", datasetID, token.UserID).First(&dataset).Error; err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "dataset not found or access denied"})
+	}
+
+	var rows []map[string]interface{}
+	h.db.Table(dataset.DataTableName).Limit(5000).Find(&rows)
+
+	return c.JSON(fiber.Map{
+		"data": rows,
 	})
 }
