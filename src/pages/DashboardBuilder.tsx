@@ -39,6 +39,8 @@ import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
+const AnyResponsiveGridLayout = ResponsiveGridLayout as any;
+
 function WidgetChartRenderer({ widget, metaDs, renderFn }: { widget: any, metaDs: any, renderFn: (w: any, ds: any, isLoading: boolean) => React.ReactNode }) {
   const { data: __datasetDataRes, isLoading } = useDatasetData(widget.dataSetId || '', { limit: 10000 });
   const ds = React.useMemo(() => {
@@ -142,6 +144,7 @@ export default function DashboardBuilder() {
 
   const [containerWidth, setContainerWidth] = useState(1200);
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  const draggedItemRef = useRef<any>(null);
 
   useEffect(() => {
     if (!gridContainerRef.current) return;
@@ -1134,8 +1137,9 @@ export default function DashboardBuilder() {
                     key={chart.id}
                     className="bg-background rounded-xl border border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md hover:border-border/80 group cursor-grab active:cursor-grabbing"
                     draggable={true}
+                    unselectable="on"
                     onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', JSON.stringify({
+                      const dragData = {
                         source: 'saved-chart',
                         chartId: chart.id,
                         title: chart.title,
@@ -1144,7 +1148,9 @@ export default function DashboardBuilder() {
                         xAxis: chart.xAxis,
                         yAxis: chart.yAxis,
                         groupBy: chart.groupBy
-                      }));
+                      };
+                      draggedItemRef.current = dragData;
+                      e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
                       e.dataTransfer.effectAllowed = 'copy';
                     }}
                   >
@@ -1335,6 +1341,45 @@ export default function DashboardBuilder() {
                     e.dataTransfer.dropEffect = 'copy';
                   }
                 }}
+                onDrop={(e) => {
+                  // Fallback drop handler if RGL ignores the drop
+                  if (!activeDashboardId) return;
+
+                  try {
+                    let parsed = draggedItemRef.current;
+                    if (!parsed) {
+                      const transferData = e.dataTransfer?.getData('text/plain');
+                      if (!transferData) return;
+                      parsed = JSON.parse(transferData);
+                    }
+
+                    if (parsed && parsed.source === 'saved-chart') {
+                      // We don't have layoutItem x/y coords here precisely unless we calculate it.
+                      // Let's just append at the bottom.
+                      const newWidget = {
+                        id: crypto.randomUUID(),
+                        title: parsed.title,
+                        type: parsed.type,
+                        dataSetId: parsed.datasetId,
+                        xAxis: parsed.xAxis,
+                        yAxis: parsed.yAxis,
+                        groupBy: parsed.groupBy || '',
+                        width: 'half',
+                        x: 0,
+                        y: Infinity, // forces to bottom
+                        w: 6,
+                        h: 4
+                      };
+
+                      const newWidgets = [...safeWidgets, newWidget];
+                      handleUpdateWidgets(newWidgets);
+                      toast({ title: 'Widget Ditambahkan', description: parsed.title });
+                      draggedItemRef.current = null; // reset
+                    }
+                  } catch (error) {
+                    console.error("Fallback Drop Parse Error", error);
+                  }
+                }}
               >
                 {safeWidgets.length === 0 && (
                   <div className="absolute inset-0 pointer-events-none z-10 flex flex-col items-center pt-12">
@@ -1347,7 +1392,7 @@ export default function DashboardBuilder() {
                     </div>
                   </div>
                 )}
-                <ResponsiveGridLayout
+                <AnyResponsiveGridLayout
                   className="layout -mx-4"
                   style={{ minHeight: 500 }}
                   width={containerWidth}
@@ -1355,10 +1400,10 @@ export default function DashboardBuilder() {
                   breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
                   cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
                   rowHeight={80}
-                  onLayoutChange={(currentLayout) => {
+                  onLayoutChange={(currentLayout: any) => {
                     // Update the x,y,w,h in safeWidgets
                     const newWidgets = safeWidgets.map((w: any) => {
-                      const lay = currentLayout.find(l => l.i === w.id);
+                      const lay = currentLayout.find((l: any) => l.i === w.id);
                       if (lay) {
                         return { ...w, x: lay.x, y: lay.y, w: lay.w, h: lay.h };
                       }
@@ -1374,21 +1419,24 @@ export default function DashboardBuilder() {
                       handleUpdateWidgets(newWidgets);
                     }
                   }}
-                  draggableHandle=".drag-handle"
                   margin={[24, 24]}
                   isDroppable={true}
                   droppingItem={{ i: 'drop', w: 6, h: 4, x: 0, y: 0 }}
-                  onDrop={(layout, layoutItem, _event) => {
+                  onDrop={(layout: any, layoutItem: any, _event: any) => {
                     const e = _event as unknown as React.DragEvent;
-                    e.preventDefault();
+                    if (e.preventDefault) e.preventDefault();
                     if (!activeDashboardId) return;
 
                     try {
-                      const transferData = e.dataTransfer?.getData('text/plain');
-                      if (!transferData) return;
-                      const parsed = JSON.parse(transferData);
+                      let parsed = draggedItemRef.current;
 
-                      if (parsed.source === 'saved-chart') {
+                      if (!parsed) {
+                        const transferData = e.dataTransfer?.getData('text/plain');
+                        if (!transferData) return;
+                        parsed = JSON.parse(transferData);
+                      }
+
+                      if (parsed && parsed.source === 'saved-chart') {
                         const newWidget = {
                           id: crypto.randomUUID(),
                           title: parsed.title,
@@ -1407,6 +1455,7 @@ export default function DashboardBuilder() {
                         const newWidgets = [...safeWidgets, newWidget];
                         handleUpdateWidgets(newWidgets);
                         toast({ title: 'Widget Ditambahkan', description: parsed.title });
+                        draggedItemRef.current = null; // reset
                       }
                     } catch (error) {
                       console.error("Drop Parse Error", error);
@@ -1440,7 +1489,7 @@ export default function DashboardBuilder() {
                       </div>
                     </div>
                   ))}
-                </ResponsiveGridLayout>
+                </AnyResponsiveGridLayout>
               </div>
             </>
           )}
@@ -1627,6 +1676,6 @@ export default function DashboardBuilder() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }
