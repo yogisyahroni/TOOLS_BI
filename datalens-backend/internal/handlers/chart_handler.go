@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -92,18 +93,20 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 	}
 
 	chart := models.SavedChart{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		DatasetID: req.DatasetID,
-		Title:     req.Title,
-		Type:      req.Type,
-		XAxis:     req.XAxis,
-		YAxis:     req.YAxis,
-		GroupBy:   req.GroupBy,
-		CreatedAt: time.Now(),
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		DatasetID:   req.DatasetID,
+		Title:       req.Title,
+		Type:        req.Type,
+		XAxis:       req.XAxis,
+		YAxis:       req.YAxis,
+		GroupBy:     req.GroupBy,
+		Annotations: []byte("[]"), // Fix JSONB nil issue in Postgres
+		CreatedAt:   time.Now(),
 	}
 	if err := h.db.Create(&chart).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create chart"})
+		log.Error().Err(err).Interface("chart_payload", chart).Msg("Failed to insert chart into DB")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create chart", "details": err.Error()})
 	}
 
 	h.hub.SendToUser(userID, realtime.Event{
