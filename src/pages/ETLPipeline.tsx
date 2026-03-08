@@ -434,8 +434,12 @@ export default function ETLPipelinePage() {
     if (!data || !pipeline || data.length === 0) return;
 
     try {
-      // 1. Generate CSV from JSON data
-      const csvStr = Papa.unparse(data);
+      // 1. Generate CSV from JSON data, removing internal backend fields
+      const cleanData = data.map((row: any) => {
+        const { _row_id, ...rest } = row;
+        return rest;
+      });
+      const csvStr = Papa.unparse(cleanData);
 
       // 2. Create a Blob and File from CSV string
       const blob = new Blob([csvStr], { type: 'text/csv' });

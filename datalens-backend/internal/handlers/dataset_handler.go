@@ -113,6 +113,26 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "File has no columns"})
 	}
 
+	// Safely deduplicate and sanitize headers to prevent PostgreSQL duplicate column errors
+	seenHeaders := make(map[string]bool)
+	for i, h := range headers {
+		safeH := sanitizeIdentifier(h)
+		if safeH == "" {
+			safeH = fmt.Sprintf("col_%d", i)
+		}
+		if safeH == "_row_id" {
+			safeH = "imported_row_id"
+		}
+		orig := safeH
+		counter := 1
+		for seenHeaders[safeH] {
+			safeH = fmt.Sprintf("%s_%d", orig, counter)
+			counter++
+		}
+		seenHeaders[safeH] = true
+		headers[i] = safeH
+	}
+
 	// Detect column types
 	columnDefs := detectColumnTypes(headers, rows)
 
