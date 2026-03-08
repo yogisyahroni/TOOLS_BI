@@ -6,7 +6,7 @@ import {
   LayoutGrid, Plus, Trash2, GripVertical, BarChart3, X, Move, Maximize2, Minimize2, Loader2,
   LineChart, PieChart, AreaChart, ScatterChart as ScatterIcon,
   Radar, TrendingUp, Grid3X3, Flame, Box, Settings, Database, Edit2, Columns, Filter,
-  HelpCircle, ChevronRight, Share2, Users, Search, Check, Download, MousePointer2, Settings2, AlertCircle, Variable, PenTool, Braces, Link2, Sparkles, MessageSquare, Zap, Gauge, SunMedium, Network, Combine, Hash, Type, FunctionSquare
+  HelpCircle, ChevronRight, Share2, Users, Search, Check, Download, MousePointer2, Settings2, AlertCircle, Variable, PenTool, Braces, Link2, Sparkles, MessageSquare, Zap, Gauge, SunMedium, Network, Combine, Hash, Type, FunctionSquare, ExternalLink
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
@@ -30,10 +30,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment, useDatasets, useDatasetData, useDashboards, useCreateDashboard, useUpdateDashboard, useDeleteDashboard } from '@/hooks/useApi';
+import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment, useDatasets, useDatasetData, useDashboards, useCreateDashboard, useUpdateDashboard, useDeleteDashboard, useCharts } from '@/hooks/useApi';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
-import type { FormatRuleItem, FormatRuleCreate, DashboardParameter } from '@/lib/api';
+import type { DashboardParameter } from '@/lib/api';
 import { HelpTooltip } from '@/components/HelpTooltip';
 
 function WidgetChartRenderer({ widget, metaDs, renderFn }: { widget: any, metaDs: any, renderFn: (w: any, ds: any, isLoading: boolean) => React.ReactNode }) {
@@ -75,41 +75,7 @@ const WIDGET_TYPES: { id: WidgetType; label: string; icon: any }[] = [
   { id: 'action', label: 'Action', icon: Zap },
 ];
 
-const FORMAT_PRESETS = [
-  { label: 'High (Green)', bg: 'hsl(142 76% 36% / 0.2)', text: 'hsl(142 76% 56%)' },
-  { label: 'Medium (Yellow)', bg: 'hsl(38 92% 50% / 0.2)', text: 'hsl(38 92% 60%)' },
-  { label: 'Low (Red)', bg: 'hsl(0 72% 51% / 0.2)', text: 'hsl(0 72% 65%)' },
-  { label: 'Info (Blue)', bg: 'hsl(199 89% 48% / 0.2)', text: 'hsl(199 89% 60%)' },
-];
 
-const FORMAT_CONDITIONS = [
-  { value: 'gt', label: '>' },
-  { value: 'lt', label: '<' },
-  { value: 'gte', label: '>=' },
-  { value: 'lte', label: '<=' },
-  { value: 'eq', label: '=' },
-  { value: 'contains', label: 'Contains' },
-  { value: 'empty', label: 'Is Empty' },
-];
-
-function matchesRule(value: any, rule: FormatRuleItem): boolean {
-  if (rule.condition === 'empty') return value == null || String(value).trim() === '';
-  if (rule.condition === 'contains') return String(value).toLowerCase().includes(rule.value.toLowerCase());
-  const num = Number(value);
-  const threshold = Number(rule.value);
-  if (isNaN(num) || isNaN(threshold)) {
-    if (rule.condition === 'eq') return String(value) === rule.value;
-    return false;
-  }
-  switch (rule.condition) {
-    case 'gt': return num > threshold;
-    case 'lt': return num < threshold;
-    case 'gte': return num >= threshold;
-    case 'lte': return num <= threshold;
-    case 'eq': return num === threshold;
-    default: return false;
-  }
-}
 
 function TreemapContent(props: any) {
   const { x, y, width, height, name, value } = props;
@@ -168,6 +134,7 @@ export default function DashboardBuilder() {
   const updateDashboardMut = useUpdateDashboard();
   const deleteDashboardMut = useDeleteDashboard();
   const { data: dataSets = [] } = useDatasets();
+  const { data: savedCharts = [] } = useCharts(); // Load Saved Charts
   const { toast } = useToast();
 
   const [activeDashboardId, setActiveDashboardId] = useState('');
@@ -267,19 +234,6 @@ export default function DashboardBuilder() {
   const autoJoinMut = useAutoJoinQuery();
   const [crossDatasetCache, setCrossDatasetCache] = useState<Record<string, any[]>>({});
 
-  // --- Conditional Formatting State ---
-  const [formatCol, setFormatCol] = useState('');
-  const [formatCond, setFormatCond] = useState<FormatRuleCreate['condition']>('gt');
-  const [formatVal, setFormatVal] = useState('');
-  const [formatBg, setFormatBg] = useState(FORMAT_PRESETS[0].bg);
-  const [formatText, setFormatText] = useState(FORMAT_PRESETS[0].text);
-
-  // --- Drill Down State ---
-  const [drillHierarchy, setDrillHierarchy] = useState<string[]>([]);
-  const [drillMetricCol, setDrillMetricCol] = useState('');
-  const [drillAggFn, setDrillAggFn] = useState<'count' | 'sum' | 'avg'>('count');
-  const [drillLevels, setDrillLevels] = useState<Record<string, { column: string, filterValue: string }[]>>({});
-
   // --- Calculated Fields State ---
   const [calcOpen, setCalcOpen] = useState(false);
   const [calcDatasetId, setCalcDatasetId] = useState('');
@@ -309,19 +263,7 @@ export default function DashboardBuilder() {
 
   const executeActionMut = useExecuteAction();
 
-  // When switching widget, repopulate drill state
-  useEffect(() => {
-    if (activeDatasetId && drillConfigs && drillConfigs.length > 0) {
-      const cfg = drillConfigs[0];
-      setDrillHierarchy(cfg.hierarchy ?? []);
-      setDrillMetricCol(cfg.metricCol ?? '');
-      setDrillAggFn(cfg.aggFn ?? 'count');
-    } else {
-      setDrillHierarchy([]);
-      setDrillMetricCol('');
-      setDrillAggFn('count');
-    }
-  }, [activeDatasetId, drillConfigs]);
+
 
   const createDashboard = () => {
     if (!newDashName.trim()) return;
@@ -419,31 +361,11 @@ export default function DashboardBuilder() {
       });
     }
 
-    // 3. Drill Down for this widget
-    const widgetDrill = drillLevels[widget.id] || [];
-    if (widgetDrill.length > 0) {
-      filteredData = filteredData.filter((row: any) => {
-        return widgetDrill.every((d: any) => String(row[d.column]) === d.filterValue);
-      });
-    }
-
     return filteredData;
   };
 
   const getWidgetXAxis = (widget: Widget, datasetId: string) => {
-    let currentXAxis = widget.xAxis;
-    if (!currentXAxis) return currentXAxis;
-    const drillCfg = drillConfigs.find((c: any) => c.datasetId === datasetId);
-    if (drillCfg && drillCfg.hierarchy && drillCfg.hierarchy.length > 0) {
-      // Allow drill down if current xAxis is in the hierarchy
-      if (drillCfg.hierarchy.includes(widget.xAxis)) {
-        const depth = (drillLevels[widget.id] || []).length;
-        if (depth < drillCfg.hierarchy.length) {
-          currentXAxis = drillCfg.hierarchy[depth];
-        }
-      }
-    }
-    return currentXAxis;
+    return widget.xAxis;
   };
 
   const getStandardChartData = (widget: Widget, dataset: any) => {
@@ -660,22 +582,8 @@ export default function DashboardBuilder() {
     if (data?.activePayload?.[0]?.payload?.name) {
       const clickedValue = data.activePayload[0].payload.name;
       const currentXAxis = getWidgetXAxis(widget, widget.dataSetId);
-      const drillCfg = drillConfigs.find((c: any) => c.datasetId === widget.dataSetId);
 
-      // 1. Check Drill Down capability
-      if (drillCfg && drillCfg.hierarchy && drillCfg.hierarchy.includes(widget.xAxis)) {
-        const depth = (drillLevels[widget.id] || []).length;
-        if (depth < drillCfg.hierarchy.length - 1) { // proceed deeper
-          setDrillLevels(prev => ({
-            ...prev,
-            [widget.id]: [...(prev[widget.id] || []), { column: currentXAxis, filterValue: clickedValue }]
-          }));
-          toast({ title: 'Drilled Down', description: `${currentXAxis} = ${clickedValue}` });
-          return;
-        }
-      }
-
-      // 2. Global Cross-Filtering
+      // Global Cross-Filtering
       if (activeFilter?.column === currentXAxis && activeFilter?.value === clickedValue) {
         setActiveFilter(null);
       } else {
@@ -685,22 +593,10 @@ export default function DashboardBuilder() {
     }
   };
 
-  const handleDrillUp = (widgetId: string) => {
-    setDrillLevels(prev => {
-      const current = prev[widgetId] || [];
-      if (current.length === 0) return prev;
-      return { ...prev, [widgetId]: current.slice(0, -1) };
-    });
-  };
-
   const getCellColor = (widget: Widget, dataRow: any, index: number) => {
     const currentXAxis = getWidgetXAxis(widget, widget.dataSetId);
     if (activeFilter?.column === currentXAxis && activeFilter?.value === dataRow.name) {
       return COLORS[3]; // highlight
-    }
-    for (const rule of formatRules) {
-      if (rule.column === widget.xAxis && matchesRule(dataRow.name, rule)) return rule.bgColor;
-      if (rule.column === widget.yAxis && matchesRule(dataRow.value, rule)) return rule.bgColor;
     }
     return COLORS[index % COLORS.length];
   };
@@ -1165,123 +1061,81 @@ export default function DashboardBuilder() {
       </div>
 
       <div className="flex flex-1 overflow-hidden bg-muted/20">
-        {/* LEFT PANEL: Data Assets */}
+        {/* LEFT PANEL: Saved Charts Library */}
         <div className="w-72 border-r border-border bg-card/80 backdrop-blur-sm hidden md:flex flex-col shadow-sm z-30">
-          <div className="p-4 border-b border-border font-semibold flex items-center gap-2 text-foreground">
-            <Database className="w-4 h-4 text-primary" /> Sumber Data (Assets)
+          <div className="p-4 border-b border-border font-semibold flex items-center justify-between text-foreground">
+            <div className="flex items-center gap-2">
+              <PieChart className="w-4 h-4 text-primary" /> Charts Library
+            </div>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => window.location.href = '/chart-builder'}>
+              <Plus className="w-3.5 h-3.5 mr-1" /> New
+            </Button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {dataSets.length === 0 && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {savedCharts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 px-4 text-center bg-background rounded-xl border border-dashed border-border shadow-sm mt-4">
                 <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 shadow-inner">
-                  <Database className="w-6 h-6 text-primary/70" />
+                  <PieChart className="w-6 h-6 text-primary/70" />
                 </div>
-                <h4 className="text-sm font-semibold text-foreground mb-1.5">Belum Ada Dataset</h4>
-                <p className="text-xs text-muted-foreground mb-5 leading-relaxed">Koneksikan database eksternal atau impor file untuk mulai merancang visualisasi.</p>
-                <Button variant="default" size="sm" className="w-full text-xs shadow-sm bg-primary hover:bg-primary/90 transition-colors" onClick={() => window.location.href = '/datasets'}>
-                  <Database className="w-3.5 h-3.5 mr-2" /> Kelola Dataset
+                <h4 className="text-sm font-semibold text-foreground mb-1.5">Belum Ada Chart</h4>
+                <p className="text-xs text-muted-foreground mb-5 leading-relaxed">Buat chart terlebih dahulu di Data Explorer (Chart Builder).</p>
+                <Button variant="default" size="sm" className="w-full text-xs shadow-sm bg-primary hover:bg-primary/90 transition-colors" onClick={() => window.location.href = '/chart-builder'}>
+                  <BarChart3 className="w-3.5 h-3.5 mr-2" /> Buka Chart Builder
                 </Button>
               </div>
+            ) : (
+              savedCharts.map(chart => {
+                const Icon = WIDGET_TYPES.find(wt => wt.id === chart.type)?.icon || BarChart3;
+                return (
+                  <div key={chart.id} className="bg-background rounded-xl border border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md hover:border-border/80 group">
+                    <div className="p-3 flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <Icon className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-medium text-foreground truncate" title={chart.title}>{chart.title}</h4>
+                        <p className="text-[10px] text-muted-foreground truncate">{chart.type} • {chart.xAxis}</p>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full text-xs h-7 shadow-sm bg-muted/50 hover:bg-primary hover:text-primary-foreground transition-colors"
+                        onClick={() => {
+                          if (!activeDashboardId) {
+                            toast({ title: 'Pilih Dashboard', description: 'Buat atau pilih dashboard terlebih dahulu.', variant: 'destructive' });
+                            return;
+                          }
+                          const newWidget = {
+                            id: crypto.randomUUID(),
+                            title: chart.title,
+                            type: chart.type as any, // Cast to any to satisfy WidgetType compatibility if strict
+                            dataSetId: chart.datasetId, // Mapping API `datasetId` to Widget `dataSetId`
+                            xAxis: chart.xAxis,
+                            yAxis: chart.yAxis,
+                            groupBy: chart.groupBy || '',
+                            width: 'half',
+                          };
+
+                          // Handle ydoc sync or internal updateDashboardMut for multiplayer
+                          const newWidgets = [...safeWidgets, newWidget];
+                          const dashDoc = ydoc?.getMap('dashboard');
+                          if (dashDoc) {
+                            dashDoc.set('widgets', newWidgets);
+                          } else {
+                            updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
+                          }
+                          toast({ title: 'Widget Ditambahkan', description: chart.title });
+                        }}
+                      >
+                        <Plus className="w-3 h-3 mr-1" /> Tambah ke Canvas
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
             )}
-
-            {dataSets.map(ds => {
-              const dimensions = ds.columns.filter(c => c.type !== 'number');
-              const measures = ds.columns.filter(c => c.type === 'number');
-              const calculated = allCalcFields.filter(cf => cf.datasetId === ds.id);
-
-              return (
-                <div key={ds.id} className="space-y-3 mb-6 bg-background rounded-xl border border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md hover:border-border">
-                  <div className="bg-muted/30 p-3 flex items-center justify-between border-b border-border/50">
-                    <span className="font-semibold text-sm text-foreground truncate" title={ds.name}>{ds.name}</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary transition-colors bg-background border shadow-sm" title="Edit Metadata Dataset" onClick={() => window.location.href = `/datasets`}>
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-
-                  <div className="p-3 space-y-5">
-                    <div className="space-y-2">
-                      <h5 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1">Dimensi (Kategori)</h5>
-                      <div className="space-y-0.5">
-                        {dimensions.map(c => (
-                          <div key={c.name} className="flex items-center gap-2.5 text-xs text-foreground/80 hover:text-foreground hover:bg-muted/60 p-1.5 rounded-lg transition-colors cursor-default group">
-                            <Type className="w-3.5 h-3.5 text-blue-500/80 group-hover:text-blue-500 transition-colors" /> {c.name}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 pt-3 border-t border-border/40">
-                      <h5 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1">Metrik (Nilai Numerik)</h5>
-                      <div className="space-y-0.5">
-                        {measures.map(c => (
-                          <div key={c.name} className="flex items-center gap-2.5 text-xs text-foreground/80 hover:text-foreground hover:bg-muted/60 p-1.5 rounded-lg transition-colors cursor-default group">
-                            <Hash className="w-3.5 h-3.5 text-emerald-500/80 group-hover:text-emerald-500 transition-colors" /> {c.name}
-                          </div>
-                        ))}
-                        {calculated.map(cf => (
-                          <div key={cf.id} className="flex items-center justify-between text-xs text-violet-600 font-medium hover:bg-violet-50 p-1.5 rounded-lg transition-colors cursor-default group">
-                            <div className="flex items-center gap-2.5">
-                              <FunctionSquare className="w-3.5 h-3.5 opacity-80" /> <span className="truncate max-w-[140px]" title={cf.name}>{cf.name}</span>
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 transition-opacity" onClick={() => deleteCalcMut.mutate(cf.id)} title="Hapus Formula">
-                              <X className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-border/40 flex justify-center">
-                      <Sheet open={calcOpen && calcDatasetId === ds.id} onOpenChange={(open) => {
-                        setCalcOpen(open);
-                        if (open) setCalcDatasetId(ds.id);
-                      }}>
-                        <SheetTrigger asChild>
-                          <Button variant="secondary" size="sm" className="w-full text-xs hover:text-primary transition-colors bg-muted/50 hover:bg-muted" onClick={() => setCalcDatasetId(ds.id)}>
-                            <Plus className="w-3.5 h-3.5 mr-1.5" /> Tambah Formula Baru
-                          </Button>
-                        </SheetTrigger>
-                        <SheetContent className="bg-card w-[400px] border-l border-border overflow-y-auto z-50 shadow-2xl">
-                          <SheetHeader className="mb-6 border-b border-border pb-4">
-                            <SheetTitle className="flex items-center gap-2">
-                              <Variable className="w-5 h-5 text-violet-500" /> Formula Editor (DLX)
-                            </SheetTitle>
-                          </SheetHeader>
-                          <div className="space-y-5">
-                            <div className="space-y-2">
-                              <Label className="font-semibold text-sm">Nama Formula (Metrik)</Label>
-                              <Input className="shadow-sm" placeholder="Contoh: Profit Margin" value={calcName} onChange={e => setCalcName(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="font-semibold text-sm">Ekspresi (Sintaks PostgreSQL)</Label>
-                              <textarea
-                                className="flex min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-mono"
-                                placeholder='e.g. "sales" - "cost"'
-                                value={calcFormula}
-                                onChange={e => setCalcFormula(e.target.value)}
-                              />
-                              <p className="text-xs text-muted-foreground/80 bg-muted/50 p-2 rounded-md border">Gunakan kutip ganda untuk nama kolom tabel asli. Contoh: <code className="text-violet-500 font-semibold px-1">"revenue" / "orders"</code>. Subquery tidak diperbolehkan.</p>
-                            </div>
-                            <Button className="w-full shadow-md mt-4" disabled={!calcName || !calcFormula || createCalcMut.isPending} onClick={() => {
-                              createCalcMut.mutate({ datasetId: ds.id, name: calcName, formula: calcFormula }, {
-                                onSuccess: () => {
-                                  toast({ title: 'Formula berhasil disimpan.' });
-                                  setCalcName('');
-                                  setCalcFormula('');
-                                  setCalcOpen(false);
-                                }
-                              });
-                            }}>
-                              Simpan Calculated Field
-                            </Button>
-                          </div>
-                        </SheetContent>
-                      </Sheet>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
           </div>
         </div>
 
@@ -1407,7 +1261,7 @@ export default function DashboardBuilder() {
                   >
                     <MessageSquare className="w-4 h-4 mr-2" /> {isCommentMode ? 'Exit Comments' : 'Comments'}
                   </Button>
-                  <Button onClick={() => setIsAddingWidget(true)} className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-all font-medium">
+                  <Button onClick={() => setIsAddingWidget(true)} className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-all font-medium hidden">
                     <Plus className="w-4 h-4 mr-2" /> Tambah Widget Baru
                   </Button>
                 </div>
@@ -1419,10 +1273,7 @@ export default function DashboardBuilder() {
                     <LayoutGrid className="w-8 h-8 text-primary/60" />
                   </div>
                   <h3 className="text-xl font-bold text-foreground mb-2">Kanvas Masih Kosong</h3>
-                  <p className="text-muted-foreground mb-6">Mulai bangun dashboard analitik Anda dengan menambahkan widget pertama.</p>
-                  <Button onClick={() => setIsAddingWidget(true)} size="lg" className="bg-primary text-primary-foreground shadow-md hover:bg-primary/90">
-                    <Plus className="w-5 h-5 mr-2" /> Tambah Widget Sekarang
-                  </Button>
+                  <p className="text-muted-foreground mb-6">Mulai bangun dashboard analitik Anda dengan menyeret chart dari library di sebelah kiri.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
@@ -1480,319 +1331,125 @@ export default function DashboardBuilder() {
                 </Button>
               </div>
 
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-                <div className="px-4 pt-2">
-                  <TabsList className="grid grid-cols-3 w-full bg-muted/50">
-                    <TabsTrigger value="basic" className="text-xs data-[state=active]:bg-background">Setup</TabsTrigger>
-                    <TabsTrigger value="format" className="text-xs data-[state=active]:bg-background" disabled={!selectedWidget.dataSetId}>Format</TabsTrigger>
-                    <TabsTrigger value="drill" className="text-xs data-[state=active]:bg-background" disabled={!selectedWidget.dataSetId}>Drill</TabsTrigger>
-                  </TabsList>
-                </div>
-
+              <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                  <TabsContent value="basic" className="space-y-6 mt-0">
-                    <div className="space-y-4">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><LayoutGrid className="w-3.5 h-3.5" /> Pengaturan Dasar</Label>
-                      <div className="bg-muted/20 p-4 rounded-xl border border-border space-y-4">
+                  <div className="space-y-4">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><LayoutGrid className="w-3.5 h-3.5" /> Pengaturan Dasar</Label>
+                    <div className="bg-muted/20 p-4 rounded-xl border border-border space-y-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1.5 block">Judul Widget</Label>
+                        <Input value={selectedWidget.title} onChange={e => updateSelectedWidget({ title: e.target.value })} className="bg-background shadow-sm" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1.5 block">Ukuran Lebar</Label>
+                        <Select value={selectedWidget.width} onValueChange={(v: any) => updateSelectedWidget({ width: v })}>
+                          <SelectTrigger className="bg-background shadow-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="third">Kecil (1/3)</SelectItem>
+                            <SelectItem value="half">Sedang (1/2)</SelectItem>
+                            <SelectItem value="full">Besar (Menyebar Penuh)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {selectedWidget.type === 'action' ? (
+                      <>
+                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Target Endpoint</Label>
                         <div>
-                          <Label className="text-xs font-medium mb-1.5 block">Judul Widget</Label>
-                          <Input value={selectedWidget.title} onChange={e => updateSelectedWidget({ title: e.target.value })} className="bg-background shadow-sm" />
+                          <Label className="text-xs mb-1 block">URL</Label>
+                          <Input
+                            placeholder="https://api.example.com/webhook"
+                            value={selectedWidget.actionConfig?.url || ''}
+                            onChange={e => {
+                              const conf = selectedWidget.actionConfig || { url: '', method: 'POST', bodyTemplate: '' };
+                              updateSelectedWidget({ actionConfig: { ...conf, url: e.target.value } });
+                            }}
+                            className="bg-muted/50"
+                          />
                         </div>
                         <div>
-                          <Label className="text-xs font-medium mb-1.5 block">Tipe Visualisasi</Label>
-                          <div className="grid grid-cols-4 gap-1.5 mt-1">
-                            {WIDGET_TYPES.map(wt => (
-                              <button key={wt.id} onClick={() => updateSelectedWidget({ type: wt.id })} title={wt.label}
-                                className={`flex justify-center p-2.5 rounded-lg transition-all border shadow-sm ${selectedWidget.type === wt.id ? 'bg-primary border-primary text-primary-foreground scale-[1.03]' : 'bg-background border-border text-muted-foreground hover:bg-muted/80 hover:scale-[1.03]'}`}>
-                                <wt.icon className="w-4 h-4" />
-                              </button>
+                          <Label className="text-xs mb-1 block">Method</Label>
+                          <Select
+                            value={selectedWidget.actionConfig?.method || 'POST'}
+                            onValueChange={(v: any) => {
+                              const conf = selectedWidget.actionConfig || { url: '', method: 'POST', bodyTemplate: '' };
+                              updateSelectedWidget({ actionConfig: { ...conf, method: v } });
+                            }}
+                          >
+                            <SelectTrigger className="bg-muted/50"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="GET">GET</SelectItem>
+                              <SelectItem value="POST">POST</SelectItem>
+                              <SelectItem value="PUT">PUT</SelectItem>
+                              <SelectItem value="DELETE">DELETE</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <Label className="text-xs block">Headers (Auth, etc.)</Label>
+                            <Button variant="ghost" size="sm" className="h-4 text-[10px] px-1" onClick={() => {
+                              const conf = selectedWidget.actionConfig || { url: '', method: 'POST', headers: [] };
+                              const headers = [...(conf.headers || []), { key: '', value: '' }];
+                              updateSelectedWidget({ actionConfig: { ...conf, headers } });
+                            }}><Plus className="w-3 h-3 mr-1" />Add</Button>
+                          </div>
+                          <div className="space-y-2">
+                            {(selectedWidget.actionConfig?.headers || []).map((h, i) => (
+                              <div key={i} className="flex gap-2 items-center">
+                                <Input placeholder="Key" value={h.key} className="h-8 text-xs bg-muted/50" onChange={e => {
+                                  const headers = [...(selectedWidget.actionConfig?.headers || [])];
+                                  headers[i].key = e.target.value;
+                                  updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
+                                }} />
+                                <Input placeholder="Value" value={h.value} className="h-8 text-xs bg-muted/50" onChange={e => {
+                                  const headers = [...(selectedWidget.actionConfig?.headers || [])];
+                                  headers[i].value = e.target.value;
+                                  updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
+                                }} />
+                                <X className="w-4 h-4 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => {
+                                  const headers = [...(selectedWidget.actionConfig?.headers || [])];
+                                  headers.splice(i, 1);
+                                  updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
+                                }} />
+                              </div>
                             ))}
                           </div>
                         </div>
                         <div>
-                          <Label className="text-xs font-medium mb-1.5 block">Ukuran Lebar</Label>
-                          <Select value={selectedWidget.width} onValueChange={(v: any) => updateSelectedWidget({ width: v })}>
-                            <SelectTrigger className="bg-background shadow-sm"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="third">Kecil (1/3)</SelectItem>
-                              <SelectItem value="half">Sedang (1/2)</SelectItem>
-                              <SelectItem value="full">Besar (Menyebar Penuh)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <Label className="text-xs mb-1 block">JSON Body <span className="text-[10px] text-muted-foreground">(Use {'{{parameter_name}}'} for variables)</span></Label>
+                          <textarea
+                            className="flex min-h-[100px] w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary font-mono"
+                            placeholder='{"status": "approved", "account": "{{user_id}}"}'
+                            value={selectedWidget.actionConfig?.bodyTemplate || ''}
+                            onChange={e => {
+                              const conf = selectedWidget.actionConfig || { url: '', method: 'POST' };
+                              updateSelectedWidget({ actionConfig: { ...conf, bodyTemplate: e.target.value } });
+                            }}
+                          />
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {selectedWidget.type === 'action' ? (
-                        <>
-                          <Label className="text-xs text-muted-foreground uppercase tracking-wider">Target Endpoint</Label>
+                      </>
+                    ) : selectedWidget.type === 'text' ? null : (
+                      <div className="space-y-4">
+                        <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Settings2 className="w-3.5 h-3.5" /> Konfigurasi Chart</Label>
+                        <div className="bg-muted/20 p-4 rounded-xl border border-border flex flex-col items-center justify-center text-center space-y-3">
+                          <PieChart className="w-8 h-8 text-muted-foreground/50" />
                           <div>
-                            <Label className="text-xs mb-1 block">URL</Label>
-                            <Input
-                              placeholder="https://api.example.com/webhook"
-                              value={selectedWidget.actionConfig?.url || ''}
-                              onChange={e => {
-                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST', bodyTemplate: '' };
-                                updateSelectedWidget({ actionConfig: { ...conf, url: e.target.value } });
-                              }}
-                              className="bg-muted/50"
-                            />
+                            <p className="text-sm font-medium text-foreground">Chart dikelola di Data Explorer</p>
+                            <p className="text-xs text-muted-foreground mt-1">Struktur chart, sumbu, dan agregasi terinkronisasi dari Saved Chart ini. Buka Chart Builder untuk memodifikasi logikanya.</p>
                           </div>
-                          <div>
-                            <Label className="text-xs mb-1 block">Method</Label>
-                            <Select
-                              value={selectedWidget.actionConfig?.method || 'POST'}
-                              onValueChange={(v: any) => {
-                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST', bodyTemplate: '' };
-                                updateSelectedWidget({ actionConfig: { ...conf, method: v } });
-                              }}
-                            >
-                              <SelectTrigger className="bg-muted/50"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="GET">GET</SelectItem>
-                                <SelectItem value="POST">POST</SelectItem>
-                                <SelectItem value="PUT">PUT</SelectItem>
-                                <SelectItem value="DELETE">DELETE</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <Label className="text-xs block">Headers (Auth, etc.)</Label>
-                              <Button variant="ghost" size="sm" className="h-4 text-[10px] px-1" onClick={() => {
-                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST', headers: [] };
-                                const headers = [...(conf.headers || []), { key: '', value: '' }];
-                                updateSelectedWidget({ actionConfig: { ...conf, headers } });
-                              }}><Plus className="w-3 h-3 mr-1" />Add</Button>
-                            </div>
-                            <div className="space-y-2">
-                              {(selectedWidget.actionConfig?.headers || []).map((h, i) => (
-                                <div key={i} className="flex gap-2 items-center">
-                                  <Input placeholder="Key" value={h.key} className="h-8 text-xs bg-muted/50" onChange={e => {
-                                    const headers = [...(selectedWidget.actionConfig?.headers || [])];
-                                    headers[i].key = e.target.value;
-                                    updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
-                                  }} />
-                                  <Input placeholder="Value" value={h.value} className="h-8 text-xs bg-muted/50" onChange={e => {
-                                    const headers = [...(selectedWidget.actionConfig?.headers || [])];
-                                    headers[i].value = e.target.value;
-                                    updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
-                                  }} />
-                                  <X className="w-4 h-4 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => {
-                                    const headers = [...(selectedWidget.actionConfig?.headers || [])];
-                                    headers.splice(i, 1);
-                                    updateSelectedWidget({ actionConfig: { ...selectedWidget.actionConfig!, headers } });
-                                  }} />
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <Label className="text-xs mb-1 block">JSON Body <span className="text-[10px] text-muted-foreground">(Use {'{{parameter_name}}'} for variables)</span></Label>
-                            <textarea
-                              className="flex min-h-[100px] w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary font-mono"
-                              placeholder='{"status": "approved", "account": "{{user_id}}"}'
-                              value={selectedWidget.actionConfig?.bodyTemplate || ''}
-                              onChange={e => {
-                                const conf = selectedWidget.actionConfig || { url: '', method: 'POST' };
-                                updateSelectedWidget({ actionConfig: { ...conf, bodyTemplate: e.target.value } });
-                              }}
-                            />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Database className="w-3.5 h-3.5" /> Parameter Data</Label>
-                          <div className="bg-muted/20 p-4 rounded-xl border border-border space-y-4">
-                            <div>
-                              <Label className="text-xs font-medium mb-1.5 block">Sumber Dataset</Label>
-                              <Select value={selectedWidget.dataSetId} onValueChange={v => updateSelectedWidget({ dataSetId: v, xAxis: '', yAxis: '', groupBy: '' })}>
-                                <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Dataset" /></SelectTrigger>
-                                <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
-                              </Select>
-                            </div>
-
-                            {selectedWidget.type !== 'text' && selectedWidget.dataSetId && (
-                              <>
-                                {(!['stat'].includes(selectedWidget.type)) && (
-                                  <div>
-                                    <Label className="text-xs font-medium mb-1.5 block">X-Axis (Dimensi)</Label>
-                                    <Select value={selectedWidget.xAxis || ''} onValueChange={v => updateSelectedWidget({ xAxis: v })}>
-                                      <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Kolom" /></SelectTrigger>
-                                      <SelectContent>
-                                        {widgetColumnGroups.map(g => (
-                                          <SelectGroup key={g.datasetName}>
-                                            <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                            {g.columns.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                          </SelectGroup>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                )}
-                                <div>
-                                  <Label className="text-xs font-medium mb-1.5 block">{selectedWidget.type === 'stat' ? 'Meteran Tunggal (Metrik)' : 'Y-Axis (Ukuran/Nilai)'}</Label>
-                                  <Select value={selectedWidget.yAxis || ''} onValueChange={v => updateSelectedWidget({ yAxis: v })}>
-                                    <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Kolom Numerik" /></SelectTrigger>
-                                    <SelectContent>
-                                      {widgetColumnGroups.map(g => {
-                                        const numCols = g.columns.filter(c => c.type === 'number');
-                                        if (numCols.length === 0) return null;
-                                        return (
-                                          <SelectGroup key={g.datasetName}>
-                                            <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                            {numCols.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                          </SelectGroup>
-                                        );
-                                      })}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-
-                                {selectedWidget.type === 'heatmap' && (
-                                  <div>
-                                    <Label className="text-xs font-medium mb-1.5 block">Group By (Dimensi Lapis Ke-2)</Label>
-                                    <Select value={selectedWidget.groupBy || ''} onValueChange={v => updateSelectedWidget({ groupBy: v })}>
-                                      <SelectTrigger className="bg-background shadow-sm"><SelectValue placeholder="Pilih Kolom" /></SelectTrigger>
-                                      <SelectContent>
-                                        {widgetColumnGroups.map(g => (
-                                          <SelectGroup key={g.datasetName}>
-                                            <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                            {g.columns.filter(c => c.name !== selectedWidget.xAxis).map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                          </SelectGroup>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="format" className="space-y-6 mt-0">
-                    <div className="bg-muted/30 p-3 rounded-lg border border-border space-y-3">
-                      <Label className="text-xs font-semibold">New Rule</Label>
-                      <Select value={formatCol} onValueChange={setFormatCol}>
-                        <SelectTrigger className="bg-background h-8"><SelectValue placeholder="Column" /></SelectTrigger>
-                        <SelectContent>{widgetColumns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <Select value={formatCond} onValueChange={(val) => setFormatCond(val as FormatRuleCreate['condition'])}>
-                          <SelectTrigger className="bg-background h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>{FORMAT_CONDITIONS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                        <Input value={formatVal} onChange={e => setFormatVal(e.target.value)} placeholder="Value" className="h-8 bg-background" disabled={formatCond === 'empty'} />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-1 block">Style Preset</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {FORMAT_PRESETS.map(p => (
-                            <button key={p.label} onClick={() => { setFormatBg(p.bg); setFormatText(p.text); }}
-                              className={`h-8 rounded-md text-xs font-medium border flex items-center justify-center ${formatBg === p.bg ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : 'border-border'}`}
-                              style={{ backgroundColor: p.bg, color: p.text }}>{p.label.split(' ')[0]}</button>
-                          ))}
+                          <Button variant="outline" className="w-full text-xs mt-2 border-primary/30 text-primary hover:bg-primary/10" onClick={() => window.open(`/chart-builder?edit=${selectedWidget.dataSetId}`, '_blank')}>
+                            <ExternalLink className="w-3.5 h-3.5 mr-2" /> Buka Chart Builder
+                          </Button>
                         </div>
                       </div>
-                      <Button className="w-full h-8 text-xs" onClick={() => {
-                        if (!formatCol || !activeDatasetId) return;
-                        if (formatCond !== 'empty' && !formatVal) return;
-                        createRuleMut.mutate({ datasetId: activeDatasetId, column: formatCol, condition: formatCond, value: formatVal, bgColor: formatBg, textColor: formatText }, {
-                          onSuccess: () => { setFormatVal(''); toast({ title: 'Rule added' }); }
-                        });
-                      }}>Apply Rule</Button>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground uppercase tracking-wider">Active Rules</Label>
-                      {formatRules.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic text-center py-4">No rules created yet</p>
-                      ) : (
-                        formatRules.map(rule => (
-                          <div key={rule.id} className="flex items-center justify-between p-2 rounded border border-border text-xs" style={{ backgroundColor: rule.bgColor, color: rule.textColor }}>
-                            <span>{rule.column} {FORMAT_CONDITIONS.find(c => c.value === rule.condition)?.label} {rule.value}</span>
-                            <button onClick={() => deleteRuleMut.mutate(rule.id)} className="hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="drill" className="space-y-6 mt-0">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground uppercase tracking-wider">Hierarchy Variables</Label>
-                        <div className="flex flex-wrap gap-2">
-                          {widgetColumns.filter(c => c.type === 'string').map(c => {
-                            const active = drillHierarchy.includes(c.name);
-                            return (
-                              <button key={c.name} disabled={active} onClick={() => setDrillHierarchy(prev => [...prev, c.name])}
-                                className={`px-2 py-1 text-xs rounded-md border ${active ? 'bg-primary/20 text-primary opacity-50' : 'bg-background hover:border-primary'}`}>
-                                + {c.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {drillHierarchy.length > 0 && (
-                        <div className="space-y-2 bg-muted/30 p-3 rounded-lg border border-border">
-                          {drillHierarchy.map((col, i) => (
-                            <div key={col} className="flex items-center gap-2 text-sm bg-background p-2 rounded border">
-                              <span className="bg-primary/20 text-primary w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                              <span className="flex-1 truncate">{col}</span>
-                              <button onClick={() => setDrillHierarchy(prev => prev.filter(c => c !== col))} className="text-muted-foreground hover:text-destructive"><X className="w-4 h-4" /></button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border">
-                        <div>
-                          <Label className="text-xs mb-1 block">Metric</Label>
-                          <Select value={drillMetricCol} onValueChange={setDrillMetricCol}>
-                            <SelectTrigger className="h-8 text-xs bg-background"><SelectValue placeholder="Col..." /></SelectTrigger>
-                            <SelectContent>
-                              {widgetColumnGroups.map(g => {
-                                const numCols = g.columns.filter(c => c.type === 'number');
-                                if (numCols.length === 0) return null;
-                                return (
-                                  <SelectGroup key={g.datasetName}>
-                                    <SelectLabel className="text-xs text-primary">{g.datasetName}</SelectLabel>
-                                    {numCols.map(c => <SelectItem key={c.name} value={c.name}>{c.displayName || c.name}</SelectItem>)}
-                                  </SelectGroup>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-xs mb-1 block">Agg</Label>
-                          <Select value={drillAggFn} onValueChange={(v: any) => setDrillAggFn(v)}>
-                            <SelectTrigger className="h-8 text-xs bg-background"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="sum">SUM</SelectItem>
-                              <SelectItem value="avg">AVG</SelectItem>
-                              <SelectItem value="count">COUNT</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <Button className="w-full text-xs" variant="secondary" onClick={() => {
-                        if (!activeDatasetId || drillHierarchy.length === 0) return;
-                        saveDrillMut.mutate({ datasetId: activeDatasetId, hierarchy: drillHierarchy, metricCol: drillMetricCol, aggFn: drillAggFn }, {
-                          onSuccess: () => toast({ title: 'Config Saved' })
-                        });
-                      }}>Save Strategy</Button>
-                    </div>
-                  </TabsContent>
+                    )}
+                  </div>
                 </div>
-              </Tabs>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

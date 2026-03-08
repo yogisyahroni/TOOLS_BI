@@ -116,12 +116,18 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	}()
 
 	// BUG-07: Set refresh token in httpOnly cookie
+	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https"
+	sameSite := "Lax"
+	if isSecure {
+		sameSite = "None"
+	}
+
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		HTTPOnly: true,
-		Secure:   true,
-		SameSite: "Strict",
+		Secure:   isSecure,
+		SameSite: sameSite,
 		MaxAge:   int(h.refreshTTL.Seconds()),
 		Path:     "/api/v1/auth",
 	})
@@ -163,12 +169,18 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	// BUG-07: Set refresh token in httpOnly cookie to prevent XSS token theft
+	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https"
+	sameSite := "Lax"
+	if isSecure {
+		sameSite = "None"
+	}
+
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		HTTPOnly: true,
-		Secure:   true,
-		SameSite: "Strict",
+		Secure:   isSecure,
+		SameSite: sameSite,
 		MaxAge:   int(h.refreshTTL.Seconds()),
 		Path:     "/api/v1/auth",
 	})
@@ -263,12 +275,18 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	// BUG-07: Clear the httpOnly cookie
+	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https"
+	sameSite := "Lax"
+	if isSecure {
+		sameSite = "None"
+	}
+
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
 		HTTPOnly: true,
-		Secure:   true,
-		SameSite: "Strict",
+		Secure:   isSecure,
+		SameSite: sameSite,
 		MaxAge:   -1,
 		Path:     "/api/v1/auth",
 	})

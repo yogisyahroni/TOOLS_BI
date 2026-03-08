@@ -48,7 +48,8 @@ const menuGroups: MenuGroup[] = [
   {
     title: 'Visualize',
     items: [
-      { icon: LayoutGrid, label: 'Analytics Canvas', path: '/dashboard-builder' },
+      { icon: PaintBucket, label: 'Chart Builder', path: '/chart-builder' },
+      { icon: LayoutGrid, label: 'Dashboard Builder', path: '/dashboard-builder' },
       { icon: Globe, label: 'Geo Visualization', path: '/geo' },
     ],
   },

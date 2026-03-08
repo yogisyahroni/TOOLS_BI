@@ -15,6 +15,7 @@ import Dashboard from "./pages/Dashboard";
 import UploadData from "./pages/UploadData";
 import Datasets from "./pages/Datasets";
 import DataExplorer from "./pages/DataExplorer";
+import ChartBuilder from "./pages/ChartBuilder";
 import DashboardBuilder from "./pages/DashboardBuilder";
 import QueryEditor from "./pages/QueryEditor";
 import ETLPipeline from "./pages/ETLPipeline";
@@ -74,7 +75,7 @@ function ProtectedLayout() {
         <Route path="/explorer" element={<DataExplorer />} />
         <Route path="/ask-data" element={<AskData />} />
         <Route path="/pivot" element={<PivotTable />} />
-        <Route path="/chart-builder" element={<Navigate to="/dashboard-builder" replace />} />
+        <Route path="/chart-builder" element={<ChartBuilder />} />
         <Route path="/dashboard-builder" element={<DashboardBuilder />} />
         <Route path="/kpi" element={<KPIScorecard />} />
         <Route path="/query" element={<QueryEditor />} />
