@@ -300,16 +300,36 @@ export default function DashboardBuilder() {
   const [isAddingWidget, setIsAddingWidget] = useState(false);
   const [newWidgetDatasetId, setNewWidgetDatasetId] = useState('');
 
+  const handleUpdateWidgets = (newWidgets: any[]) => {
+    if (!activeDashboard) return;
+
+    // Optimistic Update local Query Cache
+    // Access queryClient from the top of the component
+    queryClient.setQueryData(['dashboards'], (oldData: any) => {
+      if (!oldData || !oldData.data) return oldData;
+      return {
+        ...oldData,
+        data: oldData.data.map((d: any) => d.id === activeDashboard.id ? { ...d, widgets: newWidgets } : d)
+      };
+    });
+
+    // DB Call
+    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
+
+    // Multiplayer Sync
+    syncToYjs(newWidgets);
+  };
+
   const handleAddWidget = (datasetId: string) => {
     if (!activeDashboard) return;
     const newId = Date.now().toString();
     const widget: Widget = {
       id: newId, type: 'bar', title: 'New Widget',
       dataSetId: datasetId, xAxis: '', yAxis: '', width: 'half',
+      x: 0, y: Infinity, w: 6, h: 4
     };
     const newWidgets = [...safeWidgets, widget];
-    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
-    syncToYjs(newWidgets);
+    handleUpdateWidgets(newWidgets);
     setSelectedWidgetId(newId);
     toast({ title: 'Widget Ditambahkan', description: 'Silahkan atur properti widget di panel kanan.' });
   };
@@ -317,15 +337,13 @@ export default function DashboardBuilder() {
   const updateSelectedWidget = (updates: Partial<Widget>) => {
     if (!activeDashboard || !selectedWidgetId) return;
     const newWidgets = safeWidgets.map((w: any) => w.id === selectedWidgetId ? { ...w, ...updates } : w);
-    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
-    syncToYjs(newWidgets);
+    handleUpdateWidgets(newWidgets);
   };
 
   const removeWidget = (widgetId: string) => {
     if (!activeDashboard) return;
     const newWidgets = safeWidgets.filter((w: any) => w.id !== widgetId);
-    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
-    syncToYjs(newWidgets);
+    handleUpdateWidgets(newWidgets);
     if (selectedWidgetId === widgetId) setSelectedWidgetId(null);
   };
 
@@ -340,8 +358,7 @@ export default function DashboardBuilder() {
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
     [newWidgets[idx], newWidgets[swapIdx]] = [newWidgets[swapIdx], newWidgets[idx]];
 
-    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
-    syncToYjs(newWidgets);
+    handleUpdateWidgets(newWidgets);
   };
 
   const handleDeleteDashboard = (id: string) => {
@@ -1155,10 +1172,9 @@ export default function DashboardBuilder() {
                             h: 4
                           };
 
-                          // Handle ydoc sync AND internal updateDashboardMut
+                          // Handle local optimistic update, ydoc sync AND internal updateDashboardMut
                           const newWidgets = [...safeWidgets, newWidget];
-                          updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
-                          syncToYjs(newWidgets);
+                          handleUpdateWidgets(newWidgets);
                           toast({ title: 'Widget Ditambahkan', description: chart.title });
                         }}
                       >
@@ -1301,17 +1317,20 @@ export default function DashboardBuilder() {
                 </div>
               </div>
 
-              {safeWidgets.length === 0 ? (
-                <div className="rounded-2xl p-16 border-2 border-border border-dashed text-center bg-card/50 backdrop-blur-sm mx-auto max-w-2xl mt-12 shadow-sm">
-                  <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
-                    <LayoutGrid className="w-8 h-8 text-primary/60" />
+              <div className="relative min-h-[500px]">
+                {safeWidgets.length === 0 && (
+                  <div className="absolute inset-0 pointer-events-none z-10 flex flex-col items-center pt-12">
+                    <div className="rounded-2xl p-16 border-2 border-border border-dashed text-center bg-card/50 backdrop-blur-sm max-w-2xl mx-auto shadow-sm">
+                      <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+                        <LayoutGrid className="w-8 h-8 text-primary/60" />
+                      </div>
+                      <h3 className="text-xl font-bold text-foreground mb-2">Kanvas Masih Kosong</h3>
+                      <p className="text-muted-foreground mb-6">Mulai bangun dashboard analitik Anda dengan menyeret chart dari library di sebelah kiri.</p>
+                    </div>
                   </div>
-                  <h3 className="text-xl font-bold text-foreground mb-2">Kanvas Masih Kosong</h3>
-                  <p className="text-muted-foreground mb-6">Mulai bangun dashboard analitik Anda dengan menyeret chart dari library di sebelah kiri.</p>
-                </div>
-              ) : (
+                )}
                 <ResponsiveGridLayout
-                  className="layout -mx-4"
+                  className="layout -mx-4 min-h-[500px]"
                   width={containerWidth}
                   layouts={{
                     lg: safeWidgets.map((w: any) => ({
@@ -1341,8 +1360,7 @@ export default function DashboardBuilder() {
                     );
 
                     if (changed) {
-                      updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
-                      syncToYjs(newWidgets);
+                      handleUpdateWidgets(newWidgets);
                     }
                   }}
                   draggableHandle=".drag-handle"
@@ -1376,8 +1394,7 @@ export default function DashboardBuilder() {
                         };
 
                         const newWidgets = [...safeWidgets, newWidget];
-                        updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
-                        syncToYjs(newWidgets);
+                        handleUpdateWidgets(newWidgets);
                         toast({ title: 'Widget Ditambahkan', description: parsed.title });
                       }
                     } catch (error) {
@@ -1413,7 +1430,7 @@ export default function DashboardBuilder() {
                     </div>
                   ))}
                 </ResponsiveGridLayout>
-              )}
+              </div>
             </>
           )}
         </div>
