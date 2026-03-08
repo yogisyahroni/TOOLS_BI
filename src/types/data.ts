@@ -89,7 +89,14 @@ export interface Widget {
   xAxis: string;
   yAxis: string;
   groupBy?: string; // Menambahkan groupBy opsional (banyak digunakan di Heatmap dsb)
-  width: 'half' | 'full' | 'third';
+  width: 'half' | 'full' | 'third'; // Legacy fallback
+
+  // React Grid Layout properties
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+
   // Phase 14: Action Widgets
   actionConfig?: {
     url: string;

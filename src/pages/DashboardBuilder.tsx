@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutGrid, Plus, Trash2, GripVertical, BarChart3, X, Move, Maximize2, Minimize2, Loader2,
@@ -35,6 +35,9 @@ import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { DashboardParameter } from '@/lib/api';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 
 function WidgetChartRenderer({ widget, metaDs, renderFn }: { widget: any, metaDs: any, renderFn: (w: any, ds: any, isLoading: boolean) => React.ReactNode }) {
   const { data: __datasetDataRes, isLoading } = useDatasetData(widget.dataSetId || '', { limit: 10000 });
@@ -136,6 +139,20 @@ export default function DashboardBuilder() {
   const { data: dataSets = [] } = useDatasets();
   const { data: savedCharts = [] } = useCharts(); // Load Saved Charts
   const { toast } = useToast();
+
+  const [containerWidth, setContainerWidth] = useState(1200);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!gridContainerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        setContainerWidth(entries[0].contentRect.width);
+      }
+    });
+    observer.observe(gridContainerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const [activeDashboardId, setActiveDashboardId] = useState('');
   const [newDashName, setNewDashName] = useState('');
@@ -1117,14 +1134,10 @@ export default function DashboardBuilder() {
                             width: 'half',
                           };
 
-                          // Handle ydoc sync or internal updateDashboardMut for multiplayer
+                          // Handle ydoc sync AND internal updateDashboardMut
                           const newWidgets = [...safeWidgets, newWidget];
-                          const dashDoc = ydoc?.getMap('dashboard');
-                          if (dashDoc) {
-                            dashDoc.set('widgets', newWidgets);
-                          } else {
-                            updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
-                          }
+                          updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
+                          syncToYjs(newWidgets);
                           toast({ title: 'Widget Ditambahkan', description: chart.title });
                         }}
                       >
@@ -1140,6 +1153,7 @@ export default function DashboardBuilder() {
 
         {/* MIDDLE PANEL: Main Canvas */}
         <div
+          ref={gridContainerRef}
           className="flex-1 overflow-y-auto p-8 relative"
           onClick={(e) => {
             if (!isCommentMode || !activeDashboardId) return;
@@ -1275,40 +1289,72 @@ export default function DashboardBuilder() {
                   <p className="text-muted-foreground mb-6">Mulai bangun dashboard analitik Anda dengan menyeret chart dari library di sebelah kiri.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
-                  <AnimatePresence>
-                    {safeWidgets.map((widget: any, idx: number) => (
-                      <motion.div key={widget.id} layout initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-                        onClick={() => setSelectedWidgetId(widget.id)}
-                        className={`rounded-xl border shadow-sm hover:shadow-md overflow-hidden bg-card/90 backdrop-blur-sm cursor-pointer transition-all duration-200 ${selectedWidgetId === widget.id ? 'ring-2 ring-primary border-transparent shadow-lg scale-[1.01]' : 'border-border hover:border-primary/40'} ${widget.width === 'full' ? 'md:col-span-2 lg:col-span-3' : widget.width === 'half' ? 'md:col-span-2' : ''}`}>
+                <ResponsiveGridLayout
+                  className="layout -mx-4"
+                  width={containerWidth}
+                  layouts={{
+                    lg: safeWidgets.map((w: any) => ({
+                      i: w.id,
+                      x: w.x ?? 0,
+                      y: w.y ?? Infinity,
+                      w: w.w ?? (w.width === 'full' ? 12 : w.width === 'half' ? 6 : 4),
+                      h: w.h ?? (w.type === 'stat' || w.type === 'text' || w.type === 'action' ? 2 : 4)
+                    }))
+                  }}
+                  breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+                  cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
+                  rowHeight={80}
+                  onLayoutChange={(currentLayout) => {
+                    // Update the x,y,w,h in safeWidgets
+                    const newWidgets = safeWidgets.map((w: any) => {
+                      const lay = currentLayout.find(l => l.i === w.id);
+                      if (lay) {
+                        return { ...w, x: lay.x, y: lay.y, w: lay.w, h: lay.h };
+                      }
+                      return w;
+                    });
 
-                        <div className={`p-4 border-b flex items-center justify-between transition-colors ${selectedWidgetId === widget.id ? 'bg-primary/5 border-primary/20' : 'border-border bg-muted/20'}`}>
-                          <div className="flex items-center gap-2">
-                            <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
-                            <span className="font-semibold text-foreground text-sm">{widget.title || 'Untitled'}</span>
-                          </div>
+                    // Prevent infinite loops by checking if changed
+                    const changed = newWidgets.some((nw: any, i: number) =>
+                      nw.x !== safeWidgets[i].x || nw.y !== safeWidgets[i].y || nw.w !== safeWidgets[i].w || nw.h !== safeWidgets[i].h
+                    );
 
-                          <div className="flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); moveWidget(widget.id, 'up'); }} disabled={idx === 0}>
-                              <Move className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); removeWidget(widget.id); }}>
-                              <X className="w-3.5 h-3.5 hover:text-destructive" />
-                            </Button>
-                          </div>
+                    if (changed) {
+                      updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
+                      syncToYjs(newWidgets);
+                    }
+                  }}
+                  draggableHandle=".drag-handle"
+                  margin={[24, 24]}
+                >
+                  {safeWidgets.map((widget: any) => (
+                    <div key={widget.id}
+                      onClick={() => setSelectedWidgetId(widget.id)}
+                      className={`rounded-xl border shadow-sm hover:shadow-md overflow-hidden bg-card/90 backdrop-blur-sm cursor-pointer flex flex-col ${selectedWidgetId === widget.id ? 'ring-2 ring-primary border-transparent shadow-lg scale-[1.01]' : 'border-border hover:border-primary/40'}`}>
+
+                      <div className={`drag-handle flex-none p-3 border-b flex items-center justify-between transition-colors ${selectedWidgetId === widget.id ? 'bg-primary/5 border-primary/20' : 'border-border bg-muted/20'}`}>
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+                          <span className="font-semibold text-foreground text-sm line-clamp-1">{widget.title || 'Untitled'}</span>
                         </div>
 
-                        <div className={`p-4 ${widget.type === 'stat' ? 'h-[180px]' : (widget.type === 'text' || widget.type === 'action') ? 'h-[180px]' : 'h-[300px]'}`}>
-                          <WidgetChartRenderer
-                            widget={widget}
-                            metaDs={dataSets.find(d => d.id === widget.dataSetId)}
-                            renderFn={renderWidgetChart}
-                          />
+                        <div className="flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); removeWidget(widget.id); }}>
+                            <X className="w-3.5 h-3.5 hover:text-destructive" />
+                          </Button>
                         </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
+                      </div>
+
+                      <div className="flex-1 min-h-0 p-4">
+                        <WidgetChartRenderer
+                          widget={widget}
+                          metaDs={dataSets.find(d => d.id === widget.dataSetId)}
+                          renderFn={renderWidgetChart}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </ResponsiveGridLayout>
               )}
             </>
           )}
