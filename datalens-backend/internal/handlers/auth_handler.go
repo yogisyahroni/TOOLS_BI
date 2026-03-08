@@ -116,7 +116,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	}()
 
 	// BUG-07: Set refresh token in httpOnly cookie
-	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https"
+	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
 	sameSite := "Lax"
 	if isSecure {
 		sameSite = "None"
@@ -169,7 +169,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	}
 
 	// BUG-07: Set refresh token in httpOnly cookie to prevent XSS token theft
-	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https"
+	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
 	sameSite := "Lax"
 	if isSecure {
 		sameSite = "None"
@@ -275,7 +275,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	// BUG-07: Clear the httpOnly cookie
-	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https"
+	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
 	sameSite := "Lax"
 	if isSecure {
 		sameSite = "None"
