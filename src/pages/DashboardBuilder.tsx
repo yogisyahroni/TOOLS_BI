@@ -1103,7 +1103,24 @@ export default function DashboardBuilder() {
               savedCharts.map(chart => {
                 const Icon = WIDGET_TYPES.find(wt => wt.id === chart.type)?.icon || BarChart3;
                 return (
-                  <div key={chart.id} className="bg-background rounded-xl border border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md hover:border-border/80 group">
+                  <div
+                    key={chart.id}
+                    className="bg-background rounded-xl border border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md hover:border-border/80 group cursor-grab active:cursor-grabbing"
+                    draggable={true}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', JSON.stringify({
+                        source: 'saved-chart',
+                        chartId: chart.id,
+                        title: chart.title,
+                        type: chart.type,
+                        datasetId: chart.datasetId,
+                        xAxis: chart.xAxis,
+                        yAxis: chart.yAxis,
+                        groupBy: chart.groupBy
+                      }));
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
+                  >
                     <div className="p-3 flex items-start gap-3">
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                         <Icon className="w-4 h-4 text-primary" />
@@ -1132,6 +1149,10 @@ export default function DashboardBuilder() {
                             yAxis: chart.yAxis,
                             groupBy: chart.groupBy || '',
                             width: 'half',
+                            x: 0,
+                            y: Infinity,
+                            w: 6,
+                            h: 4
                           };
 
                           // Handle ydoc sync AND internal updateDashboardMut
@@ -1326,6 +1347,43 @@ export default function DashboardBuilder() {
                   }}
                   draggableHandle=".drag-handle"
                   margin={[24, 24]}
+                  isDroppable={true}
+                  droppingItem={{ i: 'drop', w: 6, h: 4, x: 0, y: Infinity }}
+                  onDrop={(layout, layoutItem, _event) => {
+                    const e = _event as unknown as React.DragEvent;
+                    e.preventDefault();
+                    if (!activeDashboardId) return;
+
+                    try {
+                      const transferData = e.dataTransfer?.getData('text/plain');
+                      if (!transferData) return;
+                      const parsed = JSON.parse(transferData);
+
+                      if (parsed.source === 'saved-chart') {
+                        const newWidget = {
+                          id: crypto.randomUUID(),
+                          title: parsed.title,
+                          type: parsed.type,
+                          dataSetId: parsed.datasetId,
+                          xAxis: parsed.xAxis,
+                          yAxis: parsed.yAxis,
+                          groupBy: parsed.groupBy || '',
+                          width: 'half',
+                          x: layoutItem.x,
+                          y: layoutItem.y,
+                          w: 6,
+                          h: 4
+                        };
+
+                        const newWidgets = [...safeWidgets, newWidget];
+                        updateDashboardMut.mutate({ id: activeDashboardId, payload: { widgets: newWidgets } });
+                        syncToYjs(newWidgets);
+                        toast({ title: 'Widget Ditambahkan', description: parsed.title });
+                      }
+                    } catch (error) {
+                      console.error("Drop Parse Error", error);
+                    }
+                  }}
                 >
                   {safeWidgets.map((widget: any) => (
                     <div key={widget.id}
