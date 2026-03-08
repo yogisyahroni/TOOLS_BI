@@ -167,6 +167,12 @@ export default function DashboardBuilder() {
   const safeDashboards = Array.isArray(dashboards) ? dashboards : [];
   const activeDashboard: any = safeDashboards.find((d: any) => d.id === activeDashboardId) || null;
   const safeWidgets = Array.isArray(activeDashboard?.widgets) ? activeDashboard.widgets : [];
+
+  // Debug Log State Re-renders
+  useEffect(() => {
+    console.log('[DEBUG RENDER] safeWidgets changed. Length:', safeWidgets.length, 'activeDashboardId:', activeDashboardId, safeWidgets);
+  }, [safeWidgets.length, activeDashboardId]);
+
   const selectedWidget: any = safeWidgets.find((w: any) => w.id === selectedWidgetId) || null;
 
   // --- Multiplayer (Phase 15) ---
@@ -304,17 +310,37 @@ export default function DashboardBuilder() {
   const [newWidgetDatasetId, setNewWidgetDatasetId] = useState('');
 
   const handleUpdateWidgets = (newWidgets: any[]) => {
-    if (!activeDashboard) return;
+    if (!activeDashboard) {
+      console.error('[DEBUG UPDATE] activeDashboard is null, aborting handleUpdateWidgets');
+      return;
+    }
+
+    console.log('[DEBUG UPDATE] Committing new widgets array length:', newWidgets.length);
 
     // Optimistic Update local Query Cache
     // Access queryClient from the top of the component
     queryClient.setQueryData(['dashboards'], (oldData: any) => {
+      console.log('[DEBUG QUERY CACHE SET] oldData:', oldData);
       if (!oldData || !Array.isArray(oldData)) return oldData;
-      return oldData.map((d: any) => d.id === activeDashboard.id ? { ...d, widgets: newWidgets } : d);
+      const updated = oldData.map((d: any) => d.id === activeDashboard.id ? { ...d, widgets: newWidgets } : d);
+      console.log('[DEBUG QUERY CACHE SET] new mapped data:', updated);
+      return updated;
     });
 
     // DB Call
-    updateDashboardMut.mutate({ id: activeDashboard.id, payload: { widgets: newWidgets } });
+    console.log('[DEBUG UPDATE] Sending mutate command to backend...');
+    updateDashboardMut.mutate(
+      { id: activeDashboard.id, payload: { widgets: newWidgets } },
+      {
+        onSuccess: (data) => {
+          console.log('[DEBUG UPDATE SUCCESS] server returned:', data);
+          queryClient.invalidateQueries({ queryKey: ['dashboards'] });
+        },
+        onError: (err) => {
+          console.error('[DEBUG UPDATE ERROR]', err);
+        }
+      }
+    );
 
     // Multiplayer Sync
     syncToYjs(newWidgets);
@@ -1338,10 +1364,8 @@ export default function DashboardBuilder() {
                     e.dataTransfer.dropEffect = 'copy';
                   }
                 }}
-                onDrop={(e) => {
-                  // Fallback drop handler if RGL ignores the drop
-                  if (!activeDashboardId) return;
-
+                onDrop={async (e) => {
+                  // Fallback drop handler if RGL ignores the drop or if canvas is completely empty
                   try {
                     let parsed = draggedItemRef.current;
                     if (!parsed) {
@@ -1351,8 +1375,22 @@ export default function DashboardBuilder() {
                     }
 
                     if (parsed && parsed.source === 'saved-chart') {
-                      // We don't have layoutItem x/y coords here precisely unless we calculate it.
-                      // Let's just append at the bottom.
+                      let targetDashId = activeDashboardId;
+                      let targetWidgets = safeWidgets;
+
+                      // Auto-Create dashboard if empty
+                      if (!targetDashId) {
+                        toast({ title: 'Creating Dashboard...' });
+                        const newDash = await createDashboardMut.mutateAsync({
+                          name: 'Untitled Dashboard',
+                          isPublic: false,
+                          widgets: []
+                        });
+                        targetDashId = newDash.id;
+                        setActiveDashboardId(newDash.id);
+                        targetWidgets = []; // Fresh array
+                      }
+
                       const newWidget = {
                         id: crypto.randomUUID(),
                         title: parsed.title,
@@ -1368,9 +1406,20 @@ export default function DashboardBuilder() {
                         h: 4
                       };
 
-                      const newWidgets = [...safeWidgets, newWidget];
-                      handleUpdateWidgets(newWidgets);
-                      toast({ title: 'Widget Ditambahkan', description: parsed.title });
+                      const newWidgets = [...targetWidgets, newWidget];
+
+                      // Using the explicit mutation here instead of handleUpdateWidgets to ensure 
+                      // we pass the correct auto-created dashboard ID.
+                      updateDashboardMut.mutate(
+                        { id: targetDashId, payload: { widgets: newWidgets } },
+                        {
+                          onSuccess: () => {
+                            queryClient.invalidateQueries({ queryKey: ['dashboards'] });
+                            toast({ title: 'Widget Ditambahkan', description: parsed.title });
+                          }
+                        }
+                      );
+
                       draggedItemRef.current = null; // reset
                     }
                   } catch (error) {

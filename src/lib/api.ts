@@ -14,7 +14,7 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { Report } from '@/types/data';
 export type { Report };
 
-export const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+export const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://datalens-backend-8eph.onrender.com/api/v1';
 
 export function getWsUrl() {
     try {
