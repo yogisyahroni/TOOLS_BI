@@ -70,10 +70,13 @@ func (h *DatasetHandler) ListDatasets(c *fiber.Ctx) error {
 // POST /api/v1/datasets/upload
 func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		userID = "00000000-0000-0000-0000-000000000000"
+	}
 
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "File is required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "File is required: " + err.Error()})
 	}
 
 	// Limit uploads to 100MB
@@ -83,7 +86,7 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open file"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open file: " + err.Error()})
 	}
 	defer file.Close()
 
@@ -102,7 +105,7 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 		// Read all bytes first (excelize needs seekable reader)
 		rawBytes, readErr := io.ReadAll(file)
 		if readErr != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file"})
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file: " + readErr.Error()})
 		}
 		headers, rows, err = parseExcel(rawBytes)
 	}
@@ -139,8 +142,13 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 	// Upload raw file to storage
 	storageKey := fmt.Sprintf("uploads/%s/%s%s", userID, uuid.New().String(), ext)
 	fileSeeker, _ := fileHeader.Open()
+
+	if h.storage == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "File storage service is not configured or unavailable"})
+	}
+
 	if err := h.storage.Upload(c.Context(), storageKey, fileSeeker, fileHeader.Size, "application/octet-stream"); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to store file"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to store file: " + err.Error()})
 	}
 
 	// Create dynamic PostgreSQL table for this dataset
@@ -148,12 +156,12 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 	tableName := sanitizeTableName(datasetID)
 
 	if err := createDynamicTable(h.db, tableName, columnDefs); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create data table"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create data table: " + err.Error()})
 	}
 
 	// Bulk insert rows using PostgreSQL-compatible $N placeholders
 	if err := bulkInsertRows(h.db, tableName, headers, rows); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to insert data"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to insert data: " + err.Error()})
 	}
 
 	// Build dataset name from file name
@@ -165,7 +173,7 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 	// Serialize column defs using proper json.Marshal (BUG-10 fix)
 	colJSON, jsonErr := encodeColumns(columnDefs)
 	if jsonErr != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encode columns"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encode columns: " + jsonErr.Error()})
 	}
 
 	datasetRecord := models.Dataset{
@@ -183,7 +191,7 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 	}
 
 	if err := h.db.Create(&datasetRecord).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save dataset"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save dataset: " + err.Error()})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(datasetRecord)

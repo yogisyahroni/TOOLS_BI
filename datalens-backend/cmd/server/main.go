@@ -82,7 +82,7 @@ func main() {
 	rdb := initRedis(cfg)
 	log.Info().Msg("Redis connected")
 
-	// --- Storage (MinIO / S3) ---
+	// --- Storage (MinIO / S3) with Local Fallback ---
 	var fileStorage storage.FileStorage
 	if cfg.S3.Endpoint != "" && cfg.S3.AccessKey != "" {
 		minioStore, err := storage.NewMinIOStorage(
@@ -90,11 +90,15 @@ func main() {
 			cfg.S3.Bucket, cfg.S3.UseSSL,
 		)
 		if err != nil {
-			log.Warn().Err(err).Msg("MinIO not available, file uploads will fail")
+			log.Warn().Err(err).Msg("MinIO not available, falling back to local file storage")
+			fileStorage, _ = storage.NewLocalStorage("./uploads")
 		} else {
 			fileStorage = minioStore
 			log.Info().Str("bucket", cfg.S3.Bucket).Msg("MinIO storage connected")
 		}
+	} else {
+		log.Info().Msg("S3/MinIO not configured, using local file storage")
+		fileStorage, _ = storage.NewLocalStorage("./uploads")
 	}
 
 	// --- WebSocket Hub ---
@@ -211,10 +215,10 @@ func main() {
 	api := v1.Use(authRequired)
 
 	// PERF-08: Strict rate limiter for expensive endpoints (5 req/min per IP).
-	// Upload can exhaust CPU/memory; external DB query can exhaust connection pool.
 	uploadRateLimit := middleware.RateLimiter(rdb, 5, 60) // 5 req/min
 
 	// Dataset routes
+	// app.Use("/api/v1/datasets", mw.Protected()) // Not needed, api group is protected
 	datasets := api.Group("/datasets")
 	datasets.Get("/", datasetH.ListDatasets)
 	datasets.Post("/upload", uploadRateLimit, datasetH.UploadDataset)
@@ -651,6 +655,9 @@ func globalErrorHandler(c *fiber.Ctx, err error) error {
 	if e, ok := err.(*fiber.Error); ok {
 		code = e.Code
 		msg = e.Message
+	} else {
+		log.Error().Err(err).Msg("Unhandled server error")
+		msg = err.Error()
 	}
 	return c.Status(code).JSON(fiber.Map{"error": msg})
 }
