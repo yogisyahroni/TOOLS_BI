@@ -455,7 +455,7 @@ func main() {
 		log.Warn().Str("dir", distDir).Msg("Frontend dist/ not found — API-only mode")
 	}
 
-	addr := ":" + cfg.Server.Port
+	addr := "0.0.0.0:" + cfg.Server.Port
 	log.Info().Str("address", addr).Str("env", cfg.Server.Env).Msg("DataLens API starting")
 
 	// Graceful shutdown
