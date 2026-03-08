@@ -309,11 +309,8 @@ export default function DashboardBuilder() {
     // Optimistic Update local Query Cache
     // Access queryClient from the top of the component
     queryClient.setQueryData(['dashboards'], (oldData: any) => {
-      if (!oldData || !oldData.data) return oldData;
-      return {
-        ...oldData,
-        data: oldData.data.map((d: any) => d.id === activeDashboard.id ? { ...d, widgets: newWidgets } : d)
-      };
+      if (!oldData || !Array.isArray(oldData)) return oldData;
+      return oldData.map((d: any) => d.id === activeDashboard.id ? { ...d, widgets: newWidgets } : d);
     });
 
     // DB Call
