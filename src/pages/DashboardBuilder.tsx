@@ -334,6 +334,16 @@ export default function DashboardBuilder() {
     toast({ title: 'Widget Ditambahkan', description: 'Silahkan atur properti widget di panel kanan.' });
   };
 
+  const gridLayouts = useMemo(() => ({
+    lg: safeWidgets.map((w: any) => ({
+      i: w.id,
+      x: w.x ?? 0,
+      y: w.y ?? Infinity,
+      w: w.w ?? (w.width === 'full' ? 12 : w.width === 'half' ? 6 : 4),
+      h: w.h ?? (w.type === 'stat' || w.type === 'text' || w.type === 'action' ? 2 : 4)
+    }))
+  }), [safeWidgets]);
+
   const updateSelectedWidget = (updates: Partial<Widget>) => {
     if (!activeDashboard || !selectedWidgetId) return;
     const newWidgets = safeWidgets.map((w: any) => w.id === selectedWidgetId ? { ...w, ...updates } : w);
@@ -1317,7 +1327,15 @@ export default function DashboardBuilder() {
                 </div>
               </div>
 
-              <div className="relative min-h-[500px]">
+              <div
+                className="relative min-h-[500px] w-full"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer) {
+                    e.dataTransfer.dropEffect = 'copy';
+                  }
+                }}
+              >
                 {safeWidgets.length === 0 && (
                   <div className="absolute inset-0 pointer-events-none z-10 flex flex-col items-center pt-12">
                     <div className="rounded-2xl p-16 border-2 border-border border-dashed text-center bg-card/50 backdrop-blur-sm max-w-2xl mx-auto shadow-sm">
@@ -1330,17 +1348,10 @@ export default function DashboardBuilder() {
                   </div>
                 )}
                 <ResponsiveGridLayout
-                  className="layout -mx-4 min-h-[500px]"
+                  className="layout -mx-4"
+                  style={{ minHeight: 500 }}
                   width={containerWidth}
-                  layouts={{
-                    lg: safeWidgets.map((w: any) => ({
-                      i: w.id,
-                      x: w.x ?? 0,
-                      y: w.y ?? Infinity,
-                      w: w.w ?? (w.width === 'full' ? 12 : w.width === 'half' ? 6 : 4),
-                      h: w.h ?? (w.type === 'stat' || w.type === 'text' || w.type === 'action' ? 2 : 4)
-                    }))
-                  }}
+                  layouts={gridLayouts}
                   breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
                   cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
                   rowHeight={80}
@@ -1366,7 +1377,7 @@ export default function DashboardBuilder() {
                   draggableHandle=".drag-handle"
                   margin={[24, 24]}
                   isDroppable={true}
-                  droppingItem={{ i: 'drop', w: 6, h: 4, x: 0, y: Infinity }}
+                  droppingItem={{ i: 'drop', w: 6, h: 4, x: 0, y: 0 }}
                   onDrop={(layout, layoutItem, _event) => {
                     const e = _event as unknown as React.DragEvent;
                     e.preventDefault();
