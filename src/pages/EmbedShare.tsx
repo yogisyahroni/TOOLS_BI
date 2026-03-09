@@ -248,8 +248,13 @@ export default function EmbedShare() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground"><Eye className="w-3 h-3 inline mr-1" />{token.accessCount}</span>
                       {!token.revoked && (
-                        <Button variant="ghost" size="sm" className="text-destructive h-6 px-2 text-xs"
-                          onClick={() => handleRevoke(token.id)}>Revoke</Button>
+                        <>
+                          <a href={getEmbedUrl(token.id)} target="_blank" rel="noreferrer" className="text-xs font-medium text-primary hover:underline items-center gap-1 inline-flex">
+                            <ExternalLink className="w-3 h-3" /> View
+                          </a>
+                          <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 h-6 px-2 text-xs"
+                            onClick={() => handleRevoke(token.id)}>Revoke</Button>
+                        </>
                       )}
                     </div>
                   </div>

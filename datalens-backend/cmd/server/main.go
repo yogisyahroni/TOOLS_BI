@@ -211,6 +211,11 @@ func main() {
 	auth.Post("/logout", authRequired, authH.Logout)
 	auth.Get("/me", authRequired, authH.Me)
 
+	// Public embed endpoints (no auth)
+	v1.Get("/embed/view/:token", embedH.ViewEmbed)
+	v1.Get("/embed/view/:token/data/:datasetId", embedH.FetchEmbedData)
+	v1.Get("/embed/:token", dashboardH.GetEmbed)
+
 	// Apply auth to all remaining routes
 	api := v1.Use(authRequired)
 
@@ -236,9 +241,6 @@ func main() {
 	dashboards.Put("/:id", dashboardH.UpdateDashboard)
 	dashboards.Delete("/:id", dashboardH.DeleteDashboard)
 	dashboards.Post("/:id/embed", dashboardH.GenerateEmbedToken)
-
-	// Public embed (no auth)
-	v1.Get("/embed/:token", dashboardH.GetEmbed)
 
 	// Report routes
 	reports := api.Group("/reports")
@@ -428,10 +430,6 @@ func main() {
 	embedTokens.Get("/", embedH.ListEmbedTokens)
 	embedTokens.Post("/", embedH.GenerateEmbedToken)
 	embedTokens.Delete("/:id", embedH.RevokeEmbedToken)
-
-	// Public embed view endpoint — NO JWT middleware
-	app.Get("/api/v1/embed/view/:token", embedH.ViewEmbed)
-	app.Get("/api/v1/embed/view/:token/data/:datasetId", embedH.FetchEmbedData)
 
 	// --- Static Frontend (React SPA) ---
 	// Serve the built frontend from ../dist/ if it exists.
