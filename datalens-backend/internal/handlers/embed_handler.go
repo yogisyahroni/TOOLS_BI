@@ -111,7 +111,7 @@ func (h *EmbedHandler) ViewEmbed(c *fiber.Ctx) error {
 	var resourceData interface{}
 	if token.ResourceType == "dashboard" {
 		var dashboard models.Dashboard
-		if err := h.db.Preload("Widgets").Where("id = ?", token.ResourceID).First(&dashboard).Error; err == nil {
+		if err := h.db.Where("id = ?", token.ResourceID).First(&dashboard).Error; err == nil {
 			resourceData = dashboard
 		}
 	} else if token.ResourceType == "chart" {
