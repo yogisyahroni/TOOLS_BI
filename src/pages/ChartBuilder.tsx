@@ -129,7 +129,7 @@ export default function ChartBuilder() {
     return { ...meta, data: __datasetDataRes?.data || [] };
   }, [dataSets, selectedDataSet, __datasetDataRes]);
   const columns = dataset?.columns || [];
-  const numericColumns = columns.filter(c => ['number', 'numeric', 'int', 'integer', 'int2', 'int4', 'int8', 'float', 'float4', 'float8', 'decimal', 'double precision'].some(t => c.type.toLowerCase().includes(t)));
+  const numericColumns = columns.filter(c => c.type && ['number', 'numeric', 'int', 'integer', 'int2', 'int4', 'int8', 'float', 'float4', 'float8', 'decimal', 'double precision'].some(t => c.type.toLowerCase().includes(t)));
 
   const chartData = useMemo(() => {
     if (!dataset || !xAxis || !yAxis) return [];
