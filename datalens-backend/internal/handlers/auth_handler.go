@@ -133,9 +133,9 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	})
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"user":        userRecord,
-		"accessToken": accessToken,
-		// refreshToken omitted from body — client reads from httpOnly cookie
+		"user":         userRecord,
+		"accessToken":  accessToken,
+		"refreshToken": refreshToken,
 	})
 }
 

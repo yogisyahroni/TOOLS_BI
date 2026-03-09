@@ -32,6 +32,7 @@ export function getWsUrl() {
 // is hit first with the httpOnly cookie. See useAuth hook for bootstrap logic.
 // ---------------------------------------------------------------------------
 let accessToken: string | null = null;
+let refreshToken: string | null = null;
 
 export function getAccessToken() {
     return accessToken;
@@ -41,10 +42,20 @@ export function setAccessToken(token: string) {
     accessToken = token;
 }
 
+export function getRefreshToken() {
+    return refreshToken;
+}
+
+export function setRefreshToken(token: string | null) {
+    refreshToken = token;
+}
+
 export function clearTokens() {
     accessToken = null;
-    // Refresh token is in an httpOnly cookie — cleared by the server on /auth/logout
-    // We deliberately do NOT clear localStorage here as no sensitive tokens live there
+    refreshToken = null;
+    // Refresh token is in an httpOnly cookie, but also in memory/localStorage fallback.
+    // Explicitly delete localStorage to prevent inconsistent Zustand state looping.
+    localStorage.removeItem('datalens-auth');
 }
 
 // ---------------------------------------------------------------------------
@@ -99,11 +110,15 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            // BUG-07: No need to send refreshToken in body — browser sends httpOnly cookie
-            const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, {
+            // Include refreshToken in body as fallback for strict 3rd-party cookie blockers
+            const payload = refreshToken ? { refreshToken } : {};
+            const { data } = await axios.post(`${API_BASE}/auth/refresh`, payload, {
                 withCredentials: true,
             });
             setAccessToken(data.accessToken);
+            if (data.refreshToken) {
+                setRefreshToken(data.refreshToken); // If backend decides to rotate it
+            }
             processQueue(null, data.accessToken);
             original.headers.Authorization = `Bearer ${data.accessToken}`;
             return api(original);
@@ -127,7 +142,7 @@ export const authApi = {
     register: (payload: { email: string; password: string; displayName: string }) =>
         api.post('/auth/register', payload),
     login: (email: string, password: string) =>
-        api.post<{ accessToken: string; user: UserProfile }>(
+        api.post<{ accessToken: string; refreshToken: string; user: UserProfile }>(
             '/auth/login',
             { email, password }
         ),
