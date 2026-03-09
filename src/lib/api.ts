@@ -133,7 +133,11 @@ api.interceptors.response.use(
         } catch (err) {
             processQueue(err, null);
             clearTokens();
-            window.location.href = '/login';
+            // Prevent infinite reload loops if loadMe fails while already on public auth pages
+            const currentPath = window.location.pathname;
+            if (currentPath !== '/login' && currentPath !== '/register') {
+                window.location.href = '/login';
+            }
             return Promise.reject(err);
         } finally {
             isRefreshing = false;
