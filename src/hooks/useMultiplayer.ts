@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import * as Y from 'yjs';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuth } from '@/context/AuthContext';
 import { getAccessToken, getWsUrl } from '@/lib/api';
 
 export interface CursorState {
@@ -17,7 +17,7 @@ const toBase64 = (arr: Uint8Array) => btoa(String.fromCharCode(...arr));
 const fromBase64 = (str: string) => Uint8Array.from(atob(str), c => c.charCodeAt(0));
 
 export function useMultiplayer(dashboardId: string | null) {
-    const { user } = useAuthStore();
+    const { user } = useAuth();
     const token = getAccessToken();
     const [cursors, setCursors] = useState<Record<string, CursorState>>({});
     const wsRef = useRef<WebSocket | null>(null);

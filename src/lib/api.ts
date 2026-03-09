@@ -48,13 +48,18 @@ export function getRefreshToken() {
 
 export function setRefreshToken(token: string | null) {
     refreshToken = token;
+    if (token) {
+        localStorage.setItem('datalens_refresh_token', token);
+    } else {
+        localStorage.removeItem('datalens_refresh_token');
+    }
 }
 
 export function clearTokens() {
     accessToken = null;
     refreshToken = null;
-    // Refresh token is in an httpOnly cookie, but also in memory/localStorage fallback.
-    // Explicitly delete localStorage to prevent inconsistent Zustand state looping.
+    localStorage.removeItem('datalens_refresh_token');
+    // Also clear old zustand state to prevent conflicts for existing users
     localStorage.removeItem('datalens-auth');
 }
 
@@ -110,20 +115,8 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            // Fallback: If memory refreshToken is missing (race condition on refresh),
-            // read it directly from localStorage where Zustand writes it.
-            let tokenToUse = refreshToken;
-            if (!tokenToUse) {
-                try {
-                    const stored = localStorage.getItem('datalens-auth');
-                    if (stored) {
-                        const parsed = JSON.parse(stored);
-                        tokenToUse = parsed?.state?.refreshToken || null;
-                    }
-                } catch (e) {
-                    console.error('Failed to parse auth from localStorage in interceptor', e);
-                }
-            }
+            // Read refresh token directly from straightforward localStorage key
+            let tokenToUse = refreshToken || localStorage.getItem('datalens_refresh_token');
 
             // Include refreshToken in body as fallback for strict 3rd-party cookie blockers
             const payload = tokenToUse ? { refreshToken: tokenToUse } : {};

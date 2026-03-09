@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useAuthStore } from "@/stores/authStore";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 
 // Auth pages
 import Login from "./pages/Login";
@@ -63,7 +63,9 @@ const queryClient = new QueryClient({
 // Auth guard: redirects to /login if not authenticated
 // ────────────────────────────────────────────────────────────────
 function ProtectedLayout() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) return <div className="flex h-screen w-full items-center justify-center">Loading session...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return (
     <AppLayout>
@@ -111,24 +113,26 @@ function ProtectedLayout() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/embed/view/:token" element={<EmbedViewer />} />
-          {/* Standalone 404 — renders WITHOUT AppLayout/sidebar */}
-          <Route path="/not-found" element={<NotFound />} />
-          {/* Protected routes — all nested inside auth guard */}
-          <Route path="/*" element={<ProtectedLayout />} />
-          {/* Top-level catch-all fallback (reaches here only if nothing matches) */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/embed/view/:token" element={<EmbedViewer />} />
+            {/* Standalone 404 — renders WITHOUT AppLayout/sidebar */}
+            <Route path="/not-found" element={<NotFound />} />
+            {/* Protected routes — all nested inside auth guard */}
+            <Route path="/*" element={<ProtectedLayout />} />
+            {/* Top-level catch-all fallback (reaches here only if nothing matches) */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

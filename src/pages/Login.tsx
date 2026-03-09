@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, LogIn, Database } from 'lucide-react';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,7 @@ export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const { login, isLoading } = useAuthStore();
+    const { login, isLoading } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
 

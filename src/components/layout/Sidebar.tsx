@@ -10,7 +10,7 @@ import {
   Activity, Workflow, PlugZap, FolderInput, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Menu structure with groups ───────────────────────────────────────────────
 interface MenuItem { icon: React.ElementType; label: string; path: string; badge?: string }
@@ -104,7 +104,7 @@ export function Sidebar() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, logout } = useAuth();
 
   const handleLogout = async () => {
     await logout();
