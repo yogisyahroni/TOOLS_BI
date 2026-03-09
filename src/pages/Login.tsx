@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, LogIn, Database } from 'lucide-react';
@@ -12,9 +12,17 @@ export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const { login, isLoading } = useAuth();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
+
+    // Redirect to dashboard if already logged in
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/');
+        }
+    }, [isAuthenticated, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -22,6 +30,7 @@ export default function Login() {
             toast({ title: 'Validation error', description: 'Email and password are required.', variant: 'destructive' });
             return;
         }
+        setIsSubmitting(true);
         try {
             await login(email, password);
             toast({ title: 'Welcome back!', description: 'You have successfully signed in.' });
@@ -29,6 +38,8 @@ export default function Login() {
         } catch (err: unknown) {
             const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Login failed. Check your credentials.';
             toast({ title: 'Sign in failed', description: msg, variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -99,8 +110,8 @@ export default function Login() {
                             </Link>
                         </div>
 
-                        <Button type="submit" className="w-full" disabled={isLoading}>
-                            {isLoading ? (
+                        <Button type="submit" className="w-full" disabled={isSubmitting}>
+                            {isSubmitting ? (
                                 <span className="flex items-center gap-2">
                                     <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
                                     Signing in…
