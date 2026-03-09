@@ -104,16 +104,16 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
         }
     }));
 
-    const axisLabelStyle = { fontSize: 10, color: 'hsl(var(--muted-foreground))' };
-    const splitLineStyle = { lineStyle: { color: 'hsl(var(--border))', type: 'dashed' as const } };
+    const axisLabelStyle = { fontSize: 10, color: '#9ca3af' }; // text-muted-foreground
+    const splitLineStyle = { lineStyle: { color: '#374151', type: 'dashed' as const } }; // border
 
     let option: any = {
         grid: { top: 30, right: 20, bottom: 30, left: isHorizontal ? 80 : 40, containLabel: true },
         tooltip: {
             trigger: 'item',
-            backgroundColor: 'hsl(var(--popover))',
-            borderColor: 'hsl(var(--border))',
-            textStyle: { color: 'hsl(var(--popover-foreground))', fontSize: 12 },
+            backgroundColor: '#1e293b', // popover
+            borderColor: '#334155', // border
+            textStyle: { color: '#f8fafc', fontSize: 12 }, // popover-foreground
             borderRadius: 8
         },
     };
@@ -133,13 +133,13 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
             option.series = [{ data: seriesData, type: 'bar', itemStyle: { borderRadius: isHorizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] } }];
             break;
         case 'line':
-            option.series = [{ data: seriesData, type: 'line', symbolSize: 6, lineStyle: { width: 3 }, itemStyle: { color: 'hsl(var(--primary))' } }];
+            option.series = [{ data: seriesData, type: 'line', symbolSize: 6, lineStyle: { width: 3 }, itemStyle: { color: '#0ea5e9' } }];
             break;
         case 'area':
-            option.series = [{ data: seriesData, type: 'line', areaStyle: { opacity: 0.2 }, symbolSize: 6, lineStyle: { width: 2 }, itemStyle: { color: 'hsl(var(--primary))' } }];
+            option.series = [{ data: seriesData, type: 'line', areaStyle: { opacity: 0.2 }, symbolSize: 6, lineStyle: { width: 2 }, itemStyle: { color: '#0ea5e9' } }];
             break;
         case 'pie':
-            option.series = [{ data: seriesData, type: 'pie', radius: ['45%', '75%'], center: ['50%', '50%'], label: { show: false }, itemStyle: { borderRadius: 4, borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
+            option.series = [{ data: seriesData, type: 'pie', radius: ['45%', '75%'], center: ['50%', '50%'], label: { show: false }, itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 } }];
             option.tooltip.formatter = '{b}: {c} ({d}%)';
             break;
         case 'scatter':
@@ -148,15 +148,15 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
             break;
         case 'radar': {
             const maxVal = Math.max(...data.map(v => Number(v.value) || 0)) * 1.1;
-            option.radar = { indicator: data.map(d => ({ name: String(d.name), max: maxVal })), axisName: { color: 'hsl(var(--muted-foreground))', fontSize: 10 } };
-            option.series = [{ type: 'radar', data: [{ value: data.map(d => d.value), name: widget.yAxis }], areaStyle: { opacity: 0.3 }, itemStyle: { color: 'hsl(var(--primary))' }, lineStyle: { color: 'hsl(var(--primary))', width: 2 } }];
+            option.radar = { indicator: data.map(d => ({ name: String(d.name), max: maxVal })), axisName: { color: '#9ca3af', fontSize: 10 } };
+            option.series = [{ type: 'radar', data: [{ value: data.map(d => d.value), name: widget.yAxis }], areaStyle: { opacity: 0.3 }, itemStyle: { color: '#0ea5e9' }, lineStyle: { color: '#0ea5e9', width: 2 } }];
             break;
         }
         case 'funnel':
-            option.series = [{ type: 'funnel', left: '10%', top: 20, bottom: 20, width: '80%', data: seriesData.sort((a, b) => b.value - a.value), label: { show: true, position: 'inside', formatter: '{b}' }, itemStyle: { borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
+            option.series = [{ type: 'funnel', left: '10%', top: 20, bottom: 20, width: '80%', data: seriesData.sort((a, b) => b.value - a.value), label: { show: true, position: 'inside', formatter: '{b}' }, itemStyle: { borderColor: '#0f172a', borderWidth: 2 } }];
             break;
         case 'treemap':
-            option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: 'hsl(var(--background))' } }];
+            option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: '#0f172a' } }];
             break;
         case 'waterfall': {
             let running = 0;
@@ -188,12 +188,12 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
                     name: widget.title || 'KPI',
                     type: 'gauge',
                     max: gaugeMax,
-                    progress: { show: true, width: 18, itemStyle: { color: 'hsl(var(--primary))' } },
-                    axisLine: { lineStyle: { width: 18, color: [[1, 'hsl(var(--muted))']] } },
+                    progress: { show: true, width: 18, itemStyle: { color: '#0ea5e9' } },
+                    axisLine: { lineStyle: { width: 18, color: [[1, '#334155']] } },
                     axisTick: { show: false },
                     splitLine: { show: false },
                     axisLabel: { show: false },
-                    detail: { valueAnimation: true, fontSize: 30, color: 'hsl(var(--foreground))', formatter: '{value}' },
+                    detail: { valueAnimation: true, fontSize: 30, color: '#f8fafc', formatter: '{value}' },
                     data: [{ value: sum, name: widget.yAxis }]
                 }]
             };
