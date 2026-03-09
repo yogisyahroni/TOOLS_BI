@@ -122,13 +122,28 @@ export default function ChartBuilder() {
   const [chartTitle, setChartTitle] = useState('Untitled Chart');
   const [groupBy, setGroupBy] = useState('');
 
-  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
+  const [dataLimit, setDataLimit] = useState<string>('50');
+  const [sortOrder, setSortOrder] = useState<'default' | 'asc' | 'desc'>('default');
+  const [dateCol, setDateCol] = useState<string>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
+  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(
+    selectedDataSet || '',
+    {
+      limit: 50000,
+      dateCol: dateCol !== 'all' && dateCol !== '' ? dateCol : undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined
+    }
+  );
   const dataset = React.useMemo(() => {
     const meta = dataSets.find(ds => ds.id === selectedDataSet);
     if (!meta) return null;
     return { ...meta, data: __datasetDataRes?.data || [] };
   }, [dataSets, selectedDataSet, __datasetDataRes]);
   const columns = dataset?.columns || [];
+  const dateColumns = columns.filter(c => c.type === 'date');
   const numericColumnsRaw = columns.filter(c => {
     if (!c.type) return false;
     const t = c.type.toLowerCase();
@@ -144,10 +159,16 @@ export default function ChartBuilder() {
       const val = Number(row[yAxis]) || 0;
       aggregated.set(key, (aggregated.get(key) || 0) + val);
     });
-    return Array.from(aggregated.entries())
-      .map(([name, value]) => ({ name, value }))
-      .slice(0, 50);
-  }, [dataset, xAxis, yAxis]);
+    let result = Array.from(aggregated.entries()).map(([name, value]) => ({ name, value }));
+
+    if (sortOrder === 'asc') result.sort((a, b) => a.value - b.value);
+    else if (sortOrder === 'desc') result.sort((a, b) => b.value - a.value);
+
+    const limit = parseInt(dataLimit, 10);
+    if (limit > 0) result = result.slice(0, limit);
+
+    return result;
+  }, [dataset, xAxis, yAxis, sortOrder, dataLimit]);
 
   // Waterfall data: compute running total
   const waterfallData = useMemo(() => {
@@ -192,7 +213,12 @@ export default function ChartBuilder() {
         groups.get(key)!.push(val);
       }
     });
-    return Array.from(groups.entries()).slice(0, 20).map(([name, vals]) => {
+
+    let result = Array.from(groups.entries());
+    const limit = parseInt(dataLimit, 10);
+    if (limit > 0) result = result.slice(0, limit);
+
+    return result.map(([name, vals]) => {
       vals.sort((a, b) => a - b);
       const q1 = vals[Math.floor(vals.length * 0.25)];
       const median = vals[Math.floor(vals.length * 0.5)];
@@ -390,7 +416,12 @@ export default function ChartBuilder() {
         current.bar += barVal;
         current.line += lineVal;
       });
-      const comboData = Array.from(agg.entries()).map(([name, vals]) => ({ name, barValue: vals.bar, lineValue: vals.line })).slice(0, 50);
+
+      let result = Array.from(agg.entries()).map(([name, vals]) => ({ name, barValue: vals.bar, lineValue: vals.line }));
+      const limit = parseInt(dataLimit, 10);
+      if (limit > 0) result = result.slice(0, limit);
+
+      const comboData = result;
       const axisLabelStyle = { color: '#9ca3af', fontSize: 10 };
       const splitLineStyle = { lineStyle: { color: '#374151', type: 'dashed' } };
       const option = {
@@ -527,6 +558,65 @@ export default function ChartBuilder() {
                   </Select>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Date Filter Panel */}
+          {dateColumns.length > 0 && selectedDataSet && (
+            <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">Date Filter</h3>
+              <div>
+                <Label className="text-muted-foreground text-xs">Date Column</Label>
+                <Select value={dateCol} onValueChange={setDateCol}>
+                  <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select date column" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Dates</SelectItem>
+                    {dateColumns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {dateCol !== 'all' && dateCol !== '' && (
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label className="text-muted-foreground text-xs">Start Date</Label>
+                    <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-muted/50 border-border [color-scheme:dark]" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-muted-foreground text-xs">End Date</Label>
+                    <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-muted/50 border-border [color-scheme:dark]" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Data Config Panel */}
+          <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">Data Manipulation</h3>
+            <div>
+              <Label className="text-muted-foreground text-xs">Sort by Value</Label>
+              <Select value={sortOrder} onValueChange={(v: any) => setSortOrder(v)}>
+                <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Default" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value="desc">Top Items (Desc)</SelectItem>
+                  <SelectItem value="asc">Bottom Items (Asc)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-muted-foreground text-xs">Item Limit</Label>
+              <Select value={dataLimit} onValueChange={setDataLimit}>
+                <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="50 Items" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">Top/Bottom 10</SelectItem>
+                  <SelectItem value="20">Top/Bottom 20</SelectItem>
+                  <SelectItem value="50">Top/Bottom 50</SelectItem>
+                  <SelectItem value="100">Top/Bottom 100</SelectItem>
+                  <SelectItem value="500">Top/Bottom 500</SelectItem>
+                  <SelectItem value="0">All Items</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

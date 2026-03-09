@@ -224,8 +224,8 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 50)
-	if limit > 500 {
-		limit = 500
+	if limit > 50000 {
+		limit = 50000
 	}
 	offset := (page - 1) * limit
 
@@ -295,6 +295,21 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 		whereClause, args := middleware.BuildRLSWhereClause(rlsFilters)
 		if whereClause != "" {
 			query = query.Where(whereClause, args...)
+		}
+	}
+
+	// Apply Date Time Range Filters
+	dateCol := c.Query("dateCol")
+	startDate := c.Query("startDate")
+	endDate := c.Query("endDate")
+	if dateCol != "" {
+		safeDateCol := sanitizeIdentifier(dateCol)
+		if startDate != "" && endDate != "" {
+			query = query.Where(fmt.Sprintf(`"%s" >= ? AND "%s" <= ?`, safeDateCol, safeDateCol), startDate, endDate)
+		} else if startDate != "" {
+			query = query.Where(fmt.Sprintf(`"%s" >= ?`, safeDateCol), startDate)
+		} else if endDate != "" {
+			query = query.Where(fmt.Sprintf(`"%s" <= ?`, safeDateCol), endDate)
 		}
 	}
 

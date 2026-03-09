@@ -362,6 +362,9 @@ export interface DataQueryParams {
     sort?: string;
     order?: 'asc' | 'desc';
     filters?: string; // JSON-encoded
+    dateCol?: string;
+    startDate?: string;
+    endDate?: string;
 }
 
 export interface DataQueryResult {
