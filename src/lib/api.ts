@@ -110,8 +110,13 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
+            // Import useAuthStore dynamically to avoid circular dependencies
+            // and guarantee we read the latest Zustand persisted state.
+            const { useAuthStore } = await import('@/stores/authStore');
+            const tokenToUse = refreshToken || useAuthStore.getState().refreshToken;
+
             // Include refreshToken in body as fallback for strict 3rd-party cookie blockers
-            const payload = refreshToken ? { refreshToken } : {};
+            const payload = tokenToUse ? { refreshToken: tokenToUse } : {};
             const { data } = await axios.post(`${API_BASE}/auth/refresh`, payload, {
                 withCredentials: true,
             });
