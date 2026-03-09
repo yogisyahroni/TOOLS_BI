@@ -129,8 +129,13 @@ export default function ChartBuilder() {
     return { ...meta, data: __datasetDataRes?.data || [] };
   }, [dataSets, selectedDataSet, __datasetDataRes]);
   const columns = dataset?.columns || [];
-  const numericColumns = columns.filter(c => c.type && ['number', 'numeric', 'int', 'integer', 'int2', 'int4', 'int8', 'float', 'float4', 'float8', 'decimal', 'double precision'].some(t => c.type.toLowerCase().includes(t)));
-
+  const numericColumnsRaw = columns.filter(c => {
+    if (!c.type) return false;
+    const t = c.type.toLowerCase();
+    return ['number', 'numeric', 'int', 'integer', 'int2', 'int4', 'int8', 'float', 'float4', 'float8', 'decimal', 'double precision'].some(val => t.includes(val));
+  });
+  // Fallback: If for some reason the dataset returns no recognized numeric type (e.g. generic JSON), allow all columns
+  const numericColumns = numericColumnsRaw.length > 0 ? numericColumnsRaw : columns;
   const chartData = useMemo(() => {
     if (!dataset || !xAxis || !yAxis) return [];
     const aggregated = new Map<string, number>();
