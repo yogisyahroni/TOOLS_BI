@@ -1,15 +1,17 @@
 import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Code2, Play, Clock, Download, Trash2, Save, Table as TableIcon } from 'lucide-react';
+import { Table as TableIcon, Code2, Play, Save, Download, Clock, Database, Sparkles } from 'lucide-react';
 import { AIChatPanel } from '@/components/AIChatPanel';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { HelpTooltip } from '@/components/HelpTooltip';
 import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { api } from '@/lib/api';
+import { DatasetRecommendation } from '@/components/AIChatPanel';
+import { HelpTooltip } from '@/components/HelpTooltip';
 
 interface QueryResult {
   columns: string[];
@@ -165,9 +167,17 @@ export default function QueryEditor() {
     a.href = url; a.download = 'query_result.csv'; a.click();
     URL.revokeObjectURL(url);
   };
+  const [isCreatingViews, setIsCreatingViews] = useState(false);
 
-  const handleAIResponse = (response: string) => {
-    // Extract SQL from AI response
+  const handleAIResponse = (response: string, jsonRecommendations?: DatasetRecommendation[]) => {
+    if (jsonRecommendations && jsonRecommendations.length > 0) {
+      // If it's a JSON response, we don't put the SQL directly in the editor unless there's only one.
+      // The AIChatPanel handles showing the cards.
+      toast({ title: 'AI Recommendations Ready', description: `Generated ${jsonRecommendations.length} dataset suggestions.` });
+      return;
+    }
+
+    // Fallback for single query extraction
     const sqlMatch = response.match(/```sql\n?([\s\S]*?)```/) || response.match(/SELECT[\s\S]*?(?:LIMIT\s+\d+|$)/i);
     if (sqlMatch) {
       const sql = (sqlMatch[1] || sqlMatch[0]).trim();
@@ -179,13 +189,63 @@ export default function QueryEditor() {
     }
   };
 
+  const handleCreateViews = async (recommendations: DatasetRecommendation[]) => {
+    if (!selectedDataSet) {
+      toast({ title: 'Error', description: 'Please select a source dataset first.', variant: 'destructive' });
+      return;
+    }
+
+    setIsCreatingViews(true);
+    try {
+      const promises = recommendations.map(rec =>
+        api.post('/datasets/ai-generate', {
+          sourceDatasetId: selectedDataSet,
+          name: rec.name,
+          description: rec.description,
+          query: rec.sql
+        })
+      );
+
+      await Promise.all(promises);
+      toast({ title: 'Success', description: `Successfully created ${recommendations.length} new datasets.` });
+      // Trigger a refetch of datasets
+      window.location.reload(); // Simple way to refresh the sidebar and lists
+    } catch (err: any) {
+      toast({
+        title: 'Failed to create datasets',
+        description: err.response?.data?.error || err.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsCreatingViews(false);
+    }
+  };
+
   const getAIPrompt = () => {
     if (!dataset) return 'No dataset selected. Ask the user to select a dataset first.';
-    return `You are a SQL query assistant for a dataset called "${dataset.name}". The available columns are: ${dataset.columns.map(c => `${c.name} (${c.type})`).join(', ')}. Total rows: ${dataset.rowCount}.
+    return `You are an Enterprise Data Preparation Assistant for a dataset called "${dataset.name}". 
+The available columns are: ${dataset.columns.map(c => `${c.name} (${c.type})`).join(', ')}. Total rows: ${dataset.rowCount}.
+The underlying table name is "${dataset.dataTableName}".
 
-Generate SQL-like queries using this syntax: SELECT, WHERE (=, !=, >, <, >=, <=, LIKE), ORDER BY (ASC/DESC), LIMIT.
-Table name is always "dataset".
-When the user asks in natural language, generate the appropriate SQL query. Return the SQL query clearly, ideally in a code block.`;
+Your task is to analyze the user's request and suggest one or more valuable data views (datasets) that can be derived from this source data.
+If the user asks "how many datasets can be generated", provide a list of diverse, useful analytical views (e.g., aggregations, temporal trends, categorical breakdowns, or top N lists).
+
+CRITICAL INSTRUCTION: You MUST output your recommendations as a valid JSON array object. Do NOT wrap the JSON in markdown code blocks if possible, or if you do, ensure the content is strictly parseable JSON.
+
+The JSON MUST conform exactly to this structure:
+[
+  {
+    "name": "Short, descriptive name for the dataset (e.g., 'Monthly Sales Revenue')",
+    "description": "A brief explanation of what this dataset shows and its business value.",
+    "sql": "The complete PostgreSQL query using SELECT... FROM ${dataset.dataTableName} ..."
+  }
+]
+
+SQL Guidelines:
+- Use PostgreSQL syntax.
+- You CAN use aggregations (SUM, COUNT, AVG), GROUP BY, date functions (DATE_TRUNC), and math operations.
+- Always use the exact table name provided: "${dataset.dataTableName}".
+- Ensure column names match exactly as provided in the schema.`;
   };
 
   return (
@@ -254,9 +314,11 @@ When the user asks in natural language, generate the appropriate SQL query. Retu
           {/* AI Chat */}
           <AIChatPanel
             systemPrompt={getAIPrompt()}
-            title="AI SQL Assistant"
-            placeholder="e.g., Tampilkan top 10 data dengan nilai tertinggi..."
+            title="Enterprise Data Assistant"
+            placeholder="e.g., Analyze this data and suggest useful views..."
             onAIResponse={handleAIResponse}
+            onCreateViews={handleCreateViews}
+            isCreatingViews={isCreatingViews}
           />
         </motion.div>
 
