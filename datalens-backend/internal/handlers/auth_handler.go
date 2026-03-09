@@ -186,9 +186,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	})
 
 	return c.JSON(fiber.Map{
-		"user":        userRecord,
-		"accessToken": accessToken,
-		// refreshToken is now in httpOnly cookie only
+		"user":         userRecord,
+		"accessToken":  accessToken,
+		"refreshToken": refreshToken,
 	})
 }
 
@@ -244,13 +244,36 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
 	}
 
-	accessToken, _, err := h.generateTokenPair(userRecord.ID, userRecord.Role)
+	accessToken, newRefreshToken, err := h.generateTokenPair(userRecord.ID, userRecord.Role)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate token"})
 	}
 
+	// Rotate refresh token
+	_ = h.redis.Del(ctx, storedKey)
+	if err := h.storeRefreshToken(userRecord.ID, newRefreshToken); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to store session"})
+	}
+
+	isSecure := strings.HasPrefix(h.appURL, "https") || c.Secure() || c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
+	sameSite := "Lax"
+	if isSecure {
+		sameSite = "None"
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    newRefreshToken,
+		HTTPOnly: true,
+		Secure:   isSecure,
+		SameSite: sameSite,
+		MaxAge:   int(h.refreshTTL.Seconds()),
+		Path:     "/api/v1/auth",
+	})
+
 	return c.JSON(fiber.Map{
-		"accessToken": accessToken,
+		"accessToken":  accessToken,
+		"refreshToken": newRefreshToken,
 	})
 }
 
