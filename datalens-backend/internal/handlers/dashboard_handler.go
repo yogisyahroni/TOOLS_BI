@@ -49,9 +49,9 @@ func (h *DashboardHandler) ListDashboards(c *fiber.Ctx) error {
 func (h *DashboardHandler) CreateDashboard(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	var body struct {
-		Name     string      `json:"name"`
-		Widgets  interface{} `json:"widgets"`
-		IsPublic bool        `json:"isPublic"`
+		Name     string          `json:"name"`
+		Widgets  json.RawMessage `json:"widgets"`
+		IsPublic bool            `json:"isPublic"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
@@ -61,8 +61,8 @@ func (h *DashboardHandler) CreateDashboard(c *fiber.Ctx) error {
 	}
 
 	// Default widgets to empty array if omitted or null
-	widgetsBytes, err := json.Marshal(body.Widgets)
-	if err != nil || string(widgetsBytes) == "null" {
+	widgetsBytes := []byte(body.Widgets)
+	if len(widgetsBytes) == 0 || string(widgetsBytes) == "null" {
 		widgetsBytes = []byte("[]")
 	}
 
@@ -106,9 +106,9 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 	// PERF-03 fix: Use explicit DTO struct, never pass raw request body to the ORM.
 	// Only allow updating name, widgets, and isPublic.
 	var req struct {
-		Name     *string     `json:"name"`
-		Widgets  interface{} `json:"widgets"`
-		IsPublic *bool       `json:"isPublic"`
+		Name     *string         `json:"name"`
+		Widgets  json.RawMessage `json:"widgets"`
+		IsPublic *bool           `json:"isPublic"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
@@ -124,7 +124,12 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 		updates["name"] = *req.Name
 	}
 	if req.Widgets != nil {
-		updates["widgets"] = req.Widgets
+		// Validasi apakah array widget ini valid JSON agar tidak merusak DB
+		if len(req.Widgets) > 0 && string(req.Widgets) != "null" {
+			updates["widgets"] = req.Widgets
+		} else {
+			updates["widgets"] = []byte("[]")
+		}
 	}
 	if req.IsPublic != nil {
 		updates["is_public"] = *req.IsPublic
@@ -133,6 +138,21 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 	if err := h.db.Model(&dash).Updates(updates).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update dashboard"})
 	}
+
+	// Update object sebelum di-return agar response yang dikirim ke client mendapatkan struktur yang sudah sinkron
+	if req.Name != nil {
+		dash.Name = *req.Name
+	}
+	if req.Widgets != nil {
+		dash.Widgets = updates["widgets"].(json.RawMessage)
+	}
+	if req.IsPublic != nil {
+		dash.IsPublic = *req.IsPublic
+	}
+
+	// Format time ulang untuk standar JSON response
+	dash.UpdatedAt = time.Now()
+
 	return c.JSON(dash)
 }
 
