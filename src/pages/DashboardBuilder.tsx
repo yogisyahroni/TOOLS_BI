@@ -23,6 +23,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -807,16 +808,17 @@ export default function DashboardBuilder() {
         }
       }));
 
-      const axisLabelStyle = { fontSize: 10, color: 'hsl(var(--muted-foreground))' };
-      const splitLineStyle = { lineStyle: { color: 'hsl(var(--border))', type: 'dashed' as const } };
+      // Default axis style to dark mode if not set
+      const axisLabelStyle = { color: 'hsl(var(--muted-foreground))' };
+      const splitLineStyle = { lineStyle: { color: 'hsl(var(--border))' } };
 
       let option: any = {
-        grid: { top: 30, right: 20, bottom: 30, left: isHorizontal ? 80 : 40, containLabel: true },
+        backgroundColor: 'transparent',
         tooltip: {
           trigger: 'item',
-          backgroundColor: 'hsl(var(--popover))',
+          backgroundColor: 'hsl(var(--card))',
           borderColor: 'hsl(var(--border))',
-          textStyle: { color: 'hsl(var(--popover-foreground))', fontSize: 12 },
+          textStyle: { color: 'hsl(var(--foreground))' },
           borderRadius: 8
         },
       };
@@ -965,6 +967,7 @@ export default function DashboardBuilder() {
 
     return (
       <ReactECharts
+        theme="dark"
         option={echartsOption}
         style={{ height: '100%', width: '100%' }}
         onEvents={onEvents}
@@ -1040,12 +1043,25 @@ export default function DashboardBuilder() {
             <LayoutGrid className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Unified Dashboard <HelpTooltip text="Buka dataset di kiri, bangun canvas di tengah, dan atur detail widget di kanan." /></h1>
-            <p className="text-sm text-muted-foreground">Build, edit, and explore in one place</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-foreground">Unified Dashboard</h1>
+              {activeDashboardId && (
+                <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/20 font-normal">
+                  Auto-saved
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">Build, edit, and explore in one place <HelpTooltip text="Buka dataset di kiri, bangun canvas di tengah, dan atur detail widget di kanan." /></p>
           </div>
         </div>
 
         <div className="flex gap-3 items-center">
+          {activeDashboardId && (
+            <Button variant="outline" className="border-border text-foreground gap-2" onClick={() => window.open('/embed', '_blank')}>
+              <Share2 className="w-4 h-4" /> Share
+            </Button>
+          )}
+
           <Sheet open={paramOpen} onOpenChange={setParamOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" className="border-primary/30 text-primary gap-2">
@@ -1386,8 +1402,8 @@ export default function DashboardBuilder() {
                           isPublic: false,
                           widgets: []
                         });
-                        targetDashId = newDash.id;
-                        setActiveDashboardId(newDash.id);
+                        targetDashId = newDash.data.id;
+                        setActiveDashboardId(newDash.data.id);
                         targetWidgets = []; // Fresh array
                       }
 
