@@ -23,8 +23,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             // Restore token from localStorage on boot for api.ts to use
             const storedRefreshToken = localStorage.getItem('datalens_refresh_token');
-            if (storedRefreshToken) {
+            if (storedRefreshToken && storedRefreshToken !== 'undefined') {
                 setRefreshToken(storedRefreshToken);
+            } else {
+                // Short-circuit: If there's no refresh token in storage, trying to call /auth/me
+                // will just 401 and trigger a failing /auth/refresh.
+                setIsAuthenticated(false);
+                setUser(null);
+                clearTokens();
+                setIsLoading(false);
+                return;
             }
 
             // If there's no access token, me() will trigger the 401 interceptor 

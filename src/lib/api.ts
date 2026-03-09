@@ -115,11 +115,15 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            // Read refresh token directly from straightforward localStorage key
-            let tokenToUse = refreshToken || localStorage.getItem('datalens_refresh_token');
+            const manualRefreshTokenStr = localStorage.getItem('datalens_refresh_token');
+            const tokenToUse = manualRefreshTokenStr && manualRefreshTokenStr !== 'undefined' ? manualRefreshTokenStr : '';
+
+            if (!tokenToUse) {
+                throw new Error("No refresh token available in storage");
+            }
 
             // Include refreshToken in body as fallback for strict 3rd-party cookie blockers
-            const payload = tokenToUse ? { refreshToken: tokenToUse } : {};
+            const payload = { refreshToken: tokenToUse };
             const { data } = await axios.post(`${API_BASE}/auth/refresh`, payload, {
                 withCredentials: true,
             });
@@ -134,8 +138,9 @@ api.interceptors.response.use(
             processQueue(err, null);
             clearTokens();
             // Prevent infinite reload loops if loadMe fails while already on public auth pages
+            // Also bypass redirect for public embed views
             const currentPath = window.location.pathname;
-            if (currentPath !== '/login' && currentPath !== '/register') {
+            if (currentPath !== '/login' && currentPath !== '/register' && !currentPath.startsWith('/embed/view/')) {
                 window.location.href = '/login';
             }
             return Promise.reject(err);
