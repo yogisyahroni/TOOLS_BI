@@ -804,21 +804,21 @@ export default function DashboardBuilder() {
         itemStyle: {
           color: getCellColor(widget, d, i),
           borderWidth: activeFilter?.value === String(d.name) ? 2 : 0,
-          borderColor: activeFilter?.value === String(d.name) ? 'hsl(var(--foreground))' : 'transparent'
+          borderColor: activeFilter?.value === String(d.name) ? '#f8fafc' : 'transparent'
         }
       }));
 
       // Default axis style to dark mode if not set
-      const axisLabelStyle = { color: 'hsl(var(--muted-foreground))' };
-      const splitLineStyle = { lineStyle: { color: 'hsl(var(--border))' } };
+      const axisLabelStyle = { color: '#9ca3af' }; // text-muted-foreground
+      const splitLineStyle = { lineStyle: { color: '#374151' } }; // border
 
       let option: any = {
         backgroundColor: 'transparent',
         tooltip: {
           trigger: 'item',
-          backgroundColor: 'hsl(var(--card))',
-          borderColor: 'hsl(var(--border))',
-          textStyle: { color: 'hsl(var(--foreground))' },
+          backgroundColor: '#0f172a', // card
+          borderColor: '#334155', // border
+          textStyle: { color: '#f8fafc' }, // foreground
           borderRadius: 8
         },
       };
@@ -838,30 +838,30 @@ export default function DashboardBuilder() {
           option.series = [{ data: seriesData, type: 'bar', itemStyle: { borderRadius: isHorizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] } }];
           break;
         case 'line':
-          option.series = [{ data: seriesData, type: 'line', symbolSize: 6, lineStyle: { width: 3 }, itemStyle: { color: 'hsl(var(--primary))' } }];
+          option.series = [{ data: seriesData, type: 'line', symbolSize: 6, lineStyle: { width: 3 }, itemStyle: { color: '#0ea5e9' } }];
           break;
         case 'area':
-          option.series = [{ data: seriesData, type: 'line', areaStyle: { opacity: 0.2 }, symbolSize: 6, lineStyle: { width: 2 }, itemStyle: { color: 'hsl(var(--primary))' } }];
+          option.series = [{ data: seriesData, type: 'line', areaStyle: { opacity: 0.2 }, symbolSize: 6, lineStyle: { width: 2 }, itemStyle: { color: '#0ea5e9' } }];
           break;
         case 'scatter':
           option.xAxis = { type: 'category', data: categoryNames, axisLabel: axisLabelStyle };
           option.series = [{ data: data.map((d, i) => ({ value: [d.name, d.value], itemStyle: { color: getCellColor(widget, d, i) } })), type: 'scatter', symbolSize: 12 }];
           break;
         case 'pie':
-          option.series = [{ data: seriesData, type: 'pie', radius: ['45%', '75%'], center: ['50%', '50%'], label: { show: false }, itemStyle: { borderRadius: 4, borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
+          option.series = [{ data: seriesData, type: 'pie', radius: ['45%', '75%'], center: ['50%', '50%'], label: { show: false }, itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 } }];
           option.tooltip.formatter = '{b}: {c} ({d}%)';
           break;
         case 'radar': {
           const maxVal = Math.max(...data.map(v => Number(v.value) || 0)) * 1.1;
-          option.radar = { indicator: data.map(d => ({ name: String(d.name), max: maxVal })), axisName: { color: 'hsl(var(--muted-foreground))', fontSize: 10 } };
-          option.series = [{ type: 'radar', data: [{ value: data.map(d => d.value), name: widget.yAxis }], areaStyle: { opacity: 0.3 }, itemStyle: { color: 'hsl(var(--primary))' }, lineStyle: { color: 'hsl(var(--primary))', width: 2 } }];
+          option.radar = { indicator: data.map(d => ({ name: String(d.name), max: maxVal })), axisName: { color: '#9ca3af', fontSize: 10 } };
+          option.series = [{ type: 'radar', data: [{ value: data.map(d => d.value), name: widget.yAxis }], areaStyle: { opacity: 0.3 }, itemStyle: { color: '#0ea5e9' }, lineStyle: { color: '#0ea5e9', width: 2 } }];
           break;
         }
         case 'funnel':
-          option.series = [{ type: 'funnel', left: '10%', top: 20, bottom: 20, width: '80%', data: seriesData.sort((a, b) => b.value - a.value), label: { show: true, position: 'inside', formatter: '{b}' }, itemStyle: { borderColor: 'hsl(var(--background))', borderWidth: 2 } }];
+          option.series = [{ type: 'funnel', left: '10%', top: 20, bottom: 20, width: '80%', data: seriesData.sort((a, b) => b.value - a.value), label: { show: true, position: 'inside', formatter: '{b}' }, itemStyle: { borderColor: '#0f172a', borderWidth: 2 } }];
           break;
         case 'treemap':
-          option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: 'hsl(var(--background))' } }];
+          option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: '#0f172a' } }];
           break;
         case 'waterfall': {
           const wfData = getWaterfallData(data);
@@ -888,12 +888,12 @@ export default function DashboardBuilder() {
               name: widget.title || 'KPI',
               type: 'gauge',
               max: gaugeMax,
-              progress: { show: true, width: 18, itemStyle: { color: 'hsl(var(--primary))' } },
-              axisLine: { lineStyle: { width: 18, color: [[1, 'hsl(var(--muted))']] } },
+              progress: { show: true, width: 18, itemStyle: { color: '#0ea5e9' } },
+              axisLine: { lineStyle: { width: 18, color: [[1, '#334155']] } },
               axisTick: { show: false },
               splitLine: { show: false },
               axisLabel: { show: false },
-              detail: { valueAnimation: true, fontSize: 30, color: 'hsl(var(--foreground))', formatter: '{value}' },
+              detail: { valueAnimation: true, fontSize: 30, color: '#f8fafc', formatter: '{value}' },
               data: [{ value: gaugeVal, name: widget.yAxis }]
             }]
           };
@@ -905,7 +905,7 @@ export default function DashboardBuilder() {
             type: 'sunburst',
             data: sunburstData,
             radius: [0, '90%'],
-            itemStyle: { borderRadius: 4, borderWidth: 2, borderColor: 'hsl(var(--background))' },
+            itemStyle: { borderRadius: 4, borderWidth: 2, borderColor: '#0f172a' },
             label: { show: false }
           }];
           break;
@@ -919,7 +919,7 @@ export default function DashboardBuilder() {
             emphasis: { focus: 'adjacency' },
             nodeAlign: 'justify',
             lineStyle: { color: 'source', curveness: 0.5 },
-            itemStyle: { borderColor: 'hsl(var(--background))', borderWidth: 1 }
+            itemStyle: { borderColor: '#0f172a', borderWidth: 1 }
           }];
           break;
         }
@@ -943,7 +943,7 @@ export default function DashboardBuilder() {
               type: 'line',
               yAxisIndex: 1,
               data: comboData.map(d => ({ value: d.lineValue, name: d.name })),
-              itemStyle: { color: 'hsl(var(--destructive))' },
+              itemStyle: { color: '#ef4444' },
               lineStyle: { width: 3 },
               symbolSize: 6
             }
