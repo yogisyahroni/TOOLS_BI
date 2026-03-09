@@ -1,10 +1,12 @@
 import React from 'react';
 import { useDatasets, useDatasetData, useCharts, useCreateChart, useDeleteChart } from '@/hooks/useApi';
+import ReactECharts from 'echarts-for-react';
 import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart3, LineChart, PieChart, AreaChart, ScatterChart as ScatterIcon,
-  Radar, TrendingUp, Plus, Trash2, Download, Save, Eye, Flame, Grid3X3, Box, GitBranch as SankeyIcon
+  Radar, TrendingUp, Plus, Trash2, Download, Save, Eye, Flame, Grid3X3, Box, GitBranch as SankeyIcon,
+  LayoutGrid, Gauge, SunMedium, Network, Combine
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart as ReLineChart, Line,
@@ -37,6 +39,11 @@ const CHART_TYPES = [
   { id: 'heatmap', label: 'Heatmap', icon: Flame },
   { id: 'boxplot', label: 'Box Plot', icon: Box },
   { id: 'horizontal_bar', label: 'H-Bar', icon: BarChart3 },
+  { id: 'stat', label: 'Stat', icon: LayoutGrid },
+  { id: 'gauge', label: 'Gauge', icon: Gauge },
+  { id: 'sunburst', label: 'Sunburst', icon: SunMedium },
+  { id: 'sankey', label: 'Sankey', icon: Network },
+  { id: 'combo', label: 'Combo', icon: Combine },
 ] as const;
 
 const COLORS = [
@@ -278,6 +285,126 @@ export default function ChartBuilder() {
       );
     }
 
+    if (chartType === 'stat') {
+      if (!dataset || !yAxis) return <EmptyChart msg="Pilih Dataset dan Y-Axis untuk menghitung KPI/Stat" />;
+      const sum = dataset.data.map((r: any) => Number(r[yAxis])).filter((n: any) => !isNaN(n)).reduce((a: number, b: number) => a + b, 0) || 0;
+      const count = dataset.data.map((r: any) => Number(r[yAxis])).filter((n: any) => !isNaN(n)).length || 0;
+      const avg = count > 0 ? sum / count : 0;
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-center">
+          <p className="text-5xl font-bold text-primary">{sum.toLocaleString()}</p>
+          <p className="text-base text-muted-foreground mt-2">Sum of {yAxis}</p>
+          <div className="flex gap-4 mt-4 text-sm text-muted-foreground">
+            <span>Count: {count.toLocaleString()}</span>
+            <span>Avg: {avg.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (chartType === 'gauge') {
+      if (!dataset || !yAxis) return <EmptyChart msg="Pilih Dataset dan Y-Axis untuk melihat Gauge" />;
+      const sum = dataset.data.map((r: any) => Number(r[yAxis])).filter((n: any) => !isNaN(n)).reduce((a: number, b: number) => a + b, 0) || 0;
+      const gaugeMax = sum > 0 ? Math.pow(10, Math.ceil(Math.log10(sum))) : 100;
+      const option = {
+        backgroundColor: 'transparent',
+        tooltip: { formatter: '{a} <br/>{b} : {c}' },
+        series: [{
+          name: chartTitle || 'KPI',
+          type: 'gauge',
+          max: gaugeMax,
+          progress: { show: true, width: 18, itemStyle: { color: '#0ea5e9' } },
+          axisLine: { lineStyle: { width: 18, color: [[1, '#334155']] } },
+          axisTick: { show: false },
+          splitLine: { show: false },
+          axisLabel: { show: false },
+          detail: { valueAnimation: true, fontSize: 30, color: '#f8fafc', formatter: '{value}' },
+          data: [{ value: sum, name: yAxis }]
+        }]
+      };
+      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
+    }
+
+    if (chartType === 'sunburst') {
+      if (!dataset || !xAxis || !groupBy || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, Y-Axis, dan Group By untuk Sunburst" />;
+      const groups = new Map<string, Map<string, number>>();
+      dataset.data.forEach((row: any) => {
+        const parent = String(row[xAxis] || 'Unknown');
+        const child = String(row[groupBy] || 'Unknown');
+        const val = Number(row[yAxis]) || 0;
+        if (!groups.has(parent)) groups.set(parent, new Map());
+        const childMap = groups.get(parent)!;
+        childMap.set(child, (childMap.get(child) || 0) + val);
+      });
+      const sunburstData = Array.from(groups.entries()).map(([parentName, childMap]) => ({
+        name: parentName,
+        children: Array.from(childMap.entries()).map(([childName, val]) => ({ name: childName, value: val }))
+      }));
+      const option = {
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'item', backgroundColor: '#0f172a', borderColor: '#334155', textStyle: { color: '#f8fafc' }, borderRadius: 8 },
+        series: [{ type: 'sunburst', data: sunburstData, radius: [0, '90%'], itemStyle: { borderRadius: 4, borderWidth: 2, borderColor: '#0f172a' }, label: { show: false } }]
+      };
+      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
+    }
+
+    if (chartType === 'sankey') {
+      if (!dataset || !xAxis || !groupBy || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, Y-Axis, dan Group By untuk Sankey" />;
+      const nodesSet = new Set<string>();
+      const linksMap = new Map<string, number>();
+      dataset.data.forEach((row: any) => {
+        const source = String(row[xAxis] || 'Unknown');
+        const target = String(row[groupBy] || 'Unknown');
+        const val = Number(row[yAxis]) || 0;
+        nodesSet.add(source);
+        nodesSet.add(target);
+        const key = `${source}->${target}`;
+        linksMap.set(key, (linksMap.get(key) || 0) + val);
+      });
+      const sankeyData = {
+        nodes: Array.from(nodesSet).map(name => ({ name })),
+        links: Array.from(linksMap.entries()).map(([key, value]) => { const [source, target] = key.split('->'); return { source, target, value }; })
+      };
+      const option = {
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'item', backgroundColor: '#0f172a', borderColor: '#334155', textStyle: { color: '#f8fafc' }, borderRadius: 8 },
+        series: [{ type: 'sankey', data: sankeyData.nodes, links: sankeyData.links, emphasis: { focus: 'adjacency' }, nodeAlign: 'justify', lineStyle: { color: 'source', curveness: 0.5 }, itemStyle: { borderColor: '#0f172a', borderWidth: 1 } }]
+      };
+      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
+    }
+
+    if (chartType === 'combo') {
+      if (!dataset || !xAxis || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, dan Y-Axis (serta opsional Group By) untuk Combo Chart" />;
+      const agg = new Map<string, { bar: number, line: number }>();
+      dataset.data.forEach((row: any) => {
+        const key = String(row[xAxis] || 'Unknown');
+        const barVal = Number(row[yAxis]) || 0;
+        const lineVal = groupBy ? (Number(row[groupBy]) || 0) : 0;
+        if (!agg.has(key)) agg.set(key, { bar: 0, line: 0 });
+        const current = agg.get(key)!;
+        current.bar += barVal;
+        current.line += lineVal;
+      });
+      const comboData = Array.from(agg.entries()).map(([name, vals]) => ({ name, barValue: vals.bar, lineValue: vals.line })).slice(0, 50);
+      const axisLabelStyle = { color: '#9ca3af', fontSize: 10 };
+      const splitLineStyle = { lineStyle: { color: '#374151', type: 'dashed' } };
+      const option = {
+        backgroundColor: 'transparent',
+        grid: { top: 30, right: 30, bottom: 30, left: 50, containLabel: true },
+        tooltip: { trigger: 'axis', backgroundColor: '#0f172a', borderColor: '#334155', textStyle: { color: '#f8fafc' }, borderRadius: 8, axisPointer: { type: 'shadow' } },
+        xAxis: { type: 'category', data: comboData.map(d => d.name), axisLabel: { ...axisLabelStyle, interval: 0, rotate: comboData.length > 5 ? 45 : 0 } },
+        yAxis: [
+          { type: 'value', name: yAxis, axisLabel: axisLabelStyle, splitLine: splitLineStyle },
+          { type: 'value', name: groupBy || '', axisLabel: axisLabelStyle, splitLine: { show: false } }
+        ],
+        series: [
+          { name: yAxis, type: 'bar', data: comboData.map((d, i) => ({ value: d.barValue, name: d.name, itemStyle: { color: COLORS[i % COLORS.length], borderRadius: [3, 3, 0, 0] } })) },
+          { name: groupBy || 'Secondary', type: 'line', yAxisIndex: 1, data: comboData.map(d => ({ value: d.lineValue, name: d.name })), itemStyle: { color: '#ef4444' }, lineStyle: { width: 3 }, symbolSize: 6 }
+        ]
+      };
+      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
+    }
+
     if (!chartData.length) return <EmptyChart />;
 
     const commonProps = { data: chartData, margin: { top: 20, right: 30, left: 20, bottom: 60 } };
@@ -341,8 +468,8 @@ export default function ChartBuilder() {
             <BarChart3 className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Chart Builder <HelpTooltip text="Buat visualisasi chart interaktif. Pilih tipe chart, dataset, sumbu X dan Y, lalu simpan atau ekspor sebagai PNG. Mendukung 12 tipe chart termasuk waterfall, heatmap, dan boxplot." /></h1>
-            <p className="text-muted-foreground">Create interactive visualizations — 12 chart types</p>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Explorer <HelpTooltip text="Buat visualisasi chart interaktif. Pilih tipe chart, dataset, sumbu X dan Y, lalu simpan atau ekspor. Mendukung 17 tipe chart termasuk waterfall, combo, dan sankey." /></h1>
+            <p className="text-muted-foreground">Interactive visual builder & data exploration tool</p>
           </div>
         </div>
       </motion.div>
@@ -351,8 +478,8 @@ export default function ChartBuilder() {
         {/* Config Panel */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-1 space-y-6">
           <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">Chart Type <HelpTooltip text="12 tipe: Bar, Line, Pie, Area, Scatter, Radar, Funnel, Treemap, Waterfall, Heatmap, Box Plot, Horizontal Bar." /></h3>
-            <div className="grid grid-cols-4 gap-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">Chart Type <HelpTooltip text="17 tipe: Bar, Line, Pie, Stat, Gauge, Sunburst, Sankey, Combo, dsb." /></h3>
+            <div className="grid grid-cols-4 lg:grid-cols-3 gap-2 h-64 overflow-y-auto pr-2 custom-scrollbar">
               {CHART_TYPES.map(ct => (
                 <button key={ct.id} onClick={() => setChartType(ct.id)}
                   className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all text-[10px] ${chartType === ct.id ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'}`}>
@@ -386,9 +513,9 @@ export default function ChartBuilder() {
                   <SelectContent>{numericColumns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              {(chartType === 'heatmap') && (
+              {['heatmap', 'sunburst', 'sankey', 'combo'].includes(chartType) && (
                 <div>
-                  <Label className="text-muted-foreground text-xs">Group By (Y-Axis Heatmap)</Label>
+                  <Label className="text-muted-foreground text-xs">Group By (Secondary / Node)</Label>
                   <Select value={groupBy} onValueChange={setGroupBy}>
                     <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select column" /></SelectTrigger>
                     <SelectContent>{columns.filter(c => c.name !== xAxis).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
