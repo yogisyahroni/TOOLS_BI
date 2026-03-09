@@ -110,10 +110,20 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            // Import useAuthStore dynamically to avoid circular dependencies
-            // and guarantee we read the latest Zustand persisted state.
-            const { useAuthStore } = await import('@/stores/authStore');
-            const tokenToUse = refreshToken || useAuthStore.getState().refreshToken;
+            // Fallback: If memory refreshToken is missing (race condition on refresh),
+            // read it directly from localStorage where Zustand writes it.
+            let tokenToUse = refreshToken;
+            if (!tokenToUse) {
+                try {
+                    const stored = localStorage.getItem('datalens-auth');
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        tokenToUse = parsed?.state?.refreshToken || null;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse auth from localStorage in interceptor', e);
+                }
+            }
 
             // Include refreshToken in body as fallback for strict 3rd-party cookie blockers
             const payload = tokenToUse ? { refreshToken: tokenToUse } : {};
