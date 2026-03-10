@@ -69,11 +69,13 @@ func (h *Hub) Run() {
 			log.Debug().Str("userId", client.UserID).Msg("WebSocket client registered")
 
 		case client := <-h.unregister:
+			// Ensure cleanup only happens once
+			client.closeConn()
+
 			h.mu.Lock()
 			// Remove from clients
 			if clients, ok := h.clients[client.UserID]; ok {
 				if _, exists := clients[client]; exists {
-					close(client.send)
 					delete(clients, client)
 					if len(clients) == 0 {
 						delete(h.clients, client.UserID)
@@ -90,7 +92,7 @@ func (h *Hub) Run() {
 				}
 			}
 			h.mu.Unlock()
-			log.Debug().Str("userId", client.UserID).Msg("WebSocket client unregistered")
+			log.Debug().Str("userId", client.UserID).Msg("WebSocket client unregistered and fully cleaned up")
 
 		case msg := <-h.clientMessages:
 			// Handle client messages (join_room, leave_room, cursor_move, yjs_update)

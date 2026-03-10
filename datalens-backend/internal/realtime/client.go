@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/gofiber/websocket/v2"
@@ -17,11 +18,14 @@ const (
 
 // Client is a single WebSocket connection to the hub.
 type Client struct {
-	UserID string
-	RoomID string
-	conn   *websocket.Conn
-	send   chan Event
-	hub    *Hub
+	UserID     string
+	RoomID     string
+	conn       *websocket.Conn
+	send       chan Event
+	hub        *Hub
+	closeOnce  sync.Once
+	isClosed   bool
+	clientLock sync.Mutex
 }
 
 func newClient(conn *websocket.Conn, userID string, hub *Hub) *Client {
@@ -43,8 +47,12 @@ func (c *Client) Pump() {
 // readPump handles incoming messages and heartbeats.
 func (c *Client) readPump() {
 	defer func() {
+		// Recover from panics inside readPump
+		if r := recover(); r != nil {
+			log.Error().Interface("panic", r).Str("userId", c.UserID).Msg("Recovered panic in readPump")
+		}
 		c.hub.unregister <- c
-		c.conn.Close()
+		c.closeConn()
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
@@ -88,34 +96,63 @@ func (c *Client) readPump() {
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		if r := recover(); r != nil {
+			log.Error().Interface("panic", r).Str("userId", c.UserID).Msg("Recovered panic in writePump")
+		}
 		ticker.Stop()
-		c.conn.Close()
+		c.closeConn()
 	}()
 
 	for {
 		select {
 		case event, ok := <-c.send:
+			c.clientLock.Lock()
+			if c.isClosed {
+				c.clientLock.Unlock()
+				return
+			}
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// Hub closed the channel
 				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.clientLock.Unlock()
 				return
 			}
 			data, err := json.Marshal(event)
 			if err != nil {
+				c.clientLock.Unlock()
 				log.Error().Err(err).Msg("Failed to marshal WebSocket event")
 				continue
 			}
 			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				c.clientLock.Unlock()
 				log.Debug().Err(err).Str("userId", c.UserID).Msg("WS write error")
 				return
 			}
+			c.clientLock.Unlock()
 
 		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			c.clientLock.Lock()
+			if c.isClosed {
+				c.clientLock.Unlock()
 				return
 			}
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				c.clientLock.Unlock()
+				return
+			}
+			c.clientLock.Unlock()
 		}
 	}
+}
+
+// closeConn safely closes the websocket connection exactly once
+func (c *Client) closeConn() {
+	c.closeOnce.Do(func() {
+		c.clientLock.Lock()
+		c.isClosed = true
+		c.clientLock.Unlock()
+		c.conn.Close()
+	})
 }

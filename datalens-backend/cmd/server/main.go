@@ -214,14 +214,14 @@ func main() {
 	v1.Get("/embed/view/:token/data/:datasetId", embedH.FetchEmbedData)
 	v1.Get("/embed/:token", dashboardH.GetDashboard)
 
-	// Webhook endpoint (custom auth via DB token, so bypasses JWT)
-	v1.Post("/webhooks/:id", webhookH.HandleWebhook)
+	// PERF-08: Strict rate limiter for expensive endpoints (5 req/min per IP).
+	uploadRateLimit := middleware.RateLimiter(rdb, 5, 60) // 5 req/min
+
+	// Webhook endpoint (custom auth via DB token, so bypasses JWT, but applied rate-limit for DDoS protection)
+	v1.Post("/webhooks/:id", uploadRateLimit, webhookH.HandleWebhook)
 
 	// Apply auth to all remaining routes
 	api := v1.Use(authRequired)
-
-	// PERF-08: Strict rate limiter for expensive endpoints (5 req/min per IP).
-	uploadRateLimit := middleware.RateLimiter(rdb, 5, 60) // 5 req/min
 
 	// Dataset routes
 	// app.Use("/api/v1/datasets", mw.Protected()) // Not needed, api group is protected
