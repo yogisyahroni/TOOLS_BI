@@ -317,6 +317,13 @@ export const reportTemplateApi = {
     list: () => api.get<{ data: UserReportTemplate[] }>('/report-templates'),
     create: (payload: UserReportTemplateCreate) => api.post<UserReportTemplate>('/report-templates', payload),
     delete: (id: string) => api.delete(`/report-templates/${id}`),
+    import: (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return api.post<UserReportTemplate>('/templates/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
 };
 
 // BUG-H2: Dataset Relationships (DB Diagram)
