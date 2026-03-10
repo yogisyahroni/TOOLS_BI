@@ -36,6 +36,11 @@ const stepTypes = [
   { value: 'aggregate', label: 'Aggregate', icon: Layers, description: 'Group and aggregate data' },
   { value: 'select', label: 'Select Columns', icon: CheckCircle, description: 'Select specific columns' },
   { value: 'sort', label: 'Sort', icon: ArrowRight, description: 'Sort data by column' },
+  { value: 'deduplicate', label: 'Remove Duplicates', icon: Layers, description: 'Remove duplicate rows' },
+  { value: 'parse_date', label: 'Parse Date', icon: Clock, description: 'Format and extract dates' },
+  { value: 'json_extract', label: 'JSON Extractor', icon: Layers, description: 'Extract value from JSON string' },
+  { value: 'cast_type', label: 'Type Casting', icon: Shuffle, description: 'Convert data types (e.g. String to Number)' },
+  { value: 'data_cleansing', label: 'Data Cleansing', icon: AlertCircle, description: 'Handle missing or null values' },
 ];
 
 // Execute ETL pipeline on data
@@ -130,6 +135,97 @@ function executePipeline(data: Record<string, any>[], steps: ETLStep[]): Record<
           const cmp = typeof av === 'number' ? av - Number(bv) : String(av).localeCompare(String(bv));
           return direction === 'desc' ? -cmp : cmp;
         });
+        break;
+      }
+      case 'deduplicate': {
+        const { columns } = config;
+        if (!columns || columns.length === 0) {
+          // Deduplicate entire row if no specific columns provided
+          const seen = new Set();
+          result = result.filter(row => {
+            const str = JSON.stringify(row);
+            if (seen.has(str)) return false;
+            seen.add(str);
+            return true;
+          });
+        } else {
+          const seen = new Set();
+          result = result.filter(row => {
+            const key = columns.map((c: string) => row[c]).join('|');
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
+        break;
+      }
+      case 'parse_date': {
+        const { column, newColumn, extract } = config; // extract could be 'year', 'month', 'day', 'iso'
+        if (!column) break;
+        const targetCol = newColumn || column;
+        result = result.map(row => {
+          const date = new Date(row[column]);
+          if (isNaN(date.getTime())) return row; // Keep original if invalid date
+
+          let newVal: string | number = date.toISOString();
+          if (extract === 'year') newVal = date.getFullYear();
+          else if (extract === 'month') newVal = date.getMonth() + 1;
+          else if (extract === 'day') newVal = date.getDate();
+          else if (extract === 'iso') newVal = date.toISOString();
+
+          return { ...row, [targetCol]: newVal };
+        });
+        break;
+      }
+      case 'json_extract': {
+        const { column, newColumn, jsonPath } = config;
+        if (!column || !jsonPath) break;
+        const targetCol = newColumn || `${column}_extracted`;
+        result = result.map(row => {
+          try {
+            const parsed = typeof row[column] === 'string' ? JSON.parse(row[column]) : row[column];
+            const newVal = parsed ? parsed[jsonPath] : null;
+            return { ...row, [targetCol]: newVal };
+          } catch {
+            return { ...row, [targetCol]: null };
+          }
+        });
+        break;
+      }
+      case 'cast_type': {
+        const { column, newColumn, targetType } = config;
+        if (!column || !targetType) break;
+        const targetCol = newColumn || column;
+        result = result.map(row => {
+          let newVal = row[column];
+          if (targetType === 'number') {
+            newVal = Number(newVal);
+            if (isNaN(newVal)) newVal = null;
+          } else if (targetType === 'string') {
+            newVal = newVal !== null && newVal !== undefined ? String(newVal) : '';
+          } else if (targetType === 'boolean') {
+            newVal = Boolean(newVal);
+          }
+          return { ...row, [targetCol]: newVal };
+        });
+        break;
+      }
+      case 'data_cleansing': {
+        const { column, action, fillValue } = config;
+        if (!column || !action) break;
+
+        if (action === 'drop_null') {
+          result = result.filter(row => row[column] !== null && row[column] !== undefined && row[column] !== '');
+        } else if (action === 'fill_null') {
+          result = result.map(row => {
+            if (row[column] === null || row[column] === undefined || row[column] === '') {
+              // Try to match type if value is roughly a number
+              const fill = isNaN(Number(fillValue)) ? fillValue : Number(fillValue);
+              return { ...row, [column]: fill };
+            }
+            return row;
+          });
+        }
         break;
       }
     }
@@ -312,6 +408,140 @@ function StepConfigEditor({
               </SelectContent>
             </Select>
           </div>
+        </div>
+      );
+
+    case 'deduplicate':
+      return (
+        <div>
+          <Label className="text-xs text-muted-foreground">Columns to Check (Leave empty to check entire row)</Label>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {columns.map(c => {
+              const selected = (config.columns || []).includes(c.name);
+              return (
+                <button
+                  key={c.name}
+                  onClick={() => {
+                    const cols = config.columns || [];
+                    onUpdate({ ...config, columns: selected ? cols.filter((x: string) => x !== c.name) : [...cols, c.name] });
+                  }}
+                  className={cn(
+                    'text-[10px] px-2 py-1 rounded-full border transition-colors',
+                    selected ? 'bg-primary/20 border-primary/30 text-primary' : 'bg-muted/30 border-border text-muted-foreground'
+                  )}
+                >
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+
+    case 'parse_date':
+      return (
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <Label className="text-xs text-muted-foreground">Date Column</Label>
+            <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
+              <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
+              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Extract</Label>
+            <Select value={config.extract || 'iso'} onValueChange={v => onUpdate({ ...config, extract: v })}>
+              <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="iso">Full ISO Date</SelectItem>
+                <SelectItem value="year">Year Only</SelectItem>
+                <SelectItem value="month">Month Only</SelectItem>
+                <SelectItem value="day">Day Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">New Column</Label>
+            <Input value={config.newColumn || ''} onChange={e => onUpdate({ ...config, newColumn: e.target.value })} placeholder="Replace Original" className="bg-muted/50 border-border h-8 text-xs" />
+          </div>
+        </div>
+      );
+
+    case 'json_extract':
+      return (
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <Label className="text-xs text-muted-foreground">JSON Column</Label>
+            <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
+              <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
+              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">JSON Key / Path</Label>
+            <Input value={config.jsonPath || ''} onChange={e => onUpdate({ ...config, jsonPath: e.target.value })} placeholder="e.g. details.id" className="bg-muted/50 border-border h-8 text-xs" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">New Column</Label>
+            <Input value={config.newColumn || ''} onChange={e => onUpdate({ ...config, newColumn: e.target.value })} placeholder="Default: [Col]_extracted" className="bg-muted/50 border-border h-8 text-xs" />
+          </div>
+        </div>
+      );
+
+    case 'cast_type':
+      return (
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <Label className="text-xs text-muted-foreground">Column</Label>
+            <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
+              <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
+              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Target Type</Label>
+            <Select value={config.targetType || 'string'} onValueChange={v => onUpdate({ ...config, targetType: v })}>
+              <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="string">Text (String)</SelectItem>
+                <SelectItem value="number">Number (Float/Int)</SelectItem>
+                <SelectItem value="boolean">Boolean</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">New Column</Label>
+            <Input value={config.newColumn || ''} onChange={e => onUpdate({ ...config, newColumn: e.target.value })} placeholder="Replace Original" className="bg-muted/50 border-border h-8 text-xs" />
+          </div>
+        </div>
+      );
+
+    case 'data_cleansing':
+      return (
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <Label className="text-xs text-muted-foreground">Column</Label>
+            <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
+              <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
+              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Action</Label>
+            <Select value={config.action || 'drop_null'} onValueChange={v => onUpdate({ ...config, action: v })}>
+              <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="drop_null">Drop Row if Null/Empty</SelectItem>
+                <SelectItem value="fill_null">Fill Null/Empty with Value</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {config.action === 'fill_null' && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Fill Value</Label>
+              <Input value={config.fillValue || ''} onChange={e => onUpdate({ ...config, fillValue: e.target.value })} placeholder="e.g. 0 or N/A" className="bg-muted/50 border-border h-8 text-xs" />
+            </div>
+          )}
         </div>
       );
 
@@ -505,7 +735,7 @@ export default function ETLPipelinePage() {
     const dsInfo = dataSets.map(ds => `"${ds.name}" (${ds.columns.map(c => `${c.name}:${c.type}`).join(', ')})`).join('; ');
     return `You are an ETL pipeline assistant for DataLens. Available datasets: ${dsInfo || 'none'}.
 
-Generate ETL pipeline steps as a JSON array. Each step has: type (filter|transform|aggregate|select|sort), and config object.
+Generate ETL pipeline steps as a JSON array. Each step has: type (filter|transform|aggregate|select|sort|deduplicate|parse_date|json_extract|cast_type|data_cleansing), and config object.
 
 Step configs:
 - filter: { "column": "col", "operator": "=|!=|>|<|>=|<=|contains", "value": "val" }
@@ -513,8 +743,13 @@ Step configs:
 - aggregate: { "groupBy": "col", "aggregations": [{ "column": "col", "function": "sum|avg|count|min|max", "alias": "name" }] }
 - select: { "columns": ["col1", "col2"] }
 - sort: { "column": "col", "direction": "asc|desc" }
+- deduplicate: { "columns": ["col1", "col2"] } (leave columns empty to deduplicate whole row)
+- parse_date: { "column": "col", "extract": "iso|year|month|day", "newColumn": "new_col" }
+- json_extract: { "column": "col", "jsonPath": "path.to.key", "newColumn": "new_col" }
+- cast_type: { "column": "col", "targetType": "string|number|boolean", "newColumn": "new_col" }
+- data_cleansing: { "column": "col", "action": "drop_null|fill_null", "fillValue": "val" }
 
-When the user asks in natural language, generate the appropriate steps. Return JSON array wrapped in your explanation.`;
+When the user asks in natural language, generate the appropriate steps. Return ONLY the JSON array.`;
   };
 
   return (
@@ -597,12 +832,21 @@ When the user asks in natural language, generate the appropriate steps. Return J
                     </div>
 
                     {/* Add Steps Buttons */}
-                    <div className="px-4 pb-3 flex items-center gap-2 flex-wrap">
-                      {stepTypes.map(st => (
-                        <Button key={st.value} variant="outline" size="sm" className="text-xs h-7" onClick={() => addStep(pipeline.id, st.value as ETLStep['type'])}>
-                          <st.icon className="w-3 h-3 mr-1" /> {st.label}
-                        </Button>
-                      ))}
+                    <div className="px-4 pb-3">
+                      <h4 className="text-xs font-semibold text-muted-foreground mb-2">Available Actions</h4>
+                      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                        {stepTypes.map(st => (
+                          <Button
+                            key={st.value}
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 shrink-0 whitespace-nowrap bg-muted/50 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
+                            onClick={() => addStep(pipeline.id, st.value as ETLStep['type'])}
+                          >
+                            <st.icon className="w-3 h-3 mr-1" /> {st.label}
+                          </Button>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Steps */}
