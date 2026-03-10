@@ -44,7 +44,6 @@ import ExportPDF from "./pages/ExportPDF";
 import DataRefresh from "./pages/DataRefresh";
 import ReportTemplates from "./pages/ReportTemplates";
 import Connections from "./pages/Connections";
-import ImportPage from "./pages/ImportPage";
 import NotFound from "./pages/NotFound";
 import DataConnectors from './pages/DataConnectors';
 
@@ -102,7 +101,6 @@ function ProtectedLayout() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/connections" element={<Connections />} />
-        <Route path="/import" element={<ImportPage />} />
         <Route path="/privacy" element={<DataPrivacy />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/not-found" replace />} />

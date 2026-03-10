@@ -135,7 +135,6 @@ func main() {
 	exportH := handlers.NewExportHandler(db)
 	etlH := handlers.NewETLHandler(db, hub)
 	schemaH := handlers.NewSchemaHandler(db)
-	importH := handlers.NewImportHandler(db)
 	// P1 BUG fixes: new handlers for backend-persisted bookmark/annotation/template/relationship
 	bookmarkH := handlers.NewBookmarkHandler(db)
 	annotationH := handlers.NewAnnotationHandler(db)
@@ -371,12 +370,6 @@ func main() {
 	conns.Post("/:id/create-dataset", schemaH.CreateDataset)
 	conns.Post("/:id/query", uploadRateLimit, schemaH.QueryConnection) // PERF-08: rate-limit external DB queries
 	conns.Delete("/:id", schemaH.DeleteConnection)
-
-	// File Import routes (.pbix / .twb / .twbx / .pptx)
-	importGrp := api.Group("/import")
-	importGrp.Get("/supported", importH.GetSupportedFormats)
-	importGrp.Post("/parse", importH.ParseFile)
-	importGrp.Post("/confirm", importH.ConfirmImport)
 
 	// P1 BUG fixes: backend-persistent routes
 	// BUG-H5: Bookmarks

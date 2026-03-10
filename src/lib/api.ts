@@ -576,61 +576,7 @@ export interface ConnectionCreate {
     schemaName?: string;
 }
 
-// ── Parser / Import types ─────────────────────────────────────────────────────
-export interface ParsedVisual {
-    type: string;
-    title: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    columns?: string[];
-}
 
-export interface ParsedPage {
-    name: string;
-    index: number;
-    width?: number;
-    height?: number;
-    visuals: ParsedVisual[];
-    rawNotes?: string;
-}
-
-export interface DataSource {
-    name: string;
-    type: string;
-    connection: string;
-}
-
-export interface ParsedReport {
-    title: string;
-    sourceType: string;
-    pages: ParsedPage[];
-    dataSources: DataSource[];
-    metadata?: Record<string, unknown>;
-    parsedAt: string;
-}
-
-
-// ── API helpers ───────────────────────────────────────────────────────────────
-
-export const importApi = {
-    supported: () => api.get<{ formats: string[] }>('/import/supported'),
-    parse: (file: File) => {
-        const fd = new FormData();
-        fd.append('file', file);
-        return api.post<{ parsed: ParsedReport; filename: string; sizeBytes: number }>('/import/parse', fd, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
-    },
-    confirm: (file: File) => {
-        const fd = new FormData();
-        fd.append('file', file);
-        return api.post<{ template: { id: string; name: string }; reports: unknown[]; parsed: ParsedReport; message: string }>('/import/confirm', fd, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
-    },
-};
 
 // ── P1 Types ──────────────────────────────────────────────────────────────────
 
