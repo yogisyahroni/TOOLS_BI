@@ -152,6 +152,7 @@ func main() {
 	queryH := handlers.NewQueryHandler(db)
 	actionH := handlers.NewActionHandler(db)
 	commentH := handlers.NewCommentHandler(db, hub)
+	migrationH := handlers.NewMigrationHandler(db, cfg.AI)
 
 	airbyteSvc := services.NewAirbyteService()
 	connectorH := handlers.NewConnectorHandler(airbyteSvc)
@@ -242,6 +243,15 @@ func main() {
 	dashboards.Put("/:id", dashboardH.UpdateDashboard)
 	dashboards.Delete("/:id", dashboardH.DeleteDashboard)
 	dashboards.Post("/:id/embed", dashboardH.GenerateEmbedToken)
+
+	// Templates routes
+	templates := api.Group("/templates")
+	templates.Get("/", templateH.ListTemplates)
+	templates.Post("/", templateH.CreateTemplate)
+	templates.Get("/:id", templateH.GetTemplate)
+	templates.Put("/:id", templateH.UpdateTemplate)
+	templates.Delete("/:id", templateH.DeleteTemplate)
+	templates.Post("/import", uploadRateLimit, migrationH.ImportBIFile)
 
 	// Report routes
 	reports := api.Group("/reports")

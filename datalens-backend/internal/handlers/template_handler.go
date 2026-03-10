@@ -79,6 +79,64 @@ func (h *TemplateHandler) CreateTemplate(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(tpl)
 }
 
+// GetTemplate retrieves a specific template by ID.
+// GET /api/v1/templates/:id
+func (h *TemplateHandler) GetTemplate(c *fiber.Ctx) error {
+	var template models.ReportTemplate
+	if err := h.db.Where("id = ?", c.Params("id")).First(&template).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Template not found"})
+	}
+	return c.JSON(template)
+}
+
+// UpdateTemplate updates an existing report template.
+// PUT /api/v1/templates/:id
+func (h *TemplateHandler) UpdateTemplate(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	var template models.ReportTemplate
+
+	// Find the existing template, ensuring the user owns it (or they are an admin, depending on rules)
+	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&template).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Template not found or unauthorized"})
+	}
+
+	var req struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Category    string          `json:"category"`
+		Pages       json.RawMessage `json:"pages"`
+		ColorScheme json.RawMessage `json:"colorScheme"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	if req.Name != "" {
+		template.Name = req.Name
+	}
+	if req.Description != "" {
+		template.Description = req.Description
+	}
+	if req.Category != "" {
+		template.Category = req.Category
+	}
+	if len(req.Pages) > 0 && string(req.Pages) != "null" {
+		template.Pages = req.Pages
+	}
+	if len(req.ColorScheme) > 0 && string(req.ColorScheme) != "null" {
+		template.ColorScheme = req.ColorScheme
+	}
+
+	template.UpdatedAt = time.Now()
+
+	if err := h.db.Save(&template).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update template"})
+	}
+
+	return c.JSON(template)
+}
+
 // DeleteTemplate deletes a user-owned template.
 // DELETE /api/v1/report-templates/:id
 func (h *TemplateHandler) DeleteTemplate(c *fiber.Ctx) error {

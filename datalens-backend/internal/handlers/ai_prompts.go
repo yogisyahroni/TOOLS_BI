@@ -289,6 +289,70 @@ Evaluate data quality across these dimensions:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BuildTemplateMigrationPrompt — converts raw XML/JSON BI layouts to DataLens JSON templates.
+// Used by Phase 9 BI File Migration handler.
+// ─────────────────────────────────────────────────────────────────────────────
+func BuildTemplateMigrationPrompt(fileType string, rawLayout string) string {
+	return `You are an expert BI Migration Engineer. Your task is to translate an external BI file's internal layout structure (` + fileType + `) into the internal DataLens "ReportTemplate" JSON schema.
+
+### Input Data
+This is the raw, extracted layout metadata (often XML or JSON). Some parts may be truncated. Focus on the available components:
+"""
+` + rawLayout + `
+"""
+
+### Objective
+Extract the pages, sections, and charts (visuals) found in the layout and map them to the following strict JSON schema. 
+
+### DataLens JSON Schema Requirements:
+{
+  "name": "Template Title (try to infer from data or use generic)",
+  "category": "Sales / HR / Finance / Dashboard (infer category)",
+  "description": "Brief description of what this dashboard displays",
+  "pages": [
+    {
+      "id": "page_id_1",
+      "title": "Page 1. Infer title from layout",
+      "sections": [
+        {
+          "id": "section_id_1",
+          "title": "Main Area",
+          "charts": [
+             {
+               "id": "chart_id",
+               "title": "Inferred Chart Title",
+               "type": "bar | line | pie | area | stat | gauge | table | scatter | sunburst | sankey",
+               "width": "full | half | third | quarter",
+               "config": {
+                 "xAxis": "inferred_column",
+                 "yAxis": ["inferred_column"],
+                 "orientation": "vertical"
+               }
+             }
+          ]
+        }
+      ]
+    }
+  ],
+  "colorScheme": {
+     "primary": "#hex",
+     "secondary": "#hex",
+     "accent": "#hex",
+     "background": "#hex"
+  }
+}
+
+### Rules:
+1. Output ONLY valid JSON matching the schema above.
+2. Do NOT wrap the JSON in markdown code blocks like ` + "```json" + ` or ` + "```" + `.
+3. If specific fields (like axes) are unreadable from the raw layout, infer reasonable defaults based on the chart type.
+4. Try to parse color palettes if they exist in the metadata; otherwise provide a professional default scheme.
+5. Keep chart types mapped strictly to the allowed list: bar, line, pie, area, stat, gauge, table, scatter, sunburst, sankey.
+
+Return ONLY the raw JSON string.`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
