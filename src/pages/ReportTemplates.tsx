@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Layout, Plus, Upload, Eye, Trash2, Copy, Download, FileText,
   BarChart3, PieChart, Table2, Target, TrendingUp, Layers,
-  ChevronRight, Sparkles, Filter, Import,
+  ChevronRight, Sparkles, Filter, Import, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { builtinTemplates } from '@/lib/builtinTemplates';
 import type { ReportTemplate, TemplateCategory, TemplateSource, TemplatePage, TemplateSection } from '@/types/data';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useReportTemplates, useCreateReportTemplate, useDeleteReportTemplate } from '@/hooks/useApi';
+import { useReportTemplates, useCreateReportTemplate, useDeleteReportTemplate, useImportTemplate } from '@/hooks/useApi';
 
 function genId() { return Math.random().toString(36).substring(2, 12); }
 
@@ -45,6 +45,7 @@ export default function ReportTemplates() {
   const { data: userTemplates = [] } = useReportTemplates();
   const createMut = useCreateReportTemplate();
   const deleteMut = useDeleteReportTemplate();
+  const importMut = useImportTemplate();
 
   // Merge builtin (client-side) with user templates from backend
   const allTemplates: ReportTemplate[] = [
@@ -68,84 +69,50 @@ export default function ReportTemplates() {
 
   const filtered = selectedCategory === 'all' ? allTemplates : allTemplates.filter(t => t.category === selectedCategory);
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const ext = file.name.split('.').pop()?.toLowerCase();
-    const reader = new FileReader();
 
-    reader.onload = (ev) => {
-      try {
-        let template: ReportTemplate;
-
-        if (ext === 'json') {
+    // Custom JSON templates parsed directly
+    if (ext === 'json') {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
           const parsed = JSON.parse(ev.target?.result as string);
-          template = {
-            ...parsed,
-            id: genId(),
+          createMut.mutate({
+            name: parsed.name || file.name,
+            description: parsed.description || 'Imported JSON template',
+            category: parsed.category || 'custom',
             source: parsed.source || importSource,
-            createdAt: new Date(),
-            isDefault: false,
-          };
-        } else if (ext === 'pptx' || ext === 'ppt') {
-          // PPTX parsing placeholder — in production, backend parses slides
-          template = {
-            id: genId(),
-            name: file.name.replace(/\.(pptx?|ppt)$/i, ''),
-            description: `Imported from ${file.name}. Slide structure will be parsed by backend.`,
-            category: 'custom',
-            source: 'pptx',
-            pages: [{
-              id: genId(), title: 'Slide 1 (Imported)',
-              sections: [
-                { id: genId(), type: 'text', title: 'Content from PPTX', width: 'full', config: { content: 'Imported from PPTX. Connect Go backend for full slide parsing with charts, tables, and images.' } },
-              ],
-            }],
-            colorScheme: { primary: '#2c3e50', secondary: '#3498db', accent: '#e74c3c', background: '#ffffff' },
-            createdAt: new Date(),
-          };
-        } else if (ext === 'pbix' || ext === 'twb' || ext === 'twbx') {
-          // Power BI / Tableau file — backend needed
-          const source: TemplateSource = ext === 'pbix' ? 'powerbi' : 'tableau';
-          template = {
-            id: genId(),
-            name: file.name.replace(/\.(pbix|twbx?|twb)$/i, ''),
-            description: `Imported from ${sourceLabels[source]}. Full parsing requires Go backend.`,
-            category: 'custom',
-            source,
-            pages: [{
-              id: genId(), title: `Page 1 (${sourceLabels[source]})`,
-              sections: [
-                { id: genId(), type: 'text', title: `${sourceLabels[source]} Import`, width: 'full', config: { content: `Template structure imported from ${file.name}. Connect Go backend for full visual/measure extraction.` } },
-              ],
-            }],
-            colorScheme: { primary: '#1e3a5f', secondary: '#f0c929', accent: '#4a90d9', background: '#ffffff' },
-            createdAt: new Date(),
-          };
-        } else {
-          toast({ title: 'Unsupported format', description: 'Supports: JSON, PPTX, PBIX, TWB/TWBX', variant: 'destructive' });
-          return;
+            pages: parsed.pages as unknown[],
+            colorScheme: parsed.colorScheme as Record<string, string>,
+          });
+          toast({ title: 'Template imported', description: `"${parsed.name}" added successfully.` });
+        } catch (err) {
+          toast({ title: 'Import error', description: 'Failed to parse JSON template file.', variant: 'destructive' });
         }
+      };
+      reader.readAsText(file);
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
 
-        // BUG-H4 FIX: persist imported template to backend
-        createMut.mutate({
-          name: template.name,
-          description: template.description,
-          category: template.category,
-          source: template.source,
-          pages: template.pages as unknown[],
-          colorScheme: template.colorScheme as Record<string, string>,
-        });
-        toast({ title: 'Template imported', description: `"${template.name}" added successfully.` });
-
-      } catch (err) {
-        toast({ title: 'Import error', description: 'Failed to parse template file.', variant: 'destructive' });
+    // Real BI files sent to Go AI backend
+    if (['pptx', 'ppt', 'pbix', 'twb', 'twbx'].includes(ext || '')) {
+      try {
+        await importMut.mutateAsync(file);
+        toast({ title: 'Import successful', description: `Template parsed and saved from ${file.name}` });
+      } catch (err: any) {
+        toast({ title: 'Import failed', description: err.response?.data?.error || err.message || 'Failed to parse BI file', variant: 'destructive' });
+      } finally {
+        if (fileRef.current) fileRef.current.value = '';
       }
-    };
-
-    reader.readAsText(file);
-    if (fileRef.current) fileRef.current.value = '';
+    } else {
+      toast({ title: 'Unsupported format', description: 'Supports: JSON, PPTX, PBIX, TWB/TWBX', variant: 'destructive' });
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
   const duplicateTemplate = (tpl: ReportTemplate) => {
@@ -212,7 +179,10 @@ export default function ReportTemplates() {
 
           <Dialog>
             <DialogTrigger asChild>
-              <Button variant="outline"><Upload className="w-4 h-4 mr-2" /> Import Template</Button>
+              <Button variant="outline" disabled={importMut.isPending}>
+                {importMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                {importMut.isPending ? 'Processing AI Import...' : 'Import Template'}
+              </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Import Template</DialogTitle></DialogHeader>
@@ -233,10 +203,13 @@ export default function ReportTemplates() {
                     </button>
                   ))}
                 </div>
-                <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <p className="text-xs text-muted-foreground">
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                  <p className="text-xs text-primary font-medium">
                     <Sparkles className="w-3 h-3 inline mr-1" />
-                    Parsing penuh file PBIX, TWB, dan PPTX memerlukan Go backend. Saat ini, metadata template akan diekstrak dan struktur layout dibuat otomatis.
+                    AI-Powered Migration
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    File PBIX, TWB, atau PPTX akan dikirim ke Go Backend. Sistem mengekstrak layout, kemudian AI (LLM) akan secara otomatis menerjemahkan strukturnya ke dalam format JSON DataLens Template List. Proses ini membutuhkan sekitar 10-30 detik tergantung ukuran visualisasi.
                   </p>
                 </div>
               </div>

@@ -486,6 +486,14 @@ export function useCreateReportTemplate() {
     });
 }
 
+export function useImportTemplate() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (file: File) => reportTemplateApi.import(file).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['report-templates'] }),
+    });
+}
+
 export function useDeleteReportTemplate() {
     const qc = useQueryClient();
     return useMutation({
