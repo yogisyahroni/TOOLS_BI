@@ -152,6 +152,7 @@ func SupportedTypes() []DBTypeInfo {
 		{ID: "azure-sql", Label: "Azure SQL", DefaultPort: 1433, Icon: "db-azure"},
 		{ID: "sqlite", Label: "SQLite", DefaultPort: 0, Icon: "db-sqlite"},
 		{ID: "clickhouse", Label: "ClickHouse", DefaultPort: 9000, Icon: "db-clickhouse"},
+		{ID: "webhook", Label: "Webhook", DefaultPort: 0, Icon: "webhook", Note: "Real-time data ingestion via HTTP POST"},
 	}
 }
 

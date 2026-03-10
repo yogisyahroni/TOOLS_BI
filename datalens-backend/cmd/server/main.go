@@ -152,6 +152,7 @@ func main() {
 	actionH := handlers.NewActionHandler(db)
 	commentH := handlers.NewCommentHandler(db, hub)
 	migrationH := handlers.NewMigrationHandler(db, cfg.AI)
+	webhookH := handlers.NewWebhookHandler(db)
 
 	// --- Fiber App ---
 	app := fiber.New(fiber.Config{
@@ -211,7 +212,10 @@ func main() {
 	// Public embed endpoints (no auth)
 	v1.Get("/embed/view/:token", embedH.ViewEmbed)
 	v1.Get("/embed/view/:token/data/:datasetId", embedH.FetchEmbedData)
-	v1.Get("/embed/:token", dashboardH.GetEmbed)
+	v1.Get("/embed/:token", dashboardH.GetDashboard)
+
+	// Webhook endpoint (custom auth via DB token, so bypasses JWT)
+	v1.Post("/webhooks/:id", webhookH.HandleWebhook)
 
 	// Apply auth to all remaining routes
 	api := v1.Use(authRequired)
@@ -354,6 +358,7 @@ func main() {
 	conns.Get("/", schemaH.ListConnections)
 	conns.Get("/types", schemaH.GetSupportedTypes) // must be before /:id
 	conns.Post("/", schemaH.CreateConnection)
+	conns.Get("/:id/token", schemaH.GetWebhookToken)
 	conns.Post("/:id/test", schemaH.TestConnection)
 	conns.Get("/:id/schema", schemaH.GetSchema)
 	conns.Post("/:id/sync", schemaH.SyncSchema)

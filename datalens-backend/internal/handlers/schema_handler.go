@@ -75,6 +75,13 @@ func (h *SchemaHandler) CreateConnection(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name and dbType are required"})
 	}
 
+	if req.DBType == "webhook" {
+		req.Host = "n/a"
+		req.DatabaseName = "n/a"
+		req.Username = "webhook"
+		req.Password = uuid.New().String()
+	}
+
 	// Look up default port for this DB type
 	if req.Port == 0 {
 		for _, t := range connectors.SupportedTypes() {
@@ -125,6 +132,16 @@ func (h *SchemaHandler) TestConnection(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Connection not found"})
 	}
 
+	if conn.DBType == "webhook" {
+		now := time.Now()
+		h.db.Model(conn).Update("last_synced_at", &now)
+		return c.JSON(fiber.Map{
+			"status":    "connected",
+			"driver":    "webhook",
+			"latencyMs": 0,
+		})
+	}
+
 	opts := connectors.FromDBConnection(conn, conn.PasswordEncrypted)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -161,6 +178,16 @@ func (h *SchemaHandler) SyncSchema(c *fiber.Ctx) error {
 	conn, err := h.loadConn(c.Params("id"), userID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Connection not found"})
+	}
+
+	if conn.DBType == "webhook" {
+		now := time.Now()
+		h.db.Model(conn).Update("last_synced_at", &now)
+		return c.JSON(fiber.Map{
+			"message":  "Webhooks sync automatically upon receiving data.",
+			"tables":   0,
+			"syncedAt": now,
+		})
 	}
 
 	opts := connectors.FromDBConnection(conn, conn.PasswordEncrypted)
@@ -246,6 +273,27 @@ func (h *SchemaHandler) GetSchema(c *fiber.Ctx) error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/connections/:id/token
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GetWebhookToken returns the authentication token for a webhook connection.
+func (h *SchemaHandler) GetWebhookToken(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	conn, err := h.loadConn(c.Params("id"), userID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Connection not found"})
+	}
+
+	if conn.DBType != "webhook" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Token retrieval is only available for webhook connections"})
+	}
+
+	return c.JSON(fiber.Map{
+		"token": conn.PasswordEncrypted,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/connections/:id/create-dataset
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -320,6 +368,10 @@ func (h *SchemaHandler) QueryConnection(c *fiber.Ctx) error {
 	}
 	if req.Limit <= 0 || req.Limit > 10000 {
 		req.Limit = 500
+	}
+
+	if conn.DBType == "webhook" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Webhooks cannot be queried directly. Query their datasets instead."})
 	}
 
 	opts := connectors.FromDBConnection(conn, conn.PasswordEncrypted)

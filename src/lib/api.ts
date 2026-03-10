@@ -287,6 +287,7 @@ export const pipelineApi = {
 export const connectionApi = {
     list: () => api.get<{ data: DBConnection[] }>('/connections'),
     create: (payload: ConnectionCreate) => api.post<DBConnection>('/connections', payload),
+    token: (id: string) => api.get<{ token: string }>(`/connections/${id}/token`).then((res) => res.data),
     test: (id: string) => api.post<{ status: string; latencyMs: number }>(`/connections/${id}/test`).then((res) => res.data),
     schema: (id: string) => api.get<{ data: unknown[] }>(`/connections/${id}/schema`),
     sync: (id: string) =>

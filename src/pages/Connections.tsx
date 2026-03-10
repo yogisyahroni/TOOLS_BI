@@ -33,6 +33,7 @@ const DB_META: Record<string, { color: string; emoji: string }> = {
     'azure-sql': { color: '#0079D7', emoji: '☁️' },
     sqlite: { color: '#8CB4FF', emoji: '📁' },
     clickhouse: { color: '#FFCC01', emoji: '🖱' },
+    webhook: { color: '#E91E63', emoji: '🪝' },
 };
 
 const dbMeta = (type: string) => DB_META[type.toLowerCase()] ?? { color: '#6366f1', emoji: '🗄' };
@@ -79,8 +80,39 @@ function useConnectionSchema(connectionId: string | null) {
     return useQuery<TableInfo[]>({
         queryKey: ['connection-schema', connectionId],
         queryFn: () => connectionApi.schema(connectionId!).then((r: any) => r.data.data),
-        enabled: !!connectionId,
+        enabled: !!connectionId && connectionId !== 'webhook',
     });
+}
+
+// ─── Webhook Details Component ───────────────────────────────────────────────
+function WebhookDetails({ connId }: { connId: string }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['webhook-token', connId],
+        queryFn: () => connectionApi.token(connId)
+    });
+
+    if (isLoading) return <Loader2 className="w-4 h-4 animate-spin mt-2 text-muted-foreground" />;
+
+    const baseUrl = window.location.origin;
+
+    return (
+        <div className="mt-3 p-3 bg-muted/50 rounded-lg text-xs space-y-2 text-muted-foreground">
+            <p className="font-medium text-foreground">Webhook Endpoint Configuration:</p>
+            <div className="flex flex-col gap-1">
+                <span><strong>URL:</strong></span>
+                <code className="px-2 py-1 bg-background border border-border rounded truncate select-all">
+                    {baseUrl}/api/v1/webhooks/{connId}
+                </code>
+            </div>
+            <div className="flex flex-col gap-1">
+                <span><strong>Authorization Header:</strong></span>
+                <code className="px-2 py-1 bg-background border border-border rounded truncate select-all">
+                    Bearer {data?.token}
+                </code>
+            </div>
+            <p className="italic pt-2">Send a POST request with a JSON array or object. The table schema will be inferred automatically from the first payload.</p>
+        </div>
+    );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -254,21 +286,25 @@ export default function ConnectionsPage() {
                                         </button>
                                     </div>
 
-                                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                                        <Server className="w-3.5 h-3.5" />
-                                        <span>{conn.databaseName}</span>
-                                        <span className="mx-1">·</span>
-                                        <Shield className="w-3.5 h-3.5" />
-                                        <span>{conn.sslMode}</span>
-                                    </div>
+                                    {conn.dbType !== 'webhook' && (
+                                        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                            <Server className="w-3.5 h-3.5" />
+                                            <span>{conn.databaseName}</span>
+                                            <span className="mx-1">·</span>
+                                            <Shield className="w-3.5 h-3.5" />
+                                            <span>{conn.sslMode}</span>
+                                        </div>
+                                    )}
 
                                     {/* Actions */}
                                     <div className="mt-4 flex flex-wrap gap-2">
-                                        <button onClick={() => handleTest(conn.id)} disabled={testingId === conn.id}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition disabled:opacity-50">
-                                            {testingId === conn.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                                            Test
-                                        </button>
+                                        {conn.dbType !== 'webhook' && (
+                                            <button onClick={() => handleTest(conn.id)} disabled={testingId === conn.id}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition disabled:opacity-50">
+                                                {testingId === conn.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                                                Test
+                                            </button>
+                                        )}
 
                                         <button onClick={() => handleSync(conn.id)} disabled={syncingId === conn.id}
                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition disabled:opacity-50">
@@ -276,17 +312,21 @@ export default function ConnectionsPage() {
                                             Sync Schema
                                         </button>
 
-                                        <button onClick={() => { setQueryConnId(isQueryOpen ? null : conn.id); setQueryResult(null); }}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 transition">
-                                            <Code2 className="w-3.5 h-3.5" />
-                                            Query
-                                        </button>
+                                        {conn.dbType !== 'webhook' && (
+                                            <button onClick={() => { setQueryConnId(isQueryOpen ? null : conn.id); setQueryResult(null); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 transition">
+                                                <Code2 className="w-3.5 h-3.5" />
+                                                Query
+                                            </button>
+                                        )}
 
-                                        <button onClick={() => { setSelectedConnection(conn.id); setShowSchemaDialog(true); }}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 transition">
-                                            <Search className="w-3.5 h-3.5" />
-                                            Schema
-                                        </button>
+                                        {conn.dbType !== 'webhook' && (
+                                            <button onClick={() => { setSelectedConnection(conn.id); setShowSchemaDialog(true); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 transition">
+                                                <Search className="w-3.5 h-3.5" />
+                                                Schema
+                                            </button>
+                                        )}
 
                                         <button onClick={() => setExpandedId(expanded ? null : conn.id)}
                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition ml-auto">
@@ -295,17 +335,20 @@ export default function ConnectionsPage() {
                                         </button>
                                     </div>
 
-                                    {/* Expanded details */}
                                     <AnimatePresence>
                                         {expanded && (
                                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
                                                 exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                                                <div className="mt-3 p-3 bg-muted/50 rounded-lg text-xs space-y-1 text-muted-foreground">
-                                                    <p><span className="font-medium">Schema:</span> {conn.schemaName}</p>
-                                                    <p><span className="font-medium">Username:</span> {conn.username}</p>
-                                                    <p><span className="font-medium">Active:</span> {conn.isActive ? 'Yes' : 'No'}</p>
-                                                    <p><span className="font-medium">Last Synced:</span> {conn.lastSyncedAt ? new Date(conn.lastSyncedAt).toLocaleString() : 'Never'}</p>
-                                                </div>
+                                                {conn.dbType === 'webhook' ? (
+                                                    <WebhookDetails connId={conn.id} />
+                                                ) : (
+                                                    <div className="mt-3 p-3 bg-muted/50 rounded-lg text-xs space-y-1 text-muted-foreground">
+                                                        <p><span className="font-medium">Schema:</span> {conn.schemaName}</p>
+                                                        <p><span className="font-medium">Username:</span> {conn.username}</p>
+                                                        <p><span className="font-medium">Active:</span> {conn.isActive ? 'Yes' : 'No'}</p>
+                                                        <p><span className="font-medium">Last Synced:</span> {conn.lastSyncedAt ? new Date(conn.lastSyncedAt).toLocaleString() : 'Never'}</p>
+                                                    </div>
+                                                )}
                                             </motion.div>
                                         )}
 
@@ -529,60 +572,62 @@ function AddConnectionModal({
                     </div>
 
                     {/* Connection fields */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2">
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Host</label>
-                            <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                placeholder={form.dbType === 'supabase' ? 'db.abc123.supabase.co' : 'localhost'}
-                                value={form.host} onChange={e => set('host', e.target.value)} />
-                        </div>
+                    {form.dbType !== 'webhook' && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2">
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">Host</label>
+                                <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    placeholder={form.dbType === 'supabase' ? 'db.abc123.supabase.co' : 'localhost'}
+                                    value={form.host} onChange={e => set('host', e.target.value)} />
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Port</label>
-                            <input type="number" className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                value={form.port} onChange={e => set('port', Number(e.target.value))} />
-                        </div>
+                            <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">Port</label>
+                                <input type="number" className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    value={form.port} onChange={e => set('port', Number(e.target.value))} />
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Database name</label>
-                            <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                placeholder="postgres" value={form.databaseName} onChange={e => set('databaseName', e.target.value)} />
-                        </div>
+                            <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">Database name</label>
+                                <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    placeholder="postgres" value={form.databaseName} onChange={e => set('databaseName', e.target.value)} />
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Username</label>
-                            <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                placeholder="postgres" value={form.username} onChange={e => set('username', e.target.value)} />
-                        </div>
+                            <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">Username</label>
+                                <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    placeholder="postgres" value={form.username} onChange={e => set('username', e.target.value)} />
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Password</label>
-                            <input type="password" className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                value={form.password} onChange={e => set('password', e.target.value)} />
-                        </div>
+                            <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">Password</label>
+                                <input type="password" className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    value={form.password} onChange={e => set('password', e.target.value)} />
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">SSL Mode</label>
-                            <select className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                value={form.sslMode} onChange={e => set('sslMode', e.target.value)}>
-                                <option value="disable">disable</option>
-                                <option value="prefer">prefer</option>
-                                <option value="require">require</option>
-                            </select>
-                        </div>
+                            <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">SSL Mode</label>
+                                <select className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    value={form.sslMode} onChange={e => set('sslMode', e.target.value)}>
+                                    <option value="disable">disable</option>
+                                    <option value="prefer">prefer</option>
+                                    <option value="require">require</option>
+                                </select>
+                            </div>
 
-                        <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Schema</label>
-                            <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                placeholder="public" value={form.schemaName} onChange={e => set('schemaName', e.target.value)} />
+                            <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">Schema</label>
+                                <input className="w-full px-3 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    placeholder="public" value={form.schemaName} onChange={e => set('schemaName', e.target.value)} />
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 <div className="p-6 border-t border-border flex items-center justify-end gap-3">
                     <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted transition">Cancel</button>
                     <button
-                        disabled={isSaving || !form.name || !form.host}
+                        disabled={isSaving || !form.name || (form.dbType !== 'webhook' && !form.host)}
                         onClick={() => onSave(form)}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-sm font-semibold hover:opacity-90 active:scale-95 transition disabled:opacity-50">
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
