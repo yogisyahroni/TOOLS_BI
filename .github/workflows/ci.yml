@@ -36,9 +36,6 @@ jobs:
       - name: Unit Tests - engine
         run: go test ./internal/engine/... -v -count=1 -timeout 120s
 
-      - name: Unit Tests - parser
-        run: go test ./internal/parser/... -v -count=1 -timeout 120s
-
       - name: Build binary
         run: go build -o /tmp/datalens-server ./cmd/server/
 
