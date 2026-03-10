@@ -15,7 +15,7 @@ import (
 	"datalens/internal/models"
 	"datalens/internal/realtime"
 	"datalens/internal/scheduler"
-	"datalens/internal/services"
+
 	"datalens/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
@@ -153,9 +153,6 @@ func main() {
 	commentH := handlers.NewCommentHandler(db, hub)
 	migrationH := handlers.NewMigrationHandler(db, cfg.AI)
 
-	airbyteSvc := services.NewAirbyteService()
-	connectorH := handlers.NewConnectorHandler(airbyteSvc)
-
 	// --- Fiber App ---
 	app := fiber.New(fiber.Config{
 		AppName:      "DataLens API v1.0",
@@ -291,13 +288,6 @@ func main() {
 	comments.Get("/", commentH.GetComments)
 	comments.Post("/", commentH.CreateComment)
 	comments.Delete("/:id", commentH.DeleteComment)
-
-	// Connector routes (Airbyte Mock Integration)
-	connectors := api.Group("/connectors")
-	connectors.Get("/catalog", connectorH.GetCatalog)
-	connectors.Get("/active", connectorH.GetActive)
-	connectors.Post("/setup", connectorH.SetupConnection)
-	connectors.Post("/:id/sync", connectorH.TriggerSync)
 
 	// Alert routes
 	alerts := api.Group("/alerts")

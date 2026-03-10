@@ -45,7 +45,7 @@ import DataRefresh from "./pages/DataRefresh";
 import ReportTemplates from "./pages/ReportTemplates";
 import Connections from "./pages/Connections";
 import NotFound from "./pages/NotFound";
-import DataConnectors from './pages/DataConnectors';
+
 
 import EmbedViewer from "./pages/EmbedViewer";
 
@@ -72,7 +72,7 @@ function ProtectedLayout() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/upload" element={<UploadData />} />
         <Route path="/datasets" element={<Datasets />} />
-        <Route path="/connectors" element={<DataConnectors />} />
+
         <Route path="/explorer" element={<DataExplorer />} />
         <Route path="/ask-data" element={<AskData />} />
         <Route path="/pivot" element={<PivotTable />} />
