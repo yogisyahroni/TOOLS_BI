@@ -277,7 +277,9 @@ export default function ConnectionsPage() {
                                             </div>
                                             <div>
                                                 <p className="font-semibold text-foreground">{conn.name}</p>
-                                                <p className="text-xs text-muted-foreground capitalize">{conn.dbType} · {conn.host}:{conn.port}</p>
+                                                <p className="text-xs text-muted-foreground capitalize">
+                                                    {conn.dbType === 'webhook' ? 'Push-based Integration' : `${conn.dbType} · ${conn.host}:${conn.port}`}
+                                                </p>
                                             </div>
                                         </div>
                                         <button onClick={() => deleteMut.mutate(conn.id)}
@@ -306,11 +308,13 @@ export default function ConnectionsPage() {
                                             </button>
                                         )}
 
-                                        <button onClick={() => handleSync(conn.id)} disabled={syncingId === conn.id}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition disabled:opacity-50">
-                                            {syncingId === conn.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                            Sync Schema
-                                        </button>
+                                        {conn.dbType !== 'webhook' && (
+                                            <button onClick={() => handleSync(conn.id)} disabled={syncingId === conn.id}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition disabled:opacity-50">
+                                                {syncingId === conn.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                                                Sync Schema
+                                            </button>
+                                        )}
 
                                         {conn.dbType !== 'webhook' && (
                                             <button onClick={() => { setQueryConnId(isQueryOpen ? null : conn.id); setQueryResult(null); }}
