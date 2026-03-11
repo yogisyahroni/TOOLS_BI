@@ -15,6 +15,7 @@ import type { ETLPipeline as ETLPipelineType, ETLStep } from '@/types/data';
 import { cn } from '@/lib/utils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import Papa from 'papaparse';
+import { useDataWorker } from '@/hooks/useDataWorker';
 import {
   useDatasets,
   usePipelines,
@@ -43,196 +44,7 @@ const stepTypes = [
   { value: 'data_cleansing', label: 'Data Cleansing', icon: AlertCircle, description: 'Handle missing or null values' },
 ];
 
-// Execute ETL pipeline on data
-function executePipeline(data: Record<string, any>[], steps: ETLStep[]): Record<string, any>[] {
-  let result = [...data];
-
-  for (const step of steps) {
-    const { type, config } = step;
-
-    switch (type) {
-      case 'filter': {
-        const { column, operator, value } = config;
-        if (!column || !operator) break;
-        result = result.filter(row => {
-          const rowVal = row[column];
-          const cmpVal = isNaN(Number(value)) ? value : Number(value);
-          const rowNum = Number(rowVal);
-          switch (operator) {
-            case '=': return String(rowVal) === String(value);
-            case '!=': return String(rowVal) !== String(value);
-            case '>': return rowNum > Number(cmpVal);
-            case '<': return rowNum < Number(cmpVal);
-            case '>=': return rowNum >= Number(cmpVal);
-            case '<=': return rowNum <= Number(cmpVal);
-            case 'contains': return String(rowVal).toLowerCase().includes(String(value).toLowerCase());
-            default: return true;
-          }
-        });
-        break;
-      }
-      case 'transform': {
-        const { column, operation, newColumn, operand } = config;
-        if (!column || !operation) break;
-        const targetCol = newColumn || column;
-        result = result.map(row => {
-          const val = row[column];
-          let newVal = val;
-          switch (operation) {
-            case 'uppercase': newVal = String(val).toUpperCase(); break;
-            case 'lowercase': newVal = String(val).toLowerCase(); break;
-            case 'trim': newVal = String(val).trim(); break;
-            case 'round': newVal = Math.round(Number(val)); break;
-            case 'abs': newVal = Math.abs(Number(val)); break;
-            case 'add': newVal = Number(val) + Number(operand || 0); break;
-            case 'multiply': newVal = Number(val) * Number(operand || 1); break;
-          }
-          return { ...row, [targetCol]: newVal };
-        });
-        break;
-      }
-      case 'aggregate': {
-        const { groupBy, aggregations } = config;
-        if (!groupBy || !aggregations?.length) break;
-        const groups = new Map<string, Record<string, any>[]>();
-        result.forEach(row => {
-          const key = String(row[groupBy]);
-          if (!groups.has(key)) groups.set(key, []);
-          groups.get(key)!.push(row);
-        });
-        result = Array.from(groups.entries()).map(([key, rows]) => {
-          const aggRow: Record<string, any> = { [groupBy]: key };
-          for (const agg of aggregations) {
-            const vals = rows.map(r => Number(r[agg.column])).filter(n => !isNaN(n));
-            const alias = agg.alias || `${agg.function}_${agg.column}`;
-            switch (agg.function) {
-              case 'sum': aggRow[alias] = vals.reduce((a: number, b: number) => a + b, 0); break;
-              case 'avg': aggRow[alias] = vals.length ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : 0; break;
-              case 'count': aggRow[alias] = rows.length; break;
-              case 'min': aggRow[alias] = vals.length ? Math.min(...vals) : 0; break;
-              case 'max': aggRow[alias] = vals.length ? Math.max(...vals) : 0; break;
-            }
-          }
-          return aggRow;
-        });
-        break;
-      }
-      case 'select': {
-        const { columns } = config;
-        if (!columns?.length) break;
-        result = result.map(row => {
-          const newRow: Record<string, any> = {};
-          columns.forEach((c: string) => { if (c in row) newRow[c] = row[c]; });
-          return newRow;
-        });
-        break;
-      }
-      case 'sort': {
-        const { column, direction } = config;
-        if (!column) break;
-        result.sort((a, b) => {
-          const av = a[column], bv = b[column];
-          const cmp = typeof av === 'number' ? av - Number(bv) : String(av).localeCompare(String(bv));
-          return direction === 'desc' ? -cmp : cmp;
-        });
-        break;
-      }
-      case 'deduplicate': {
-        const { columns } = config;
-        if (!columns || columns.length === 0) {
-          // Deduplicate entire row if no specific columns provided
-          const seen = new Set();
-          result = result.filter(row => {
-            const str = JSON.stringify(row);
-            if (seen.has(str)) return false;
-            seen.add(str);
-            return true;
-          });
-        } else {
-          const seen = new Set();
-          result = result.filter(row => {
-            const key = columns.map((c: string) => row[c]).join('|');
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-        }
-        break;
-      }
-      case 'parse_date': {
-        const { column, newColumn, extract } = config; // extract could be 'year', 'month', 'day', 'iso'
-        if (!column) break;
-        const targetCol = newColumn || column;
-        result = result.map(row => {
-          const date = new Date(row[column]);
-          if (isNaN(date.getTime())) return row; // Keep original if invalid date
-
-          let newVal: string | number = date.toISOString();
-          if (extract === 'year') newVal = date.getFullYear();
-          else if (extract === 'month') newVal = date.getMonth() + 1;
-          else if (extract === 'day') newVal = date.getDate();
-          else if (extract === 'iso') newVal = date.toISOString();
-
-          return { ...row, [targetCol]: newVal };
-        });
-        break;
-      }
-      case 'json_extract': {
-        const { column, newColumn, jsonPath } = config;
-        if (!column || !jsonPath) break;
-        const targetCol = newColumn || `${column}_extracted`;
-        result = result.map(row => {
-          try {
-            const parsed = typeof row[column] === 'string' ? JSON.parse(row[column]) : row[column];
-            const newVal = parsed ? parsed[jsonPath] : null;
-            return { ...row, [targetCol]: newVal };
-          } catch {
-            return { ...row, [targetCol]: null };
-          }
-        });
-        break;
-      }
-      case 'cast_type': {
-        const { column, newColumn, targetType } = config;
-        if (!column || !targetType) break;
-        const targetCol = newColumn || column;
-        result = result.map(row => {
-          let newVal = row[column];
-          if (targetType === 'number') {
-            newVal = Number(newVal);
-            if (isNaN(newVal)) newVal = null;
-          } else if (targetType === 'string') {
-            newVal = newVal !== null && newVal !== undefined ? String(newVal) : '';
-          } else if (targetType === 'boolean') {
-            newVal = Boolean(newVal);
-          }
-          return { ...row, [targetCol]: newVal };
-        });
-        break;
-      }
-      case 'data_cleansing': {
-        const { column, action, fillValue } = config;
-        if (!column || !action) break;
-
-        if (action === 'drop_null') {
-          result = result.filter(row => row[column] !== null && row[column] !== undefined && row[column] !== '');
-        } else if (action === 'fill_null') {
-          result = result.map(row => {
-            if (row[column] === null || row[column] === undefined || row[column] === '') {
-              // Try to match type if value is roughly a number
-              const fill = isNaN(Number(fillValue)) ? fillValue : Number(fillValue);
-              return { ...row, [column]: fill };
-            }
-            return row;
-          });
-        }
-        break;
-      }
-    }
-  }
-
-  return result;
-}
+// Execute ETL pipeline on data moved to Web Worker
 
 // Step config editor component
 function StepConfigEditor({
@@ -551,6 +363,7 @@ function StepConfigEditor({
 }
 
 export default function ETLPipelinePage() {
+  const { runWorker } = useDataWorker();
   const { data: pipelinesData = [] } = usePipelines();
   const pipelines = pipelinesData as any[];
   const createPipelineMut = useCreatePipeline();
@@ -649,7 +462,7 @@ export default function ETLPipelinePage() {
       // 2. Run local executePipeline to get preview output data on frontend
       const response = await datasetApi.data(sourceDs.id, { limit: 50000 });
       const sourceData = response.data.data || [];
-      const result = executePipeline(sourceData, (pipeline.steps as ETLStep[]) || []);
+      const result = await runWorker<Record<string, any>[]>('EXECUTE_ETL', { data: sourceData, steps: (pipeline.steps as ETLStep[]) || [] });
       setPreviewData(prev => ({ ...prev, [pipelineId]: result }));
 
       toast({ title: 'Pipeline completed', description: `${result.length} rows processed via backend.` });

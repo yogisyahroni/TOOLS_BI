@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useDataWorker } from '@/hooks/useDataWorker';
 
 type AggFunc = 'sum' | 'avg' | 'count' | 'min' | 'max';
 
@@ -27,58 +28,25 @@ export default function PivotTable() {
     if (!meta) return null;
     return { ...meta, data: __datasetDataRes?.data || [] };
   }, [dataSets, dsId, __datasetDataRes]);
-  const pivotData = useMemo(() => {
-    if (!dataset || !rowField || !valueField) return null;
+  const { runWorker } = useDataWorker();
+  const [pivotData, setPivotData] = useState<any>(null);
+  
+  React.useEffect(() => {
+    let isMounted = true;
+    if (!dataset || !rowField || !valueField) {
+      setPivotData(null);
+      return;
+    }
 
-    const rows = new Set<string>();
-    const cols = new Set<string>();
-    const cells: Record<string, number[]> = {};
-
-    dataset.data.forEach(row => {
-      const r = String(row[rowField] ?? 'N/A');
-      const c = colField ? String(row[colField] ?? 'N/A') : 'Value';
-      const v = Number(row[valueField]) || 0;
-      rows.add(r);
-      cols.add(c);
-      const key = `${r}__${c}`;
-      if (!cells[key]) cells[key] = [];
-      cells[key].push(v);
-    });
-
-    const rowKeys = Array.from(rows).sort();
-    const colKeys = Array.from(cols).sort();
-
-    const aggregate = (vals: number[]) => {
-      if (!vals || vals.length === 0) return 0;
-      switch (aggFunc) {
-        case 'sum': return vals.reduce((a, b) => a + b, 0);
-        case 'avg': return vals.reduce((a, b) => a + b, 0) / vals.length;
-        case 'count': return vals.length;
-        case 'min': return Math.min(...vals);
-        case 'max': return Math.max(...vals);
-      }
-    };
-
-    const tableData = rowKeys.map(r => {
-      const row: Record<string, any> = { _row: r };
-      let rowTotal = 0;
-      colKeys.forEach(c => {
-        const val = aggregate(cells[`${r}__${c}`] || []);
-        row[c] = val;
-        rowTotal += val;
+    runWorker('PIVOT', { dataset, rowField, colField, valueField, aggFunc })
+      .then(res => {
+        if (isMounted) setPivotData(res);
+      })
+      .catch(err => {
+        if (isMounted) toast({ title: 'Error', description: err.message, variant: 'destructive' });
       });
-      row._total = rowTotal;
-      return row;
-    });
 
-    // Grand totals
-    const grandTotals: Record<string, number> = {};
-    colKeys.forEach(c => {
-      grandTotals[c] = tableData.reduce((sum, row) => sum + (row[c] || 0), 0);
-    });
-    grandTotals._total = Object.values(grandTotals).reduce((a, b) => a + b, 0);
-
-    return { rowKeys, colKeys, tableData, grandTotals };
+    return () => { isMounted = false; };
   }, [dataset, rowField, colField, valueField, aggFunc]);
 
   const exportCSV = () => {

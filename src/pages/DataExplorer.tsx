@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useDataWorker } from '@/hooks/useDataWorker';
 
 export default function DataExplorer() {
   const { data: dataSets = [] } = useDatasets();
@@ -31,60 +32,30 @@ export default function DataExplorer() {
     return { ...meta, data: __datasetDataRes?.data || [] };
   }, [dataSets, selectedDataSet, __datasetDataRes]);
 
-  const filteredData = useMemo(() => {
-    if (!dataset) return [];
-    let data = [...dataset.data];
-
-    // Global search
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      data = data.filter(row =>
-        Object.values(row).some(v => String(v).toLowerCase().includes(term))
-      );
+  const { runWorker } = useDataWorker();
+  const [workerResult, setWorkerResult] = useState({ filteredData: [] as any[], columnStats: [] as any[] });
+  
+  React.useEffect(() => {
+    let isMounted = true;
+    if (!dataset) {
+      setWorkerResult({ filteredData: [], columnStats: [] });
+      return;
     }
 
-    // Column filter
-    if (filterCol && filterVal) {
-      data = data.filter(row =>
-        String(row[filterCol] ?? '').toLowerCase().includes(filterVal.toLowerCase())
-      );
-    }
-
-    // Sort
-    if (sortColumn) {
-      data.sort((a, b) => {
-        const av = a[sortColumn], bv = b[sortColumn];
-        const cmp = typeof av === 'number' ? av - Number(bv) : String(av).localeCompare(String(bv));
-        return sortDir === 'desc' ? -cmp : cmp;
+    runWorker('FILTER_SORT', { dataset, searchTerm, sortColumn, sortDir, filterCol, filterVal })
+      .then(res => {
+        if (isMounted) setWorkerResult(res);
+      })
+      .catch(err => {
+        if (isMounted) toast({ title: 'Error', description: err.message, variant: 'destructive' });
       });
-    }
 
-    return data;
+    return () => { isMounted = false; };
   }, [dataset, searchTerm, sortColumn, sortDir, filterCol, filterVal]);
 
+  const { filteredData, columnStats } = workerResult;
   const pagedData = filteredData.slice(page * pageSize, (page + 1) * pageSize);
   const totalPages = Math.ceil(filteredData.length / pageSize);
-
-  // Column stats
-  const columnStats = useMemo(() => {
-    if (!dataset) return [];
-    return dataset.columns.map(col => {
-      const values = dataset.data.map(r => r[col.name]).filter(v => v != null);
-      const numVals = values.map(Number).filter(n => !isNaN(n));
-      const uniqueCount = new Set(values.map(String)).size;
-      const nullCount = dataset.data.length - values.length;
-      
-      return {
-        name: col.name,
-        type: col.type,
-        unique: uniqueCount,
-        nulls: nullCount,
-        min: numVals.length ? Math.min(...numVals) : null,
-        max: numVals.length ? Math.max(...numVals) : null,
-        mean: numVals.length ? numVals.reduce((a, b) => a + b, 0) / numVals.length : null,
-      };
-    });
-  }, [dataset]);
 
   const typeIcon = (type: string) => {
     switch (type) {
