@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -152,7 +153,10 @@ func main() {
 	actionH := handlers.NewActionHandler(db)
 	commentH := handlers.NewCommentHandler(db, hub)
 	migrationH := handlers.NewMigrationHandler(db, cfg.AI)
-	webhookH := handlers.NewWebhookHandler(db)
+	webhookH := handlers.NewWebhookHandler(db, rdb)
+	
+	webhookWorker := handlers.NewWebhookWorker(db, rdb)
+	go webhookWorker.Start(context.Background())
 
 	// --- Fiber App ---
 	app := fiber.New(fiber.Config{

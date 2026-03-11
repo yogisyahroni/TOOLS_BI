@@ -10,15 +10,17 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type WebhookHandler struct {
-	db *gorm.DB
+	db  *gorm.DB
+	rdb *redis.Client
 }
 
-func NewWebhookHandler(db *gorm.DB) *WebhookHandler {
-	return &WebhookHandler{db: db}
+func NewWebhookHandler(db *gorm.DB, rdb *redis.Client) *WebhookHandler {
+	return &WebhookHandler{db: db, rdb: rdb}
 }
 
 // HandleWebhook receives data from a 3rd party webhook connection.
@@ -98,7 +100,7 @@ func (h *WebhookHandler) HandleWebhook(c *fiber.Ctx) error {
 		}
 
 		tableName := sanitizeTableName("wh_" + connID) // make it slightly different than regular ds_uuid
-		if err := createDynamicTable(h.db, tableName, colDefs); err != nil {
+		if err := createWebhookDynamicTable(h.db, tableName, colDefs); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create dynamic table: " + err.Error()})
 		}
 
@@ -123,36 +125,110 @@ func (h *WebhookHandler) HandleWebhook(c *fiber.Ctx) error {
 		if err := h.db.Create(&ds).Error; err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create dataset record: " + err.Error()})
 		}
-	} else {
-		// Existing dataset
-		json.Unmarshal(ds.Columns, &colDefs)
-	}
 
-	// Insert rows
-	headers := make([]string, len(colDefs))
-	for i, c := range colDefs {
-		headers[i] = c.Name
-	}
-
-	strRows := make([][]string, 0, len(rows))
-	for _, row := range rows {
-		strRow := make([]string, len(headers))
-		for i, h := range headers {
-			if val, ok := row[h]; ok {
-				strRow[i] = fmt.Sprintf("%v", val)
-			} else {
-				strRow[i] = ""
-			}
+		// Insert rows synchronously for the first time
+		headers := make([]string, len(colDefs))
+		for i, c := range colDefs {
+			headers[i] = c.Name
 		}
-		strRows = append(strRows, strRow)
+
+		strRows := make([][]string, 0, len(rows))
+		for _, row := range rows {
+			strRow := make([]string, len(headers))
+			for i, header := range headers {
+				if val, ok := row[header]; ok {
+					strRow[i] = fmt.Sprintf("%v", val)
+				} else {
+					strRow[i] = ""
+				}
+			}
+			strRows = append(strRows, strRow)
+		}
+
+		if err := bulkInsertRows(h.db, ds.DataTableName, headers, strRows); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to insert data: " + err.Error()})
+		}
+
+		// Update dataset row count
+		h.db.Model(&ds).Update("row_count", gorm.Expr("row_count + ?", len(rows)))
+
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Webhook processed, table created successfully", "rowsInserted": len(rows)})
 	}
 
-	if err := bulkInsertRows(h.db, ds.DataTableName, headers, strRows); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to insert data: " + err.Error()})
+	// FAST PATH: Existing dataset -> Push to Redis Queue
+	queueKey := "webhook:queue"
+	
+	msg := map[string]interface{}{
+		"conn_id": connID,
+		"payload": rows,
+	}
+	msgBytes, _ := json.Marshal(msg)
+	
+	err = h.rdb.LPush(c.Context(), queueKey, msgBytes).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to queue webhook data"})
 	}
 
-	// Update dataset row count
-	h.db.Model(&ds).Update("row_count", gorm.Expr("row_count + ?", len(rows)))
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Webhook queued successfully", "rowsQueued": len(rows)})
+}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Webhook processed successfully", "rowsInserted": len(rows)})
+// createWebhookDynamicTable uses Native PostgreSQL Partitioning by TIME and adds a BRIN index
+func createWebhookDynamicTable(db *gorm.DB, tableName string, cols []models.ColumnDef) error {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" (`, tableName))
+	sb.WriteString(`"_row_id" BIGSERIAL, `)
+	sb.WriteString(`"_sys_created_at" TIMESTAMPTZ DEFAULT NOW(), `)
+
+	for _, col := range cols {
+		pgType := "TEXT"
+		switch col.Type {
+		case "number":
+			pgType = "DOUBLE PRECISION"
+		case "date":
+			pgType = "TIMESTAMPTZ"
+		}
+		sb.WriteString(fmt.Sprintf(`"%s" %s, `, sanitizeIdentifier(col.Name), pgType))
+	}
+
+	sb.WriteString(`PRIMARY KEY ("_row_id", "_sys_created_at")`)
+	sb.WriteString(`) PARTITION BY RANGE ("_sys_created_at")`)
+
+	if err := db.Exec(sb.String()).Error; err != nil {
+		return err
+	}
+
+	// Default partition ensures inserts don't fail immediately, even without specific time boundaries
+	defaultPartition := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s_default" PARTITION OF "%s" DEFAULT`, tableName, tableName)
+	if err := db.Exec(defaultPartition).Error; err != nil {
+		return err
+	}
+
+	// BRIN index for highly optimized time-series scanning
+	brinQuery := fmt.Sprintf(`CREATE INDEX IF NOT EXISTS "idx_%s_brin_sys" ON "%s" USING BRIN ("_sys_created_at")`, tableName, tableName)
+	if err := db.Exec(brinQuery).Error; err != nil {
+		return err
+	}
+
+	// Materialized View for quick hourly aggregation (reduces scan load for dashboard charts)
+	mvName := fmt.Sprintf(`mv_%s_hourly`, tableName)
+	mvQuery := fmt.Sprintf(`
+		CREATE MATERIALIZED VIEW IF NOT EXISTS "%s" AS
+		SELECT date_trunc('hour', "_sys_created_at") AS time_bucket, count(*) AS total_rows
+		FROM "%s"
+		GROUP BY 1
+	`, mvName, tableName)
+	
+	if err := db.Exec(mvQuery).Error; err != nil {
+		// Log but don't fail if we can't create MV
+		fmt.Printf("Warning: Failed to create materialized view: %v\n", err)
+		return nil
+	}
+
+	// Unique index allows REFRESH MATERIALIZED VIEW CONCURRENTLY later on
+	idxQuery := fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_%s_uniq" ON "%s" (time_bucket)`, mvName, mvName)
+	if err := db.Exec(idxQuery).Error; err != nil {
+		fmt.Printf("Warning: Failed to create unique index on materialized view: %v\n", err)
+	}
+
+	return nil
 }
