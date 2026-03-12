@@ -6,6 +6,7 @@ import (
 	"datalens/internal/middleware"
 	"datalens/internal/models"
 	"datalens/internal/realtime"
+	"datalens/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -17,12 +18,16 @@ import (
 type ChartHandler struct {
 	db  *gorm.DB
 	hub *realtime.Hub
+	svc *services.ChartService // Phase 31: service layer
 }
 
 // NewChartHandler creates a new ChartHandler.
 func NewChartHandler(db *gorm.DB, hub *realtime.Hub) *ChartHandler {
 	return &ChartHandler{db: db, hub: hub}
 }
+
+// SetService injects the ChartService after construction.
+func (h *ChartHandler) SetService(svc *services.ChartService) { h.svc = svc }
 
 // ListCharts returns paginated saved charts for a user.
 // PERF-04 fix: added pagination (page/limit) to prevent unbounded data responses.

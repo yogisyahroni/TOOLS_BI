@@ -9,6 +9,7 @@ import (
 	"datalens/internal/middleware"
 	"datalens/internal/models"
 	"datalens/internal/realtime"
+	"datalens/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -19,12 +20,16 @@ import (
 type DashboardHandler struct {
 	db  *gorm.DB
 	hub *realtime.Hub
+	svc *services.DashboardService // Phase 31: service layer
 }
 
 // NewDashboardHandler creates a new DashboardHandler.
 func NewDashboardHandler(db *gorm.DB, hub *realtime.Hub) *DashboardHandler {
 	return &DashboardHandler{db: db, hub: hub}
 }
+
+// SetService injects the DashboardService after construction.
+func (h *DashboardHandler) SetService(svc *services.DashboardService) { h.svc = svc }
 
 // ListDashboards returns all dashboards for the user.
 // GET /api/v1/dashboards

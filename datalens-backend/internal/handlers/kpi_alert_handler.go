@@ -5,6 +5,7 @@ import (
 
 	"datalens/internal/middleware"
 	"datalens/internal/models"
+	"datalens/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -116,6 +117,7 @@ func (h *KPIHandler) DeleteKPI(c *fiber.Ctx) error {
 type AlertHandler struct {
 	db  *gorm.DB
 	hub interface{ SendToUser(string, interface{}) } // avoid circular import
+	svc *services.DataAlertService                   // Phase 31: service layer
 }
 
 type AlertHub interface {
@@ -124,6 +126,9 @@ type AlertHub interface {
 
 // NewAlertHandler creates a new AlertHandler.
 func NewAlertHandler(db *gorm.DB) *AlertHandler { return &AlertHandler{db: db} }
+
+// SetService injects the DataAlertService after construction.
+func (h *AlertHandler) SetService(svc *services.DataAlertService) { h.svc = svc }
 
 // ListAlerts returns all alerts for the user.
 func (h *AlertHandler) ListAlerts(c *fiber.Ctx) error {

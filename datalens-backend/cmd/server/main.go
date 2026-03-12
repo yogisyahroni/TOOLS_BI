@@ -15,7 +15,9 @@ import (
 	"datalens/internal/migrations"
 	"datalens/internal/models"
 	"datalens/internal/realtime"
+	"datalens/internal/repository"
 	"datalens/internal/scheduler"
+	"datalens/internal/services"
 
 	"datalens/internal/storage"
 
@@ -120,19 +122,45 @@ func main() {
 	// BUG-09: Create mailer (falls back to NoOpMailer in dev if SMTP_HOST not set)
 	mailer := email.NewSMTPMailer(cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.Username, cfg.SMTP.Password, cfg.SMTP.From)
 
+	// ─────────────────────────────────────────────────────────────────────────────
+	// --- Phase 31: Repository + Service Layer DI ---
+	// Repositories are the only layer allowed to touch *gorm.DB directly.
+	// Services receive repositories via constructor injection.
+	// ─────────────────────────────────────────────────────────────────────────────
+	datasetRepo := repository.NewDatasetRepository(db)
+	dashboardRepo := repository.NewDashboardRepository(db)
+	chartRepo := repository.NewChartRepository(db)
+	dataAlertRepo := repository.NewDataAlertRepository(db)
+
+	datasetSvc := services.NewDatasetService(datasetRepo, rdb)
+	dashboardSvc := services.NewDashboardService(dashboardRepo)
+	chartSvc := services.NewChartService(chartRepo)
+	dataAlertSvc := services.NewDataAlertService(dataAlertRepo)
+
+	log.Info().Msg("Service layer initialised")
+
+	// --- Phase 31: Circuit Breaker ---
+	// One CB guards the entire API surface. Trips after 5 consecutive 5xx.
+	// Cooldown: 30 s. Needs 2 probe-successes to return Closed.
+	apiCB := middleware.NewCircuitBreaker("api", 5, 30*time.Second, 2)
+
 	// --- Build Handlers ---
 	authH := handlers.NewAuthHandler(db, rdb, cfg.JWT.Secret, cfg.JWT.Expiry, cfg.JWT.RefreshExpiry, mailer, cfg.SMTP.AppURL)
 	datasetH := handlers.NewDatasetHandler(db, fileStorage, rdb)
+	datasetH.SetService(datasetSvc)
 	dashboardH := handlers.NewDashboardHandler(db, hub)
+	dashboardH.SetService(dashboardSvc)
 	reportH := handlers.NewReportHandler(db, hub)
 	kpiH := handlers.NewKPIHandler(db)
 	alertH := handlers.NewAlertHandler(db)
+	alertH.SetService(dataAlertSvc)
 	cronH := handlers.NewCronHandler(db, hub)
 	encKey := cfg.Encryption.DBConnKey // reuse existing server-side encryption secret
 	aiH := handlers.NewAIHandler(db, cfg.AI, encKey)
 	settingsH := handlers.NewSettingsHandler(db, encKey)
 	wsH := handlers.NewWSHandler(hub)
 	chartH := handlers.NewChartHandler(db, hub)
+	chartH.SetService(chartSvc)
 	exportH := handlers.NewExportHandler(db)
 	etlH := handlers.NewETLHandler(db, hub)
 	schemaH := handlers.NewSchemaHandler(db)
@@ -171,22 +199,38 @@ func main() {
 	app.Use(middleware.Recover())
 	app.Use(middleware.Logger())
 	app.Use(middleware.CORS(cfg.CORS.Origins))
+	// Phase 31: circuit breaker applied globally — trips after 5 consecutive 5xx.
+	app.Use(apiCB.Middleware())
 
-	// --- Health Check ---
+	// --- Health Check (Phase 31: extended with Redis + Circuit Breaker state) ---
 	app.Get("/health", func(c *fiber.Ctx) error {
-		sqlDB, err := db.DB()
-		dbOK := err == nil
+		// DB liveness probe
+		sqlDB, dbErr := db.DB()
+		dbOK := dbErr == nil
 		if dbOK {
 			dbOK = sqlDB.Ping() == nil
 		}
-		status := "ok"
-		if !dbOK {
-			status = "degraded"
+
+		// Redis liveness probe
+		redisOK := rdb.Ping(c.Context()).Err() == nil
+
+		// Circuit breaker state
+		cbState := apiCB.State()
+
+		overallStatus := "ok"
+		if !dbOK || !redisOK {
+			overallStatus = "degraded"
 		}
-		return c.JSON(fiber.Map{
-			"status":    status,
-			"db":        boolStatus(dbOK),
-			"timestamp": time.Now().Unix(),
+		httpStatus := fiber.StatusOK
+		if overallStatus == "degraded" {
+			httpStatus = fiber.StatusServiceUnavailable
+		}
+		return c.Status(httpStatus).JSON(fiber.Map{
+			"status":         overallStatus,
+			"db":             boolStatus(dbOK),
+			"redis":          boolStatus(redisOK),
+			"circuitBreaker": cbState,
+			"timestamp":      time.Now().Unix(),
 		})
 	})
 

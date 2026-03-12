@@ -17,6 +17,7 @@ import (
 	"datalens/internal/connectors"
 	"datalens/internal/middleware"
 	"datalens/internal/models"
+	"datalens/internal/services"
 	"datalens/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
@@ -31,12 +32,17 @@ type DatasetHandler struct {
 	db      *gorm.DB
 	storage storage.FileStorage
 	rdb     *redis.Client // PERF-07: Redis for stats caching
+	svc     *services.DatasetService // Phase 31: service layer (optional; handlers fall back to db if nil)
 }
 
 // NewDatasetHandler creates a new DatasetHandler.
 func NewDatasetHandler(db *gorm.DB, stor storage.FileStorage, rdb *redis.Client) *DatasetHandler {
 	return &DatasetHandler{db: db, storage: stor, rdb: rdb}
 }
+
+// SetService injects the DatasetService after construction.
+// Call this in main.go after both the handler and service are initialised.
+func (h *DatasetHandler) SetService(svc *services.DatasetService) { h.svc = svc }
 
 // ListDatasets returns all datasets for the authenticated user.
 // GET /api/v1/datasets
