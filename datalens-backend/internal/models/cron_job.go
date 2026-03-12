@@ -21,6 +21,7 @@ type CronJob struct {
 	LastError  string          `json:"lastError" gorm:"type:text"`
 	NextRunAt  *time.Time      `json:"nextRunAt"`
 	RunCount   int             `json:"runCount" gorm:"default:0"`
+	DeletedAt  *time.Time      `json:"deletedAt,omitempty" gorm:"index"` // Phase 36: soft-delete
 	CreatedAt  time.Time       `json:"createdAt"`
 	UpdatedAt  time.Time       `json:"updatedAt"`
 }

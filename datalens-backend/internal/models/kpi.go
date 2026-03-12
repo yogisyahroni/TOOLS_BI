@@ -15,6 +15,7 @@ type KPI struct {
 	Target      *float64  `json:"target"`
 	Unit        string    `json:"unit" gorm:"size:20"`
 	Trend       string    `json:"trend" gorm:"size:10"` // up,down,neutral
+	DeletedAt   *time.Time `json:"deletedAt,omitempty" gorm:"index"` // Phase 36: soft-delete
 	CreatedAt   time.Time `json:"createdAt"`
 }
 

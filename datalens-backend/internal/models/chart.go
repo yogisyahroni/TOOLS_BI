@@ -16,6 +16,7 @@ type SavedChart struct {
 	YAxis       string          `json:"yAxis" gorm:"size:100"`
 	GroupBy     string          `json:"groupBy" gorm:"size:100"`
 	Annotations json.RawMessage `json:"annotations" gorm:"type:jsonb;default:'[]'"`
+	DeletedAt   *time.Time      `json:"deletedAt,omitempty" gorm:"index"` // Phase 36: soft-delete
 	CreatedAt   time.Time       `json:"createdAt"`
 }
 

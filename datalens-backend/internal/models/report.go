@@ -16,6 +16,7 @@ type Report struct {
 	Decisions       json.RawMessage `json:"decisions" gorm:"type:jsonb;default:'[]'"`
 	Recommendations json.RawMessage `json:"recommendations" gorm:"type:jsonb;default:'[]'"`
 	ChartConfigs    json.RawMessage `json:"chartConfigs" gorm:"type:jsonb;default:'[]'"`
+	DeletedAt       *time.Time      `json:"deletedAt,omitempty" gorm:"index"` // Phase 36: soft-delete
 	CreatedAt       time.Time       `json:"createdAt"`
 }
 
@@ -30,6 +31,7 @@ type DataStory struct {
 	Narrative string          `json:"content" gorm:"type:text;column:narrative"`
 	Insights  json.RawMessage `json:"insights" gorm:"type:jsonb;default:'[]'"`
 	Charts    json.RawMessage `json:"charts" gorm:"type:jsonb;default:'[]'"`
+	DeletedAt *time.Time      `json:"deletedAt,omitempty" gorm:"index"` // Phase 36: soft-delete
 	CreatedAt time.Time       `json:"createdAt"`
 }
 

@@ -18,6 +18,7 @@ type DataAlert struct {
 	LastCheckedAt *time.Time `json:"lastCheckedAt"`
 	NotifyVia     string     `json:"notifyVia" gorm:"default:websocket"` // websocket,email,webhook
 	NotifyTarget  string     `json:"notifyTarget"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty" gorm:"index"` // Phase 36: soft-delete
 	CreatedAt     time.Time  `json:"createdAt"`
 }
 

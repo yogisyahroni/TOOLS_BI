@@ -590,7 +590,10 @@ func initDB(cfg *config.Config) (*gorm.DB, error) {
 
 	sqlDB.SetMaxOpenConns(cfg.DB.MaxConnections)
 	sqlDB.SetMaxIdleConns(cfg.DB.MaxIdle)
-	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	// Phase 36: 5 min lifetime avoids Supabase pgBouncer stale-connection evictions
+	// (Supabase pgBouncer default idle timeout is 5 min in transaction-mode pooling).
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(2 * time.Minute)
 
 	return db, nil
 }
@@ -638,7 +641,9 @@ func initSupabaseDB(cfg *config.Config) (*gorm.DB, error) {
 
 	sqlDB.SetMaxOpenConns(cfg.DB.MaxConnections)
 	sqlDB.SetMaxIdleConns(cfg.DB.MaxIdle)
-	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	// Phase 36: 5 min lifetime avoids Supabase pgBouncer stale-connection evictions
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(2 * time.Minute)
 
 	return db, nil
 }
@@ -700,6 +705,18 @@ func autoMigrate(db *gorm.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_annotations_user_dataset ON annotations(user_id, dataset_id)",
 		"CREATE INDEX IF NOT EXISTS idx_drill_configs_user_dataset ON drill_configs(user_id, dataset_id)",
 		"CREATE INDEX IF NOT EXISTS idx_embed_tokens_user ON embed_tokens(user_id, created_at DESC)",
+		// Phase 36: additional missing indexes identified in DB audit
+		"CREATE INDEX IF NOT EXISTS idx_audit_log_action_resource ON audit_log(action, resource_type, created_at DESC)",
+		"CREATE INDEX IF NOT EXISTS idx_embed_tokens_resource ON embed_tokens(resource_id, resource_type)",
+		"CREATE INDEX IF NOT EXISTS idx_embed_tokens_revoked ON embed_tokens(revoked, expires_at)",
+		"CREATE INDEX IF NOT EXISTS idx_data_stories_user_dataset ON data_stories(user_id, dataset_id)",
+		"CREATE INDEX IF NOT EXISTS idx_data_stories_user_deleted ON data_stories(user_id, deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_reports_user_deleted ON reports(user_id, deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_saved_charts_user_deleted ON saved_charts(user_id, deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_kpis_user_deleted ON kpis(user_id, deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_data_alerts_deleted ON data_alerts(user_id, deleted_at)",
+		"CREATE INDEX IF NOT EXISTS idx_cron_jobs_target ON cron_jobs(target_id)",
+		"CREATE INDEX IF NOT EXISTS idx_comments_resource ON comments(resource_id, resource_type, created_at DESC)",
 	}
 	for _, sql := range indexes {
 		if err := db.Exec(sql).Error; err != nil {
