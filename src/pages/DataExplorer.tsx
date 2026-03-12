@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { VirtualTable, VirtualTableColumn } from '@/components/ui/VirtualTable';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HelpTooltip } from '@/components/HelpTooltip';
@@ -22,8 +22,6 @@ export default function DataExplorer() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filterCol, setFilterCol] = useState('');
   const [filterVal, setFilterVal] = useState('');
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
 
   const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(selectedDataSet || '', { limit: 10000 });
   const dataset = React.useMemo(() => {
@@ -54,8 +52,22 @@ export default function DataExplorer() {
   }, [dataset, searchTerm, sortColumn, sortDir, filterCol, filterVal]);
 
   const { filteredData, columnStats } = workerResult;
-  const pagedData = filteredData.slice(page * pageSize, (page + 1) * pageSize);
-  const totalPages = Math.ceil(filteredData.length / pageSize);
+
+  // Build VirtualTable column definitions from dataset schema
+  const virtualColumns: VirtualTableColumn[] = useMemo(() => {
+    if (!dataset) return [];
+    return dataset.columns.map(col => ({
+      key: col.name,
+      header: col.name,
+      width: 180,
+      render: (value: unknown) =>
+        value != null ? (
+          <span className="font-mono text-xs">{String(value)}</span>
+        ) : (
+          <span className="text-muted-foreground italic text-xs">null</span>
+        ),
+    }));
+  }, [dataset]);
 
   const typeIcon = (type: string) => {
     switch (type) {
@@ -70,7 +82,6 @@ export default function DataExplorer() {
   const handleSort = (col: string) => {
     if (sortColumn === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortColumn(col); setSortDir('asc'); }
-    setPage(0);
   };
 
   const handleExportCSV = () => {
@@ -106,7 +117,7 @@ export default function DataExplorer() {
         <div className="flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="text-xs text-muted-foreground mb-1 block">Dataset</label>
-            <Select value={selectedDataSet} onValueChange={v => { setSelectedDataSet(v); setPage(0); setSortColumn(''); setFilterCol(''); setFilterVal(''); setSearchTerm(''); }}>
+            <Select value={selectedDataSet} onValueChange={v => { setSelectedDataSet(v); setSortColumn(''); setFilterCol(''); setFilterVal(''); setSearchTerm(''); }}>
               <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select dataset" /></SelectTrigger>
               <SelectContent>
                 {dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name} ({ds.rowCount} rows)</SelectItem>)}
@@ -117,7 +128,7 @@ export default function DataExplorer() {
             <label className="text-xs text-muted-foreground mb-1 block">Search</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(0); }} placeholder="Search all columns..." className="pl-9 bg-muted/50 border-border" />
+              <Input value={searchTerm} onChange={e => { setSearchTerm(e.target.value); }} placeholder="Search all columns..." className="pl-9 bg-muted/50 border-border" />
             </div>
           </div>
           <div className="min-w-[150px]">
@@ -133,7 +144,7 @@ export default function DataExplorer() {
           {filterCol && (
             <div className="min-w-[150px]">
               <label className="text-xs text-muted-foreground mb-1 block">Filter Value</label>
-              <Input value={filterVal} onChange={e => { setFilterVal(e.target.value); setPage(0); }} placeholder="Contains..." className="bg-muted/50 border-border" />
+              <Input value={filterVal} onChange={e => { setFilterVal(e.target.value); }} placeholder="Contains..." className="bg-muted/50 border-border" />
             </div>
           )}
         </div>
@@ -149,44 +160,22 @@ export default function DataExplorer() {
           <TabsContent value="data">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
               <div className="p-3 border-b border-border flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">{filteredData.length} of {dataset.rowCount} rows</span>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={!filteredData.length}>
-                    <Download className="w-4 h-4 mr-1" /> CSV
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
-                  <span className="text-xs text-muted-foreground">{page + 1} / {totalPages || 1}</span>
-                  <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next</Button>
-                </div>
+                <span className="text-sm text-muted-foreground">
+                  {filteredData.length} of {dataset.rowCount} rows
+                </span>
+                <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={!filteredData.length}>
+                  <Download className="w-4 h-4 mr-1" /> CSV
+                </Button>
               </div>
-              <div className="overflow-auto max-h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-border">
-                      {dataset.columns.map(col => (
-                        <TableHead key={col.name} className="cursor-pointer hover:bg-muted/30" onClick={() => handleSort(col.name)}>
-                          <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                            {typeIcon(col.type)}
-                            <span>{col.name}</span>
-                            {sortColumn === col.name && <ArrowUpDown className="w-3 h-3 text-primary" />}
-                          </div>
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pagedData.map((row, i) => (
-                      <TableRow key={i} className="border-border hover:bg-muted/20">
-                        {dataset.columns.map(col => (
-                          <TableCell key={col.name} className="text-xs font-mono text-foreground max-w-[200px] truncate">
-                            {row[col.name] != null ? String(row[col.name]) : <span className="text-muted-foreground italic">null</span>}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              {/* VirtualTable renders only visible rows — handles 100k+ datasets smoothly */}
+              <VirtualTable
+                columns={virtualColumns}
+                data={filteredData}
+                maxHeight={520}
+                rowHeight={40}
+                striped
+                emptyMessage="No rows match your search/filter"
+              />
             </motion.div>
           </TabsContent>
 
