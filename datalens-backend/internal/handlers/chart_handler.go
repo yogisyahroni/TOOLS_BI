@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"time"
 
 	"datalens/internal/middleware"
@@ -45,32 +46,46 @@ func (h *ChartHandler) ListCharts(c *fiber.Ctx) error {
 	if page < 1 {
 		page = 1
 	}
-	offset := (page - 1) * limit
 
+	// Phase 31: delegate to service when available
+	if h.svc != nil && datasetID == "" {
+		charts, total, err := h.svc.ListCharts(c.Context(), userID, page, limit)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch charts"})
+		}
+		return c.JSON(fiber.Map{"data": charts, "total": total, "page": page, "limit": limit})
+	}
+
+	// Fallback: direct DB query (also handles datasetId filter)
+	offset := (page - 1) * limit
 	query := h.db.Model(&models.SavedChart{}).Where("user_id = ?", userID).Order("created_at desc")
 	if datasetID != "" {
 		query = query.Where("dataset_id = ?", datasetID)
 	}
-
 	var total int64
 	query.Count(&total)
-
 	var charts []models.SavedChart
 	if err := query.Offset(offset).Limit(limit).Find(&charts).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch charts"})
 	}
-	return c.JSON(fiber.Map{
-		"data":  charts,
-		"total": total,
-		"page":  page,
-		"limit": limit,
-	})
+	return c.JSON(fiber.Map{"data": charts, "total": total, "page": page, "limit": limit})
 }
 
 // GetChart returns a single saved chart.
 // GET /api/v1/charts/:id
 func (h *ChartHandler) GetChart(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+
+	// Phase 31: delegate to service when available
+	if h.svc != nil {
+		chart, err := h.svc.GetChart(c.Context(), c.Params("id"), userID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
+		}
+		return c.JSON(chart)
+	}
+
+	// Fallback: direct DB
 	var chart models.SavedChart
 	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&chart).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
@@ -109,13 +124,27 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 		Annotations: []byte("[]"), // Fix JSONB nil issue in Postgres
 		CreatedAt:   time.Now(),
 	}
+
+	// Phase 31: delegate to service when available
+	if h.svc != nil {
+		created, err := h.svc.CreateChart(c.Context(), &chart)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+		h.hub.SendToUser(userID, realtime.Event{
+			Type:    realtime.EventETLComplete,
+			Payload: fiber.Map{"action": "chart_created", "chartId": created.ID},
+		})
+		return c.Status(fiber.StatusCreated).JSON(created)
+	}
+
+	// Fallback: direct DB
 	if err := h.db.Create(&chart).Error; err != nil {
 		log.Error().Err(err).Interface("chart_payload", chart).Msg("Failed to insert chart into DB")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create chart", "details": err.Error()})
 	}
-
 	h.hub.SendToUser(userID, realtime.Event{
-		Type:    realtime.EventETLComplete, // repurpose for now as chart_created
+		Type:    realtime.EventETLComplete,
 		Payload: fiber.Map{"action": "chart_created", "chartId": chart.ID},
 	})
 	return c.Status(fiber.StatusCreated).JSON(chart)
@@ -125,11 +154,6 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 // PATCH /api/v1/charts/:id
 func (h *ChartHandler) UpdateChart(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
-	var chart models.SavedChart
-	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&chart).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
-	}
-
 	var req struct {
 		Title   *string `json:"title"`
 		Type    *string `json:"type"`
@@ -141,6 +165,41 @@ func (h *ChartHandler) UpdateChart(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
 	}
 
+	// Phase 31: delegate to service when available (mass-assignment safe)
+	if h.svc != nil {
+		// Fetch existing to apply partial patch over it
+		existing, err := h.svc.GetChart(c.Context(), c.Params("id"), userID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
+		}
+		patch := *existing
+		if req.Title != nil {
+			patch.Title = *req.Title
+		}
+		if req.Type != nil {
+			patch.Type = *req.Type
+		}
+		if req.XAxis != nil {
+			patch.XAxis = *req.XAxis
+		}
+		if req.YAxis != nil {
+			patch.YAxis = *req.YAxis
+		}
+		if req.GroupBy != nil {
+			patch.GroupBy = *req.GroupBy
+		}
+		if err := h.svc.UpdateChart(c.Context(), &patch, userID); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Update failed: %v", err)})
+		}
+		updated, _ := h.svc.GetChart(c.Context(), c.Params("id"), userID)
+		return c.JSON(updated)
+	}
+
+	// Fallback: direct DB
+	var chart models.SavedChart
+	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&chart).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
+	}
 	updates := map[string]interface{}{}
 	if req.Title != nil {
 		updates["title"] = *req.Title
@@ -157,7 +216,6 @@ func (h *ChartHandler) UpdateChart(c *fiber.Ctx) error {
 	if req.GroupBy != nil {
 		updates["group_by"] = *req.GroupBy
 	}
-
 	if err := h.db.Model(&chart).Updates(updates).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Update failed"})
 	}
@@ -168,6 +226,16 @@ func (h *ChartHandler) UpdateChart(c *fiber.Ctx) error {
 // DELETE /api/v1/charts/:id
 func (h *ChartHandler) DeleteChart(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+
+	// Phase 31: delegate to service when available
+	if h.svc != nil {
+		if err := h.svc.DeleteChart(c.Context(), c.Params("id"), userID); err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found or access denied"})
+		}
+		return c.Status(fiber.StatusNoContent).Send(nil)
+	}
+
+	// Fallback: direct DB
 	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).Delete(&models.SavedChart{}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Delete failed"})
 	}
@@ -178,9 +246,18 @@ func (h *ChartHandler) DeleteChart(c *fiber.Ctx) error {
 // POST /api/v1/charts/:id/duplicate
 func (h *ChartHandler) DuplicateChart(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+
 	var original models.SavedChart
-	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&original).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
+	if h.svc != nil {
+		src, err := h.svc.GetChart(c.Context(), c.Params("id"), userID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
+		}
+		original = *src
+	} else {
+		if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&original).Error; err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Chart not found"})
+		}
 	}
 
 	dup := models.SavedChart{
@@ -194,6 +271,15 @@ func (h *ChartHandler) DuplicateChart(c *fiber.Ctx) error {
 		GroupBy:   original.GroupBy,
 		CreatedAt: time.Now(),
 	}
+
+	if h.svc != nil {
+		created, err := h.svc.CreateChart(c.Context(), &dup)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Duplicate failed"})
+		}
+		return c.Status(fiber.StatusCreated).JSON(created)
+	}
+
 	if err := h.db.Create(&dup).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Duplicate failed"})
 	}

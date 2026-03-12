@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"datalens/internal/middleware"
@@ -37,8 +38,24 @@ func (h *DashboardHandler) ListDashboards(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 20)
-	offset := (page - 1) * limit
+	if limit > 100 {
+		limit = 100
+	}
+	if page < 1 {
+		page = 1
+	}
 
+	// Phase 31: delegate to service when available
+	if h.svc != nil {
+		dashboards, total, err := h.svc.ListDashboards(c.Context(), userID, page, limit)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch dashboards"})
+		}
+		return c.JSON(fiber.Map{"data": dashboards, "total": total, "page": page, "limit": limit})
+	}
+
+	// Fallback: direct DB query
+	offset := (page - 1) * limit
 	dashboards := make([]models.Dashboard, 0)
 	var total int64
 	q := h.db.Where("user_id = ? AND deleted_at IS NULL", userID)
@@ -80,6 +97,17 @@ func (h *DashboardHandler) CreateDashboard(c *fiber.Ctx) error {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
+
+	// Phase 31: delegate to service when available
+	if h.svc != nil {
+		created, err := h.svc.CreateDashboard(c.Context(), &dash)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.Status(fiber.StatusCreated).JSON(created)
+	}
+
+	// Fallback: direct DB
 	if err := h.db.Create(&dash).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create dashboard"})
 	}
@@ -90,6 +118,17 @@ func (h *DashboardHandler) CreateDashboard(c *fiber.Ctx) error {
 // GET /api/v1/dashboards/:id
 func (h *DashboardHandler) GetDashboard(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+
+	// Phase 31: delegate to service when available
+	if h.svc != nil {
+		dash, err := h.svc.GetDashboard(c.Context(), c.Params("id"), userID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dashboard not found"})
+		}
+		return c.JSON(dash)
+	}
+
+	// Fallback: direct DB
 	var dash models.Dashboard
 	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", c.Params("id"), userID).First(&dash).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dashboard not found"})
@@ -99,17 +138,11 @@ func (h *DashboardHandler) GetDashboard(c *fiber.Ctx) error {
 
 // UpdateDashboard updates dashboard name/widgets/visibility.
 // PUT /api/v1/dashboards/:id
-// PERF-03 fix: Only whitelisted fields can be updated — prevents mass assignment attacks
-// (e.g. user sending {"user_id": "other-id"} to hijack another user's dashboard).
+// Only whitelisted fields are updated — prevents mass assignment (OWASP API4).
 func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
-	var dash models.Dashboard
-	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", c.Params("id"), userID).First(&dash).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dashboard not found"})
-	}
 
-	// PERF-03 fix: Use explicit DTO struct, never pass raw request body to the ORM.
-	// Only allow updating name, widgets, and isPublic.
+	// Use explicit DTO struct, never pass raw request body to the ORM.
 	var req struct {
 		Name     *string         `json:"name"`
 		Widgets  json.RawMessage `json:"widgets"`
@@ -119,9 +152,55 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	updates := map[string]interface{}{
-		"updated_at": time.Now(),
+	// Phase 31: delegate to service when available (mass-assignment safe)
+	if h.svc != nil {
+		// Build patch object (only fields user sent)
+		patch := &models.Dashboard{ID: c.Params("id"), UserID: userID}
+		if req.Name != nil {
+			if *req.Name == "" {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name cannot be empty"})
+			}
+			patch.Name = *req.Name
+		}
+		if req.Widgets != nil && string(req.Widgets) != "null" {
+			patch.Widgets = req.Widgets
+		} else {
+			patch.Widgets = []byte("[]")
+		}
+		if req.IsPublic != nil {
+			patch.IsPublic = *req.IsPublic
+		}
+
+		// Retrieve current to preserve untouched fields
+		current, err := h.svc.GetDashboard(c.Context(), c.Params("id"), userID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dashboard not found"})
+		}
+		if req.Name == nil {
+			patch.Name = current.Name
+		}
+		if req.Widgets == nil {
+			patch.Widgets = current.Widgets
+		}
+		if req.IsPublic == nil {
+			patch.IsPublic = current.IsPublic
+		}
+
+		if err := h.svc.UpdateDashboard(c.Context(), patch, userID); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Update failed: %v", err)})
+		}
+
+		// Return updated state
+		updated, _ := h.svc.GetDashboard(c.Context(), c.Params("id"), userID)
+		return c.JSON(updated)
 	}
+
+	// Fallback: direct DB
+	var dash models.Dashboard
+	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", c.Params("id"), userID).First(&dash).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dashboard not found"})
+	}
+	updates := map[string]interface{}{"updated_at": time.Now()}
 	if req.Name != nil {
 		if *req.Name == "" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name cannot be empty"})
@@ -129,7 +208,6 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 		updates["name"] = *req.Name
 	}
 	if req.Widgets != nil {
-		// Validasi apakah array widget ini valid JSON agar tidak merusak DB
 		if len(req.Widgets) > 0 && string(req.Widgets) != "null" {
 			updates["widgets"] = req.Widgets
 		} else {
@@ -139,12 +217,9 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 	if req.IsPublic != nil {
 		updates["is_public"] = *req.IsPublic
 	}
-
 	if err := h.db.Model(&dash).Updates(updates).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update dashboard"})
 	}
-
-	// Update object sebelum di-return agar response yang dikirim ke client mendapatkan struktur yang sudah sinkron
 	if req.Name != nil {
 		dash.Name = *req.Name
 	}
@@ -154,10 +229,7 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 	if req.IsPublic != nil {
 		dash.IsPublic = *req.IsPublic
 	}
-
-	// Format time ulang untuk standar JSON response
 	dash.UpdatedAt = time.Now()
-
 	return c.JSON(dash)
 }
 
@@ -165,6 +237,16 @@ func (h *DashboardHandler) UpdateDashboard(c *fiber.Ctx) error {
 // DELETE /api/v1/dashboards/:id
 func (h *DashboardHandler) DeleteDashboard(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+
+	// Phase 31: delegate to service when available
+	if h.svc != nil {
+		if err := h.svc.DeleteDashboard(c.Context(), c.Params("id"), userID); err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dashboard not found or access denied"})
+		}
+		return c.Status(fiber.StatusNoContent).Send(nil)
+	}
+
+	// Fallback: direct DB soft-delete
 	now := time.Now()
 	result := h.db.Model(&models.Dashboard{}).
 		Where("id = ? AND user_id = ? AND deleted_at IS NULL", c.Params("id"), userID).

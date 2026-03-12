@@ -287,6 +287,15 @@ func (s *DataAlertService) DeleteAlert(ctx context.Context, id, userID string) e
 	return nil
 }
 
+// GetAlertByID fetches a single alert enforcing ownership.
+func (s *DataAlertService) GetAlertByID(ctx context.Context, id, userID string) (*models.DataAlert, error) {
+	a, err := s.repo.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, fmt.Errorf("alert not found or access denied")
+	}
+	return a, nil
+}
+
 // ToggleAlert switches an alert's enabled state.
 func (s *DataAlertService) ToggleAlert(ctx context.Context, id, userID string, enabled bool) error {
 	if err := s.repo.ToggleEnabled(ctx, id, userID, enabled); err != nil {
