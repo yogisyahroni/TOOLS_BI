@@ -18,8 +18,8 @@ import (
 	"datalens/internal/repository"
 	"datalens/internal/scheduler"
 	"datalens/internal/services"
-
 	"datalens/internal/storage"
+	"datalens/internal/telemetry"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
@@ -45,6 +45,20 @@ func main() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	} else {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	// --- Phase 32: OpenTelemetry distributed tracing ---
+	// No-op exporter in prod unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
+	tp, otelErr := telemetry.InitTracer(context.Background(), "datalens-backend", cfg.Server.Env)
+	if otelErr != nil {
+		log.Warn().Err(otelErr).Msg("OpenTelemetry tracer init failed (non-fatal — tracing disabled)")
+	} else {
+		log.Info().Msg("OpenTelemetry tracing initialised")
+		defer func() {
+			if shutdownErr := tp.Shutdown(context.Background()); shutdownErr != nil {
+				log.Warn().Err(shutdownErr).Msg("OTel tracer shutdown error")
+			}
+		}()
 	}
 
 	// --- Database ---
@@ -199,6 +213,9 @@ func main() {
 	app.Use(middleware.Recover())
 	app.Use(middleware.Logger())
 	app.Use(middleware.CORS(cfg.CORS.Origins))
+	// Phase 32: distributed tracing — creates a span per request.
+	// No-op when OTEL_EXPORTER_OTLP_ENDPOINT is not set in production.
+	app.Use(middleware.Tracing())
 	// Phase 31: circuit breaker applied globally — trips after 5 consecutive 5xx.
 	app.Use(apiCB.Middleware())
 
