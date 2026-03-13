@@ -242,9 +242,10 @@ The JSON MUST conform exactly to this structure:
 ]
 
 - Use PostgreSQL syntax.
-- You CAN use aggregations (SUM, COUNT, AVG), GROUP BY, date functions (DATE_TRUNC), and math operations.
-- Always use the exact table name provided: "${dataset.dataTableName}".
-- CRITICAL: Column names are CASE-SENSITIVE and must match exactly as provided in the schema.
+- You CAN use aggregations (SUM, COUNT, AVG), GROUP BY, and date functions (DATE_TRUNC).
+- IMPORTANT for DATE_TRUNC: The first argument must be a string literal (e.g., 'month') and the second MUST be a TIMESTAMP.
+- If a column is "bigint" but represents a Unix timestamp, you MUST convert it using to_timestamp() before passing to DATE_TRUNC. 
+- Example (ms): to_timestamp("column" / 1000). Example (s): to_timestamp("column").
 - ALWAYS use double quotes for ALL identifiers (e.g., SELECT "Column_Name" FROM "public"."${dataset.dataTableName}").
 - IMPORTANT: If a table name has a schema (e.g., public.users), quote them separately: "public"."users".
 - DO NOT end your SQL query with a semicolon (;). This is CRITICAL.`;
