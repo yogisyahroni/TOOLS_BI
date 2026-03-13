@@ -3,7 +3,7 @@ module datalens
 go 1.25.0
 
 require (
-	github.com/99designs/gqlgen v0.17.88
+	github.com/99designs/gqlgen v0.17.64
 	github.com/ClickHouse/clickhouse-go/v2 v2.30.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gofiber/adaptor/v2 v2.2.1
@@ -94,7 +94,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
