@@ -14,7 +14,8 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { Report } from '@/types/data';
 export type { Report };
 
-export const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://datalens-backend-8eph.onrender.com/api/v1';
+const rawApiBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'https://datalens-backend-8eph.onrender.com/api/v1';
+export const API_BASE = rawApiBase.endsWith('/') ? rawApiBase.slice(0, -1) : rawApiBase;
 
 export function getWsUrl() {
     try {
@@ -48,17 +49,13 @@ export function getRefreshToken() {
 
 export function setRefreshToken(token: string | null) {
     refreshToken = token;
-    if (token) {
-        localStorage.setItem('datalens_refresh_token', token);
-    } else {
-        localStorage.removeItem('datalens_refresh_token');
-    }
+    // BUG-07: Refresh token is stored in httpOnly cookie.
+    // For local dev/debugging we keep it in memory if needed, but NOT in localStorage.
 }
 
 export function clearTokens() {
     accessToken = null;
     refreshToken = null;
-    localStorage.removeItem('datalens_refresh_token');
     // Also clear old zustand state to prevent conflicts for existing users
     localStorage.removeItem('datalens-auth');
 }
@@ -115,22 +112,14 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            const manualRefreshTokenStr = localStorage.getItem('datalens_refresh_token');
-            const tokenToUse = manualRefreshTokenStr && manualRefreshTokenStr !== 'undefined' ? manualRefreshTokenStr : '';
-
-            if (!tokenToUse) {
-                throw new Error("No refresh token available in storage");
-            }
-
-            // Include refreshToken in body as fallback for strict 3rd-party cookie blockers
-            const payload = { refreshToken: tokenToUse };
-            const { data } = await axios.post(`${API_BASE}/auth/refresh`, payload, {
+            // BUG-07 Fix: We no longer send refreshToken in the body.
+            // The browser sends it automatically in the 'refresh_token' httpOnly cookie
+            // because of 'withCredentials: true'.
+            const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, {
                 withCredentials: true,
             });
             setAccessToken(data.accessToken);
-            if (data.refreshToken) {
-                setRefreshToken(data.refreshToken); // If backend decides to rotate it
-            }
+            // No need to setRefreshToken manually; backend will set it via cookie if rotated.
             processQueue(null, data.accessToken);
             original.headers.Authorization = `Bearer ${data.accessToken}`;
             return api(original);

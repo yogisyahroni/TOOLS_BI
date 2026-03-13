@@ -112,7 +112,7 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 		"max_tokens": cfg.MaxTokens,
 	}
 
-	baseURL := cfg.BaseURL
+	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
 	}
@@ -462,7 +462,7 @@ SQL:`, schemaContext, req.Question)
 // callOpenAI — non-streaming OpenAI-compatible request
 // ─────────────────────────────────────────────────────────────────────────────
 func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error) {
-	baseURL := cfg.BaseURL
+	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
 	}
@@ -511,7 +511,7 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 // streamOpenAI — streaming OpenAI-compatible request, calls onToken per delta
 // ─────────────────────────────────────────────────────────────────────────────
 func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onToken func(string)) error {
-	baseURL := cfg.BaseURL
+	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
 	}
@@ -572,27 +572,30 @@ func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onToken func
 
 // providerBaseURL maps known provider names to their OpenAI-compatible API base URL.
 // Providers not listed here must set baseUrl explicitly in user config.
+// Ensures no trailing slash for consistent concatenation with path.
 func providerBaseURL(provider string) string {
+	var url string
 	switch provider {
 	case "openai":
-		return "https://api.openai.com/v1"
+		url = "https://api.openai.com/v1"
 	case "openrouter":
-		return "https://openrouter.ai/api/v1"
+		url = "https://openrouter.ai/api/v1"
 	case "groq":
-		return "https://api.groq.com/openai/v1"
+		url = "https://api.groq.com/openai/v1"
 	case "deepseek":
-		return "https://api.deepseek.com/v1"
+		url = "https://api.deepseek.com/v1"
 	case "together":
-		return "https://api.together.xyz/v1"
+		url = "https://api.together.xyz/v1"
 	case "mistral":
-		return "https://api.mistral.ai/v1"
+		url = "https://api.mistral.ai/v1"
 	case "nvidia":
-		return "https://integrate.api.nvidia.com/v1"
+		url = "https://integrate.api.nvidia.com/v1"
 	case "moonshot":
-		return "https://api.moonshot.cn/v1"
+		url = "https://api.moonshot.cn/v1"
 	default:
-		return "https://api.openai.com/v1"
+		url = "https://api.openai.com/v1"
 	}
+	return strings.TrimSuffix(url, "/")
 }
 
 // sendSSEEvent writes one SSE event: "event: <type>\ndata: <payload>\n\n"
