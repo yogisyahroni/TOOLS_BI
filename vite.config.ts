@@ -24,8 +24,6 @@ export default defineConfig(({ mode }) => ({
 
   plugins: [
     react(),
-    // Auto-splits node_modules into a vendor chunk
-    splitVendorChunkPlugin(),
     mode === "development" && componentTagger(),
   ].filter(Boolean),
 
@@ -58,20 +56,8 @@ export default defineConfig(({ mode }) => ({
          *  - query           : tanstack-query                     (always, but separate)
          */
         manualChunks(id: string) {
-          // ── React core ──────────────────────────────────────────────────────
-          if (
-            id.includes("node_modules/react/") ||
-            id.includes("node_modules/react-dom/") ||
-            id.includes("node_modules/react-router-dom/") ||
-            id.includes("node_modules/scheduler/")
-          ) {
-            return "react-core";
-          }
-
-          // ── TanStack Query ──────────────────────────────────────────────────
-          if (id.includes("node_modules/@tanstack/")) {
-            return "query";
-          }
+          // Let Vite handle React, Router, and standard UI libraries to prevent 
+          // "createContext is undefined" ESM/CJS interop errors across chunks.
 
           // ── Charts (ECharts + Recharts) ─────────────────────────────────────
           if (
@@ -114,24 +100,8 @@ export default defineConfig(({ mode }) => ({
             return "xlsx";
           }
 
-          // ── Framer Motion ──────────────────────────────────────────────────
-          if (id.includes("node_modules/framer-motion/")) {
-            return "motion";
-          }
-
-          // ── Radix UI + Shadcn utilities ────────────────────────────────────
-          if (
-            id.includes("node_modules/@radix-ui/") ||
-            id.includes("node_modules/class-variance-authority/") ||
-            id.includes("node_modules/clsx/") ||
-            id.includes("node_modules/tailwind-merge/") ||
-            id.includes("node_modules/cmdk/") ||
-            id.includes("node_modules/vaul/") ||
-            id.includes("node_modules/sonner/") ||
-            id.includes("node_modules/lucide-react/")
-          ) {
-            return "ui-components";
-          }
+          // Vite's default strategy is smart enough to share Framer Motion and Radix 
+          // across modules without breaking context.
         },
       },
     },
