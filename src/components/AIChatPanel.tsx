@@ -89,16 +89,25 @@ export function AIChatPanel({
       if (response.content) {
         // Attempt to extract JSON if it's wrapped in triple backticks or plain
         let jsonStr = response.content;
-        const codeBlockMatch = jsonStr.match(/```(?:json)?\n([\s\S]*?)\n```/);
+
+        // More lenient regex for markdown blocks: allowing optional spaces/newlines
+        const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
         if (codeBlockMatch) {
-          jsonStr = codeBlockMatch[1];
+          jsonStr = codeBlockMatch[1].trim();
+        } else {
+          // Fallback: search for potential JSON array structure if no markdown block
+          const firstBracket = jsonStr.indexOf('[');
+          const lastBracket = jsonStr.lastIndexOf(']');
+          if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+            jsonStr = jsonStr.substring(firstBracket, lastBracket + 1);
+          }
         }
 
         const parsed = JSON.parse(jsonStr);
         if (Array.isArray(parsed) && parsed.length > 0 && 'sql' in parsed[0] && 'name' in parsed[0]) {
           isJsonArray = true;
           jsonData = parsed;
-          content = "Here are the dataset recommendations I have generated for you:"; // Override content
+          // We no longer override 'content' here to preserve the AI's explanation
 
           // Initialize selection state for this message
           const msgId = (Date.now() + 1).toString();
@@ -107,6 +116,7 @@ export function AIChatPanel({
       }
     } catch (e) {
       // Not JSON, treat as normal text
+      console.warn('AI Parsing failed:', e);
     }
 
     const msgId = (Date.now() + 1).toString();

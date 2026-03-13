@@ -228,9 +228,9 @@ The available columns are: ${dataset.columns.map(c => `${c.name} (${c.type})`).j
 The underlying table name is "${dataset.dataTableName}".
 
 Your task is to analyze the user's request and suggest one or more valuable data views (datasets) that can be derived from this source data.
-If the user asks "how many datasets can be generated", provide a list of diverse, useful analytical views (e.g., aggregations, temporal trends, categorical breakdowns, or top N lists).
+Provide a brief, helpful explanation of your reasoning first, and then provide the dataset recommendations in a structured JSON block.
 
-CRITICAL INSTRUCTION: You MUST output your recommendations as a valid JSON array object. Do NOT wrap the JSON in markdown code blocks if possible, or if you do, ensure the content is strictly parseable JSON.
+CRITICAL INSTRUCTION: You MUST include your recommendations as a valid JSON array object. Wrap the JSON in a standard markdown code block: \`\`\`json [your json] \`\`\`.
 
 The JSON MUST conform exactly to this structure:
 [
