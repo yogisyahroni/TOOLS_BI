@@ -172,7 +172,13 @@ type DBTypeInfo struct {
 // execQuery runs a SQL query with timing and returns structured results.
 func execQuery(ctx context.Context, db *sql.DB, query string, limit int) (*QueryResult, error) {
 	// Enforce read-only: reject destructive statements
-	upper := strings.ToUpper(strings.TrimSpace(query))
+	query = strings.TrimSpace(query)
+	for strings.HasSuffix(query, ";") {
+		query = strings.TrimSuffix(query, ";")
+	}
+	query = strings.TrimSpace(query)
+
+	upper := strings.ToUpper(query)
 	for _, kw := range []string{"DROP ", "DELETE ", "TRUNCATE ", "ALTER ", "CREATE ", "INSERT ", "UPDATE ", "GRANT ", "REVOKE "} {
 		if strings.HasPrefix(upper, kw) {
 			return nil, fmt.Errorf("only SELECT queries are allowed; got: %s", strings.Split(query, "\n")[0])

@@ -681,7 +681,13 @@ func (h *DatasetHandler) AIGenerateDataset(c *fiber.Ctx) error {
 	}
 
 	// Basic query sanitization: Ensure it's a SELECT query and prevent obvious destructive commands
-	qUpper := strings.ToUpper(strings.TrimSpace(req.Query))
+	req.Query = strings.TrimSpace(req.Query)
+	for strings.HasSuffix(req.Query, ";") {
+		req.Query = strings.TrimSuffix(req.Query, ";")
+	}
+	req.Query = strings.TrimSpace(req.Query)
+
+	qUpper := strings.ToUpper(req.Query)
 	if !strings.HasPrefix(qUpper, "SELECT") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Only SELECT queries are allowed for view generation"})
 	}
