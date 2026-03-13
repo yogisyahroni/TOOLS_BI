@@ -1,0 +1,169 @@
+# DataLens GraphQL Schema — Phase 37
+# Strategy: Read-focused, additive alongside REST.
+# Mutations stay in REST for backward compatibility.
+# All queries require JWT (enforced at route level, not schema level).
+
+scalar DateTime
+scalar JSON
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Root Query
+# ──────────────────────────────────────────────────────────────────────────────
+
+type Query {
+  # Dashboard bundle — single call replaces 3-4 sequential REST fetches.
+  # Returns dashboard metadata + its widget chart configs + dataset schemas.
+  dashboardBundle(id: ID!): DashboardBundle
+
+  # Paginated dashboard list for the authenticated user.
+  dashboards(page: Int = 1, limit: Int = 20): DashboardsResult!
+
+  # Single dataset with column schema.
+  dataset(id: ID!): Dataset
+
+  # Paginated dataset list.
+  datasets(page: Int = 1, limit: Int = 20): DatasetsResult!
+
+  # Charts belonging to a dataset (N+1 prevention via DataLoader).
+  charts(datasetId: ID!): [SavedChart!]!
+
+  # All charts for the current user.
+  myCharts(page: Int = 1, limit: Int = 20): ChartsResult!
+
+  # KPIs for the current user.
+  kpis(page: Int = 1, limit: Int = 20): KpisResult!
+
+  # Data alerts for the current user.
+  alerts(page: Int = 1, limit: Int = 20): AlertsResult!
+
+  # Health check (no auth required — useful for frontend connectivity check).
+  ping: String!
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Dashboard Bundle — Core BI use-case type
+# ──────────────────────────────────────────────────────────────────────────────
+
+"Complete dashboard snapshot optimised for the builder canvas."
+type DashboardBundle {
+  id: ID!
+  name: String!
+  isPublic: Boolean!
+  version: Int!
+  widgets: JSON!
+  "All charts referenced by this dashboard's widgets."
+  charts: [SavedChart!]!
+  "Distinct datasets used by the charts — for column schema access."
+  datasets: [Dataset!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Core Types
+# ──────────────────────────────────────────────────────────────────────────────
+
+type Dashboard {
+  id: ID!
+  userId: ID!
+  name: String!
+  isPublic: Boolean!
+  version: Int!
+  widgets: JSON!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Dataset {
+  id: ID!
+  userId: ID!
+  name: String!
+  fileName: String!
+  rowCount: Int!
+  sizeBytes: Int!
+  columns: JSON!
+  dataTableName: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  "Charts built on this dataset."
+  charts: [SavedChart!]!
+}
+
+type SavedChart {
+  id: ID!
+  userId: ID!
+  datasetId: ID!
+  title: String!
+  type: String!
+  xAxis: String!
+  yAxis: String!
+  groupBy: String!
+  annotations: JSON!
+  createdAt: DateTime!
+  "Parent dataset metadata (resolved via DataLoader — no N+1)."
+  dataset: Dataset
+}
+
+type KPI {
+  id: ID!
+  userId: ID!
+  datasetId: ID!
+  title: String!
+  metric: String!
+  aggregation: String!
+  targetValue: Float
+  currentValue: Float
+  unit: String!
+  trend: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type DataAlert {
+  id: ID!
+  userId: ID!
+  datasetId: ID!
+  name: String!
+  columnName: String!
+  condition: String!
+  threshold: Float!
+  isEnabled: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pagination Results
+# ──────────────────────────────────────────────────────────────────────────────
+
+type PageInfo {
+  total: Int!
+  page: Int!
+  limit: Int!
+  totalPages: Int!
+}
+
+type DashboardsResult {
+  items: [Dashboard!]!
+  pageInfo: PageInfo!
+}
+
+type DatasetsResult {
+  items: [Dataset!]!
+  pageInfo: PageInfo!
+}
+
+type ChartsResult {
+  items: [SavedChart!]!
+  pageInfo: PageInfo!
+}
+
+type KpisResult {
+  items: [KPI!]!
+  pageInfo: PageInfo!
+}
+
+type AlertsResult {
+  items: [DataAlert!]!
+  pageInfo: PageInfo!
+}

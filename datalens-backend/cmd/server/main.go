@@ -10,6 +10,7 @@ import (
 
 	"datalens/internal/config"
 	"datalens/internal/email"
+	"datalens/internal/graphql"
 	"datalens/internal/handlers"
 	"datalens/internal/middleware"
 	"datalens/internal/migrations"
@@ -494,6 +495,30 @@ func main() {
 	embedTokens.Get("/", embedH.ListEmbedTokens)
 	embedTokens.Post("/", embedH.GenerateEmbedToken)
 	embedTokens.Delete("/:id", embedH.RevokeEmbedToken)
+
+	// ── Phase 37: GraphQL API ────────────────────────────────────────────────
+	// Additive: existing REST endpoints are unchanged.
+	//
+	// - POST /graphql   → JWT-protected endpoint (same auth middleware as REST)
+	// - GET  /graphiql  → playground (dev/staging only; disabled in production)
+	//
+	// The handler injects userID from Fiber locals into ctx for resolvers.
+	gqlHandler := graphql.NewGraphQLHandler(
+		db,
+		dashboardRepo,
+		datasetRepo,
+		chartRepo,
+		dataAlertRepo,
+	)
+	// All HTTP verbs go through the JWT middleware, then the GraphQL handler.
+	app.All("/graphql", authRequired, gqlHandler)
+
+	// Playground is only useful in dev/staging.
+	if cfg.Server.Env != "production" {
+		app.Get("/graphiql", graphql.NewPlaygroundHandler("/graphql"))
+		log.Info().Msg("GraphQL playground enabled at /graphiql")
+	}
+	log.Info().Msg("GraphQL API registered at /graphql")
 
 	// --- Static Frontend (React SPA) ---
 	// Serve the built frontend from ../dist/ if it exists.

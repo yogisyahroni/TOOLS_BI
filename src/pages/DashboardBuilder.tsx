@@ -32,6 +32,7 @@ import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useRelationships, useAutoJoinQuery, useFormatRules, useCreateFormatRule, useDeleteFormatRule, useParameters, useCreateParameter, useDeleteParameter, useUpdateParameter, useDrillConfig, useSaveDrillConfig, useCalcFields, useCreateCalcField, useDeleteCalcField, useExecuteAction, useComments, useCreateComment, useDeleteComment, useDatasets, useDatasetData, useDashboards, useCreateDashboard, useUpdateDashboard, useDeleteDashboard, useCharts } from '@/hooks/useApi';
+import { useGraphQLDashboardBundle } from '@/hooks/useGraphQLDashboard';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { DashboardParameter } from '@/lib/api';
@@ -159,6 +160,60 @@ export default function DashboardBuilder() {
   }, []);
 
   const [activeDashboardId, setActiveDashboardId] = useState('');
+
+  // ── GraphQL cache-warmer (Phase 38) ─────────────────────────────────────────
+  // Fires a single `/graphql` query that returns the full bundle (dashboard meta
+  // + all charts + all dataset schemas).  We seed the TanStack Query cache so
+  // that `useDatasetData` calls inside `WidgetChartRenderer` often find a warm
+  // cache hit and skip individual REST round-trips.
+  // If /graphql is unreachable (cold start, network error) the error is silently
+  // swallowed — REST hooks continue to work identically.
+  const { data: gqlBundle } = useGraphQLDashboardBundle(activeDashboardId || null);
+
+  useEffect(() => {
+    if (!gqlBundle || !activeDashboardId) return;
+
+    // Seed dataset metadata cache so widgets that call useDatasets() get a hit.
+    if (gqlBundle.datasets.length > 0) {
+      queryClient.setQueryData(['datasets'], (old: unknown) => {
+        // Merge — keep existing if already fresh to avoid overwriting REST data.
+        if (Array.isArray(old) && old.length >= gqlBundle.datasets.length) return old;
+        // Map GQL dataset to the same shape REST returns (best-effort).
+        return gqlBundle.datasets.map((ds) => ({
+          id:            ds.id,
+          user_id:       ds.userId,
+          name:          ds.name,
+          file_name:     ds.fileName,
+          row_count:     ds.rowCount,
+          size_bytes:    ds.sizeBytes,
+          columns:       ds.columns,
+          data_table_name: ds.dataTableName,
+          created_at:    ds.createdAt,
+          updated_at:    ds.updatedAt,
+        }));
+      });
+    }
+
+    // Seed charts cache.
+    if (gqlBundle.charts.length > 0) {
+      queryClient.setQueryData(['charts'], (old: unknown) => {
+        if (Array.isArray(old) && old.length >= gqlBundle.charts.length) return old;
+        return gqlBundle.charts.map((c) => ({
+          id:          c.id,
+          user_id:     c.userId,
+          dataset_id:  c.datasetId,
+          title:       c.title,
+          type:        c.type,
+          x_axis:      c.xAxis,
+          y_axis:      c.yAxis,
+          group_by:    c.groupBy,
+          annotations: c.annotations,
+          created_at:  c.createdAt,
+        }));
+      });
+    }
+  }, [gqlBundle, activeDashboardId, queryClient]);
+  // ── End GraphQL cache-warmer ─────────────────────────────────────────────────
   const [newDashName, setNewDashName] = useState('');
   const [activeFilter, setActiveFilter] = useState<{ column: string; value: string } | null>(null);
 

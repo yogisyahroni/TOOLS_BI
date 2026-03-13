@@ -1,0 +1,28 @@
+# gqlgen.yml — Code generation config for DataLens GraphQL layer
+# Run: go run github.com/99designs/gqlgen generate
+
+schema:
+  - internal/graphql/schema.graphqls
+
+exec:
+  layout: single-file
+  filename: internal/graphql/generated.go
+  package: graphql
+
+model:
+  filename: internal/graphql/models_gen.go
+  package: graphql
+
+resolver:
+  layout: follow-schema
+  dir: internal/graphql
+  package: graphql
+  filename_template: "{name}_resolver.go"
+
+autobind: []
+
+models:
+  DateTime:
+    model: github.com/99designs/gqlgen/graphql.Time
+  JSON:
+    model: github.com/99designs/gqlgen/graphql.Map
