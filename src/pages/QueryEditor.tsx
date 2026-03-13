@@ -241,11 +241,11 @@ The JSON MUST conform exactly to this structure:
   }
 ]
 
-SQL Guidelines:
 - Use PostgreSQL syntax.
 - You CAN use aggregations (SUM, COUNT, AVG), GROUP BY, date functions (DATE_TRUNC), and math operations.
 - Always use the exact table name provided: "${dataset.dataTableName}".
-- Ensure column names match exactly as provided in the schema.`;
+- CRITICAL: Column names are CASE-SENSITIVE and must match exactly as provided in the schema.
+- ALWAYS use double quotes for ALL identifiers (e.g., SELECT "Column_Name" FROM "${dataset.dataTableName}").`;
   };
 
   return (
