@@ -44,13 +44,13 @@ func Tracing() fiber.Handler {
 
 		// Security: Wash Hostname and RequestURI to break taint flow.
 		hostRegex := regexp.MustCompile(`^[a-zA-Z0-9.-]+(?::[0-9]+)?$`)
-		cleanHost := ""
+		cleanHost := "unknown"
 		if match := hostRegex.FindString(c.Hostname()); match != "" {
 			cleanHost = match
 		}
 
-		targetRegex := regexp.MustCompile(`^[a-zA-Z0-9.\-\_/\\\?\&\=\:\%]+$`)
-		cleanTarget := ""
+		targetRegex := regexp.MustCompile(`^[a-zA-Z0-9.\-\_/\\\?\&\=\:\%\s]+$`)
+		cleanTarget := "/"
 		if match := targetRegex.FindString(string(c.Request().RequestURI())); match != "" {
 			cleanTarget = match
 		}
@@ -72,7 +72,8 @@ func Tracing() fiber.Handler {
 		// Call the next handler
 		if err := c.Next(); err != nil {
 			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
+			// Security: Avoid setting status to potentially tainted error strings.
+			span.SetStatus(codes.Error, "Internal Request Error")
 			return err
 		}
 

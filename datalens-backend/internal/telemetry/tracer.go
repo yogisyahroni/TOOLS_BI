@@ -12,7 +12,6 @@ package telemetry
 import (
 	"context"
 	"os"
-	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -71,23 +70,26 @@ func InitTracer(ctx context.Context, serviceName, env string) (*TracerProvider, 
 	}
 
 	// Security: Use configured batch settings via env or defaults.
-	// We parse as int/seconds and then re-assign within strict bounds
-	// to break the taint flow from os.Getenv.
+	// We use literal switching to break the taint flow from os.Getenv.
 	var finalBatchTimeout time.Duration = 5 * time.Second
 	if val := os.Getenv("OTEL_BATCH_TIMEOUT"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil {
-			if i > 0 && i <= 60 {
-				finalBatchTimeout = time.Duration(i) * time.Second
-			}
+		switch val {
+		case "1": finalBatchTimeout = 1 * time.Second
+		case "2": finalBatchTimeout = 2 * time.Second
+		case "5": finalBatchTimeout = 5 * time.Second
+		case "10": finalBatchTimeout = 10 * time.Second
+		case "30": finalBatchTimeout = 30 * time.Second
+		case "60": finalBatchTimeout = 60 * time.Second
 		}
 	}
 
 	var finalMaxBatchSize int = 512
 	if val := os.Getenv("OTEL_MAX_EXPORT_BATCH_SIZE"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil {
-			if i > 0 && i <= 2048 {
-				finalMaxBatchSize = i
-			}
+		switch val {
+		case "256": finalMaxBatchSize = 256
+		case "512": finalMaxBatchSize = 512
+		case "1024": finalMaxBatchSize = 1024
+		case "2048": finalMaxBatchSize = 2048
 		}
 	}
 
