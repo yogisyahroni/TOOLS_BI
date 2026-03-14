@@ -79,8 +79,9 @@ func main() {
 			log.Info().Msg("Supabase database connected")
 		}
 	}
-	// To prevent unused variable errors later if we don't pass supabaseDB to handlers yet
-	_ = supabaseDB
+	// --- ETL Storage Service ---
+	etlStorageSvc := services.NewETLStorageService(db, supabaseDB)
+	log.Info().Msg("ETL Storage Service initialised")
 
 	// --- Auto-migrate all models ---
 	if err := autoMigrate(db); err != nil {
@@ -177,7 +178,7 @@ func main() {
 	chartH := handlers.NewChartHandler(db, hub)
 	chartH.SetService(chartSvc)
 	exportH := handlers.NewExportHandler(db)
-	etlH := handlers.NewETLHandler(db, hub)
+	etlH := handlers.NewETLHandler(db, hub, etlStorageSvc)
 	schemaH := handlers.NewSchemaHandler(db)
 	// P1 BUG fixes: new handlers for backend-persisted bookmark/annotation/template/relationship
 	bookmarkH := handlers.NewBookmarkHandler(db)

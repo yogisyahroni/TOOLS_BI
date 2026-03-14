@@ -12,6 +12,7 @@ type ETLPipeline struct {
 	Name            string          `json:"name" gorm:"not null"`
 	SourceDatasetID string          `json:"sourceDatasetId" gorm:"type:uuid;not null;index"`
 	OutputDatasetID *string         `json:"outputDatasetId" gorm:"type:uuid;index"`
+	OutputTableName string          `json:"outputTableName" gorm:"type:text"`
 	Steps           json.RawMessage `json:"steps" gorm:"type:jsonb;default:'[]'"`
 	Status          string          `json:"status" gorm:"default:idle"` // idle,running,completed,error
 	LastRunAt       *time.Time      `json:"lastRunAt"`
@@ -33,6 +34,7 @@ type VisualPipeline struct {
 	LastRunDurationMs *int            `json:"lastRunDurationMs"`
 	LastError         string          `json:"lastError" gorm:"type:text"`
 	OutputDatasetID   *string         `json:"outputDatasetId" gorm:"type:uuid;index"`
+	OutputTableName   string          `json:"outputTableName" gorm:"type:text"`
 	Schedule          string          `json:"schedule"`
 	IsTemplate        bool            `json:"isTemplate" gorm:"default:false"`
 	Tags              json.RawMessage `json:"tags" gorm:"type:jsonb;default:'[]'"`

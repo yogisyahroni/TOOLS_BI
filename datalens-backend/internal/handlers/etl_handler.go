@@ -1,14 +1,17 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"datalens/internal/engine"
 	"datalens/internal/middleware"
 	"datalens/internal/models"
 	"datalens/internal/realtime"
+	"datalens/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -17,13 +20,14 @@ import (
 
 // ETLHandler manages ETL pipeline operations.
 type ETLHandler struct {
-	db  *gorm.DB
-	hub *realtime.Hub
+	db         *gorm.DB
+	hub        *realtime.Hub
+	storageSvc *services.ETLStorageService
 }
 
 // NewETLHandler creates a new ETLHandler.
-func NewETLHandler(db *gorm.DB, hub *realtime.Hub) *ETLHandler {
-	return &ETLHandler{db: db, hub: hub}
+func NewETLHandler(db *gorm.DB, hub *realtime.Hub, storageSvc *services.ETLStorageService) *ETLHandler {
+	return &ETLHandler{db: db, hub: hub, storageSvc: storageSvc}
 }
 
 // ListPipelines returns all ETL pipelines for the user.
@@ -140,7 +144,7 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 
 	// Async execution
 	go func() {
-		result := executePipeline(&pipeline)
+		result := h.executePipelineInternal(context.Background(), &pipeline)
 		now := time.Now()
 		run.Status = result.status
 		run.Error = result.errMsg
@@ -151,8 +155,9 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 		}
 		h.db.Save(&run)
 		h.db.Model(&pipeline).Updates(map[string]interface{}{
-			"status":      result.status,
-			"last_run_at": &now,
+			"status":            result.status,
+			"last_run_at":       &now,
+			"output_table_name": pipeline.OutputTableName,
 		})
 		h.hub.SendToUser(userID, realtime.Event{
 			Type: realtime.EventETLComplete,
@@ -160,6 +165,7 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 				"pipelineId": pipeline.ID,
 				"status":     result.status,
 				"outputRows": result.outputRows,
+				"tableName":  pipeline.OutputTableName,
 			},
 		})
 	}()
@@ -188,30 +194,38 @@ type pipelineExecResult struct {
 	outputRows int64
 }
 
-// executePipeline processes ETL steps. Extendable with engine/visual_etl.
-func executePipeline(p *models.ETLPipeline) pipelineExecResult {
-	time.Sleep(300 * time.Millisecond)
+// executePipelineInternal processes ETL steps using the visual_etl engine and persists results.
+func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLPipeline) pipelineExecResult {
+	var spec engine.PipelineSpec
+	if err := json.Unmarshal(p.Steps, &spec.Nodes); err != nil {
+		return pipelineExecResult{status: "error", errMsg: "Invalid pipeline specification"}
+	}
 
-	var steps []map[string]interface{}
-	if len(p.Steps) > 0 {
-		if err := json.Unmarshal(p.Steps, &steps); err != nil {
-			return pipelineExecResult{status: "error", errMsg: "Invalid steps JSON"}
+	// 1. Run the transformation engine
+	result, err := engine.RunVisualPipeline(h.db, spec)
+	if err != nil {
+		return pipelineExecResult{status: "error", errMsg: err.Error()}
+	}
+
+	if len(result.Errors) > 0 {
+		// Collect first error for status report
+		for _, errText := range result.Errors {
+			return pipelineExecResult{status: "error", errMsg: errText}
 		}
 	}
 
-	for _, step := range steps {
-		stepType, _ := step["type"].(string)
-		switch strings.ToLower(stepType) {
-		case "filter", "transform", "aggregate", "join", "rename", "drop", "sort", "limit":
-			continue
-		default:
-			if stepType != "" {
-				return pipelineExecResult{
-					status: "error",
-					errMsg: fmt.Sprintf("Unknown step type: %s", stepType),
-				}
-			}
-		}
+	// 2. Generate output table name if not exists
+	if p.OutputTableName == "" {
+		p.OutputTableName = fmt.Sprintf("etl_out_%s", strings.ReplaceAll(uuid.New().String(), "-", "_"))
 	}
-	return pipelineExecResult{status: "completed", outputRows: 0}
+
+	// 3. Persist results
+	if err := h.storageSvc.PersistETLResult(ctx, p.OutputTableName, result.Rows); err != nil {
+		return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Storage failed: %v", err)}
+	}
+
+	return pipelineExecResult{
+		status:     "completed",
+		outputRows: int64(len(result.Rows)),
+	}
 }
