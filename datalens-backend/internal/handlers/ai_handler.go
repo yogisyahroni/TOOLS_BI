@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -113,13 +114,18 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 		"max_tokens": cfg.MaxTokens,
 	}
 
-	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
-	if baseURL == "" {
-		baseURL = providerBaseURL(cfg.Provider)
+	baseURLStr := strings.TrimSuffix(cfg.BaseURL, "/")
+	if baseURLStr == "" {
+		baseURLStr = providerBaseURL(cfg.Provider)
+	}
+
+	u, err := url.Parse(baseURLStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid AI base URL"})
 	}
 
 	data, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+	httpReq, err := http.NewRequest("POST", u.JoinPath("chat/completions").String(), bytes.NewReader(data))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}

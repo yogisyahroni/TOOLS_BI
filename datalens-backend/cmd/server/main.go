@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -517,7 +518,8 @@ func main() {
 		dataAlertRepo,
 	)
 	// All HTTP verbs go through the JWT middleware, then the GraphQL handler.
-	app.All("/graphql", authRequired, gqlHandler)
+	// Security: Only POST allowed for GraphQL mutations/queries
+	app.Post("/graphql", authRequired, gqlHandler)
 
 	// Playground is only useful in dev/staging.
 	if cfg.Server.Env != "production" {
@@ -533,6 +535,9 @@ func main() {
 	if distDir == "" {
 		distDir = "../dist"
 	}
+	// Security: Ensure path is cleaned
+	distDir = filepath.Clean(distDir)
+
 	if _, statErr := os.Stat(distDir); statErr == nil {
 		app.Static("/", distDir, fiber.Static{
 			Compress:  true,
@@ -542,8 +547,9 @@ func main() {
 		})
 		// SPA fallback: serve index.html for any unmatched route
 		app.Use(func(c *fiber.Ctx) error {
-			if c.Path() != "/" && !contains(c.Path(), "/api/", "/ws", "/health") {
-				return c.SendFile(distDir + "/index.html")
+			path := c.Path()
+			if path != "/" && !contains(path, "/api/", "/ws", "/health") {
+				return c.SendFile(filepath.Join(distDir, "index.html"))
 			}
 			return c.Next()
 		})

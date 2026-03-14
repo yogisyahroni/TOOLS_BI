@@ -73,14 +73,14 @@ func InitTracer(ctx context.Context, serviceName, env string) (*TracerProvider, 
 	// Security: Use configured batch settings via env or defaults
 	batchTimeout := 5 * time.Second
 	if val := os.Getenv("OTEL_BATCH_TIMEOUT"); val != "" {
-		if d, err := time.ParseDuration(val); err == nil {
+		if d, err := time.ParseDuration(val); err == nil && d > 0 {
 			batchTimeout = d
 		}
 	}
 
 	maxBatchSize := 512
 	if val := os.Getenv("OTEL_MAX_EXPORT_BATCH_SIZE"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil {
+		if i, err := strconv.Atoi(val); err == nil && i > 0 && i <= 2048 {
 			maxBatchSize = i
 		}
 	}

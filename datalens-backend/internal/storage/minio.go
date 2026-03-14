@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -18,6 +19,11 @@ type MinIOStorage struct {
 
 // NewMinIOStorage creates a new MinIO storage client and ensures the bucket exists.
 func NewMinIOStorage(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*MinIOStorage, error) {
+	// Security: Validate endpoint
+	if _, err := url.Parse(endpoint); err != nil {
+		return nil, fmt.Errorf("invalid minio endpoint: %w", err)
+	}
+
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: useSSL,
