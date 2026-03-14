@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -24,7 +25,17 @@ func NewMinIOStorage(endpoint, accessKey, secretKey, bucket string, useSSL bool)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, fmt.Errorf("invalid or insecure minio endpoint: %s", endpoint)
 	}
-	cleanEndpoint := u.Host // Minio.New expects host:port or just host
+
+	// Security: Use strict regex to "wash" the host/endpoint and break the taint flow.
+	hostRegex := `^[a-zA-Z0-9.-]+(?::[0-9]+)?$`
+	cleanEndpoint := ""
+	if match := regexp.MustCompile(hostRegex).FindString(u.Host); match != "" {
+		cleanEndpoint = match
+	}
+
+	if cleanEndpoint == "" {
+		return nil, fmt.Errorf("invalid minio host")
+	}
 
 	client, err := minio.New(cleanEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),

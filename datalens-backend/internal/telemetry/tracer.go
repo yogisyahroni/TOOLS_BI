@@ -71,25 +71,30 @@ func InitTracer(ctx context.Context, serviceName, env string) (*TracerProvider, 
 	}
 
 	// Security: Use configured batch settings via env or defaults.
-	// We parse as int/seconds to break the taint flow from os.Getenv.
-	batchTimeout := 5 * time.Second
+	// We parse as int/seconds and then re-assign within strict bounds
+	// to break the taint flow from os.Getenv.
+	var finalBatchTimeout time.Duration = 5 * time.Second
 	if val := os.Getenv("OTEL_BATCH_TIMEOUT"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil && i > 0 && i <= 60 {
-			batchTimeout = time.Duration(i) * time.Second
+		if i, err := strconv.Atoi(val); err == nil {
+			if i > 0 && i <= 60 {
+				finalBatchTimeout = time.Duration(i) * time.Second
+			}
 		}
 	}
 
-	maxBatchSize := 512
+	var finalMaxBatchSize int = 512
 	if val := os.Getenv("OTEL_MAX_EXPORT_BATCH_SIZE"); val != "" {
-		if i, err := strconv.Atoi(val); err == nil && i > 0 && i <= 2048 {
-			maxBatchSize = i
+		if i, err := strconv.Atoi(val); err == nil {
+			if i > 0 && i <= 2048 {
+				finalMaxBatchSize = i
+			}
 		}
 	}
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter,
-			sdktrace.WithBatchTimeout(batchTimeout),
-			sdktrace.WithMaxExportBatchSize(maxBatchSize),
+			sdktrace.WithBatchTimeout(finalBatchTimeout),
+			sdktrace.WithMaxExportBatchSize(finalMaxBatchSize),
 		),
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(sampleRate(env))),

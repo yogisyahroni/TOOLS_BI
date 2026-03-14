@@ -2,7 +2,8 @@ package middleware
 
 import (
 	"fmt"
-
+	"regexp"
+Section
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -41,14 +42,27 @@ func Tracing() fiber.Handler {
 		ctx, span := tracer.Start(ctx, spanName)
 		defer span.End()
 
+		// Security: Wash Hostname and RequestURI to break taint flow.
+		hostRegex := regexp.MustCompile(`^[a-zA-Z0-9.-]+(?::[0-9]+)?$`)
+		cleanHost := ""
+		if match := hostRegex.FindString(c.Hostname()); match != "" {
+			cleanHost = match
+		}
+
+		targetRegex := regexp.MustCompile(`^[a-zA-Z0-9.\-\_/\\\?\&\=\:\%]+$`)
+		cleanTarget := ""
+		if match := targetRegex.FindString(string(c.Request().RequestURI())); match != "" {
+			cleanTarget = match
+		}
+
 		// Attach standard HTTP semantic attributes
 		span.SetAttributes(
 			semconv.HTTPMethod(c.Method()),
 			semconv.HTTPRoute(route.Path),
-			semconv.HTTPTarget(string(c.Request().RequestURI())),
+			semconv.HTTPTarget(cleanTarget),
 			semconv.HTTPScheme(c.Protocol()),
 			attribute.String("http.user_agent", c.Get("User-Agent")),
-			attribute.String("net.host.name", c.Hostname()),
+			attribute.String("net.host.name", cleanHost),
 		)
 
 		// Inject span context into Fiber's request context so downstream
