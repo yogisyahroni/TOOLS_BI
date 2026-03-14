@@ -441,6 +441,15 @@ export default function ETLPipelinePage() {
     }
   };
 
+  const handleRemovePipeline = async (id: string) => {
+    try {
+      await deletePipelineMut.mutateAsync(id);
+      toast({ title: 'Pipeline deleted', description: 'The pipeline has been removed.' });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete pipeline', variant: 'destructive' });
+    }
+  };
+
   const runDraftLocal = async (sourceId: string, steps: ETLStep[]) => {
     const sourceDs = dataSets.find(ds => ds.id === sourceId);
     if (!sourceDs) return;
@@ -521,11 +530,11 @@ export default function ETLPipelinePage() {
     try {
       const jsonMatch = response.match(/\[[\s\S]*\]/);
       if (!jsonMatch) return;
-      const steps: any[] = JSON.parse(jsonMatch[0]);
+      const parsedSteps: any[] = JSON.parse(jsonMatch[0]);
 
-      // 1. If in Exploration Mode (Source selected but not saved)
-      if (selectedSource && pipelines.length === 0) {
-        const newSteps: ETLStep[] = steps.map((s, i) => ({
+      // 1. If a source is selected for Discovery/Exploration, prioritize it
+      if (selectedSource) {
+        const newSteps: ETLStep[] = parsedSteps.map((s, i) => ({
           id: generateId(),
           type: s.type,
           config: s.config || {},
@@ -534,30 +543,29 @@ export default function ETLPipelinePage() {
         const finalSteps = [...draftSteps, ...newSteps];
         setDraftSteps(finalSteps);
         runDraftLocal(selectedSource, finalSteps);
-        toast({ title: 'AI Recommendation Applied', description: `${newSteps.length} steps added to preview.` });
+        toast({ title: 'Discovery Steps Applied', description: `${newSteps.length} steps added to exploration preview.` });
         return;
       }
 
-      // 2. Original behavior for existing pipelines
-      if (pipelines.length === 0) {
-        toast({ title: 'Create a pipeline first', description: 'Please create a pipeline or select a source, then AI will add steps.', variant: 'destructive' });
-        return;
+      // 2. Fallback to existing pipelines only if NOT in discovery mode
+      if (pipelines.length > 0) {
+        const lastPipeline = pipelines[pipelines.length - 1];
+        const currentSteps = (lastPipeline.steps as ETLStep[]) || [];
+        const newSteps: ETLStep[] = parsedSteps.map((s, i) => ({
+          id: generateId(),
+          type: s.type,
+          config: s.config || {},
+          order: currentSteps.length + i,
+        }));
+
+        const finalSteps = [...currentSteps, ...newSteps];
+        await updatePipelineMut.mutateAsync({ id: lastPipeline.id, payload: { steps: finalSteps as any } });
+        toast({ title: 'Steps Added to Pipeline', description: `${newSteps.length} steps added to ${lastPipeline.name}` });
+      } else {
+        toast({ title: 'Select a source first', description: 'Please select a data source for discovery or create a pipeline.', variant: 'destructive' });
       }
-
-      const lastPipeline = pipelines[pipelines.length - 1];
-      const currentSteps = (lastPipeline.steps as ETLStep[]) || [];
-      const newSteps: ETLStep[] = steps.map((s, i) => ({
-        id: generateId(),
-        type: s.type,
-        config: s.config || {},
-        order: currentSteps.length + i,
-      }));
-
-      const finalSteps = [...currentSteps, ...newSteps];
-      await updatePipelineMut.mutateAsync({ id: lastPipeline.id, payload: { steps: finalSteps as any } });
-      toast({ title: 'AI Steps Added', description: `${newSteps.length} steps added to ${lastPipeline.name}` });
     } catch {
-      // Not JSON JSON formatted
+      // JSON parsing failed
     }
   };
 
@@ -572,24 +580,33 @@ export default function ETLPipelinePage() {
 
   // Build system prompt for AI
   const getAIPrompt = () => {
+    const selectedSetName = dataSets.find(ds => ds.id === selectedSource)?.name || 'the current data';
     const dsInfo = dataSets.map(ds => `"${ds.name}" (${ds.columns.map(c => `${c.name}:${c.type}`).join(', ')})`).join('; ');
-    return `You are an ETL pipeline assistant for DataLens. Available datasets: ${dsInfo || 'none'}.
+    
+    return `You are an Enterprise Data Preparation Assistant for DataLens. 
+Current Target: Analyze and transform "${selectedSetName}".
+Available Datasets context: ${dsInfo || 'none'}.
 
-Generate ETL pipeline steps as a JSON array. Each step has: type (filter|transform|aggregate|select|sort|deduplicate|parse_date|json_extract|cast_type|data_cleansing), and config object.
+Your goal is to suggest high-quality ETL (Extract, Transform, Load) steps based on the user's request.
+Provide a brief analysis of what needs to be done, then provide the pipeline steps in a structured JSON block.
 
-Step configs:
-- filter: { "column": "col", "operator": "=|!=|>|<|>=|<=|contains", "value": "val" }
-- transform: { "column": "col", "operation": "uppercase|lowercase|trim|round|abs|add|multiply", "newColumn": "new_col", "operand": number }
-- aggregate: { "groupBy": "col", "aggregations": [{ "column": "col", "function": "sum|avg|count|min|max", "alias": "name" }] }
-- select: { "columns": ["col1", "col2"] }
-- sort: { "column": "col", "direction": "asc|desc" }
-- deduplicate: { "columns": ["col1", "col2"] } (leave columns empty to deduplicate whole row)
-- parse_date: { "column": "col", "extract": "iso|year|month|day", "newColumn": "new_col" }
-- json_extract: { "column": "col", "jsonPath": "path.to.key", "newColumn": "new_col" }
-- cast_type: { "column": "col", "targetType": "string|number|boolean", "newColumn": "new_col" }
-- data_cleansing: { "column": "col", "action": "drop_null|fill_null", "fillValue": "val" }
+CRITICAL: You MUST include your recommendation as a valid JSON array object. Wrap the JSON in a markdown code block: \`\`\`json [your json] \`\`\`.
 
-When the user asks in natural language, generate the appropriate steps. Return ONLY the JSON array.`;
+Each step must have:
+- type: (filter | transform | aggregate | select | sort | deduplicate | parse_date | json_extract | cast_type | data_cleansing)
+- config: specific object for the step type.
+
+Config Examples:
+- Filter: { column: string, operator: ">"|"<"|"="|"!="|">="|"<="|"contains", value: string }
+- Transform: { column: string, operation: "uppercase"|"lowercase"|"round"|"abs"|"trim"|"sqrt", newColumn?: string, operand?: number }
+- Aggregate: { groupBy: string[], metrics: { column: string, op: "sum"|"avg"|"min"|"max"|"count", alias: string }[] }
+- Select: { columns: string[] }
+- Sort: { column: string, direction: "asc"|"desc" }
+- Cast_type: { column: string, toType: "string"|"number"|"boolean"|"date" }
+- Parse_date: { column: string, format: string }
+- Data_cleansing: { column: string, strategy: "remove_null"|"fill_zero"|"fill_mean" }
+
+Always prioritize business value and data quality.`;
   };
 
   return (
@@ -631,7 +648,7 @@ When the user asks in natural language, generate the appropriate steps. Return O
                 {selectedSource && newPipelineName && (
                   <Button 
                     onClick={async () => {
-                      const res = await createPipelineMut.mutateAsync({ name: newPipelineName, sourceDatasetId: selectedSource, steps: draftSteps });
+                      const res = await createPipelineMut.mutateAsync({ name: newPipelineName, sourceDatasetId: selectedSource, steps: draftSteps as any });
                       setDraftSteps([]);
                       setDraftPreview([]);
                       setNewPipelineName('');
@@ -834,8 +851,8 @@ When the user asks in natural language, generate the appropriate steps. Return O
           <div className="sticky top-6">
             <AIChatPanel
               systemPrompt={getAIPrompt()}
-              title="AI ETL Assistant"
-              placeholder="e.g., Filter rows where sales > 1000 then sort by date descending..."
+              title={selectedSource ? `AI ETL: ${dataSets.find(ds => ds.id === selectedSource)?.name}` : "AI ETL Assistant"}
+              placeholder={selectedSource ? "e.g., Filter high value orders then group by region..." : "Select a source to start..."}
               onAIResponse={handleAIResponse}
               className="h-fit"
             />
