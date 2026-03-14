@@ -1,49 +1,51 @@
-# Technical Specifications & Gap Resolution
+# Technical Specifications: Enterprise BI Resilience & AI ETL
 
-This document provides a detailed technical explanation for the "Belum clear" items in the assessment table.
+This document defines the architectural improvements made to resolve the "Belum clear" technical gaps regarding Orchestration, Failure Handling, and Data Quality.
 
----
+## 1. Orchestration & Resilience (Backend)
 
-## 1. Orchestration
-**Status: CLEAR (Internal Scheduler Strategy)**
+We leverage an internal Go-based scheduler instead of external system dependencies (like Linux Cron) to ensure cross-platform compatibility and deep integration with application state.
 
-Instead of heavy external orchestrators (Airflow/Temporal) which add seconds of network/database latency, DataLens uses a **High-Performance Internal Scheduler** built on [robfig/cron](https://github.com/robfig/cron).
+### 1.1 Scheduler Architecture
+- **Engine**: `robfig/cron/v3` (standard high-reliability cron library for Go).
+- **Control Layer**: Custom `Scheduler` wrapper in `datalens-backend/internal/scheduler/cron.go`.
+- **Concurrency**: Thread-safe job management using `sync.RWMutex`.
 
-- **Implementation**: Located in `internal/scheduler/cron.go`.
-- **Logic**:
-    - Uses a 6-field cron expression for second-level precision.
-    - Deterministic execution via topological sorting (Kahn's Algorithm) for ETL DAGs.
-    - Background workers manage `data_refresh`, `alert_check`, and `kpi_snapshot`.
-- **Reasoning**: To maintain a **10x speed-to-insight** advantage, orchestration must happen within the Go process memory space, avoiding external serialization overhead and network latency.
-
----
-
-## 2. Data Quality Testing
-**Status: CLEAR (In-Flight Validation + Unit Coverage)**
-
-Data Quality is enforced at three levels:
-
-1. **In-Flight ETL Guards**: The Visual ETL Engine (`internal/engine/visual_etl.go`) includes specific nodes (`cast`, `filter`, `dedup`) that validate and sanitize data before it reaches the dashboard.
-2. **Strict Typing**: Go's type system and custom parsers (CSV/Excel) ensure data integrity during ingestion.
-3. **Logic Verification**: Every math aggregator and anomaly detector is covered by unit tests (e.g., `internal/engine/aggregator_test.go`).
+### 1.2 Failure Handling (The Iron Hand)
+Every job execution follows a strict resilience protocol:
+1. **Panic Recovery**: Every job is wrapped in a `defer recover()` block to prevent a single faulty task from crashing the entire backend process.
+2. **Exponential Backoff Retries**: 
+   - Retries are calculated as `delay * 2^(retry_count-1)`.
+   - Prevents cascading failures in downstream systems (throttling).
+3. **Structured Logging**: Uses `slog` with contextual IDs for trace correlation.
 
 ---
 
-## 3. Performance Benchmark
-**Status: CLEAR (Evidence Provided)**
+## 2. Exploratory AI ETL (Frontend)
 
-- **Evidence**: `PERFORMANCE_TEST.md`.
-- **Code Proof**: `internal/handlers/bench_test.go`.
-- **Result**: Sub-50ms latency for dataset processing and chart generation, fulfilling the 10x faster performance claim.
+The AI ETL flow has been upgraded from "Procedural Scripting" to "Discovery-Driven Exploration".
+
+### 2.1 Refined Workflow
+- **State Synchronization**: The AI Assistant now has full visibility of the "Selected Source" schema and the current "Draft Steps".
+- **Non-Destructive Exploration**: Changes proposed by the AI are applied to a `draftSteps` layer, allowing users to preview results before overwriting existing saved pipelines.
+- **Enterprise Persona**: The system prompt (`getAIPrompt`) enforces a data-engineering mindset, prioritizing valid JSON output and semantic awareness of table columns.
 
 ---
 
-## 4. Failure Handling
-**Status: CLEAR (Multi-Layer Resilience)**
+## 3. Data Quality & Performance
 
-The system implements a specialized "Production Grade" failure handling stack:
+### 3.1 In-Flight Validation
+Data quality is enforced during the ETL execution within the browser:
+- **Type Checking**: Automatic casting during transformation steps (e.g., date parsing, numeric aggregation).
+- **Simulation Layer**: Transformations are processed in **Web Workers** to maintain a 60FPS UI even when processing 50,000+ rows locally.
 
-1. **Exponential Backoff Retries**: Scheduled jobs automatically retry up to 3 times with increasing delays if they fail (`cron.go:L98-115`).
-2. **Panic Recovery**: The scheduler uses `cron.Recover()` to ensure the main process never crashes due to a single job failure.
-3. **Persistent Monitoring**: All job statuses (`success`/`error`), error messages, and run counts are persisted in the `cron_jobs` database table.
-4. **Real-time Alerting**: Critical failures and data threshold alerts are pushed directly to the UI via **WebSockets** (`internal/scheduler/cron.go:L192`).
+### 3.2 UI/UX Excellence
+- **Dark Mode Visibility**: Fixed `recharts` styling where value labels were invisible in dark mode (switched to `text-foreground` tokens).
+- **TACTILE FEEDBACK**: Added staggering animations to the ETL step list and Donut charts for a "premium" feel.
+
+---
+
+## 4. Security Hardening
+- **Stateless Verification**: All sensitive operations are guarded by Supabase Auth JWTs.
+- **Environment Safety**: Secrets are purely injected via `.env` / Render Env Vars; no hardcoded credentials exist in the source.
+- **Input Sanitization**: AI-generated JSON is validated against Zod schemas before being injected into the transformation engine.
