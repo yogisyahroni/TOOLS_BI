@@ -95,15 +95,32 @@ func (s *Scheduler) executeJob(jobID, jobType, targetID, userID string) {
 
 	var execErr error
 
-	switch jobType {
-	case "data_refresh":
-		execErr = s.runDataRefresh(targetID, userID)
-	case "alert_check":
-		execErr = s.runAlertCheck(userID)
-	case "kpi_snapshot":
-		execErr = s.runKPISnapshot(userID)
-	default:
-		log.Warn().Str("type", jobType).Msg("Unknown job type, skipping")
+	// Retry configuration
+	maxRetries := 3
+	retryDelay := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			log.Info().Str("jobId", jobID).Int("attempt", i+1).Msg("Retrying cron job")
+			time.Sleep(retryDelay)
+			retryDelay *= 2 // Exponential backoff
+		}
+
+		switch jobType {
+		case "data_refresh":
+			execErr = s.runDataRefresh(targetID, userID)
+		case "alert_check":
+			execErr = s.runAlertCheck(userID)
+		case "kpi_snapshot":
+			execErr = s.runKPISnapshot(userID)
+		default:
+			log.Warn().Str("type", jobType).Msg("Unknown job type, skipping")
+			return
+		}
+
+		if execErr == nil {
+			break
+		}
 	}
 
 	status := "success"
@@ -111,7 +128,7 @@ func (s *Scheduler) executeJob(jobID, jobType, targetID, userID string) {
 	if execErr != nil {
 		status = "error"
 		errMsg = execErr.Error()
-		log.Error().Err(execErr).Str("jobId", jobID).Str("type", jobType).Msg("Cron job failed")
+		log.Error().Err(execErr).Str("jobId", jobID).Str("type", jobType).Msg("Cron job failed after max retries")
 	}
 
 	now := time.Now()
