@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Upload, GitBranch, FileText, Shield, Settings,
@@ -11,6 +10,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { useSidebar } from '@/hooks/use-sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useState } from 'react';
 
 // ─── Menu structure with groups ───────────────────────────────────────────────
 interface MenuItem { icon: React.ElementType; label: string; path: string; badge?: string }
@@ -97,8 +99,9 @@ const menuGroups: MenuGroup[] = [
   },
 ];
 
-export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
-  const [collapsed, setCollapsed] = useState(false);
+export function Sidebar() {
+  const { isOpen, setIsOpen, isCollapsed, setIsCollapsed } = useSidebar();
+  const isMobile = useIsMobile();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const location = useLocation();
   const navigate = useNavigate();
@@ -124,12 +127,12 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
   return (
     <>
       <AnimatePresence>
-        {open && (
+        {isMobile && isOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => onOpenChange?.(false)}
+            onClick={() => setIsOpen(false)}
             className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
           />
         )}
@@ -138,19 +141,19 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
       <motion.aside
         initial={false}
         animate={{ 
-          width: collapsed ? 80 : 280,
-          x: open !== undefined ? (open ? 0 : -280) : 0 
+          width: isCollapsed ? 80 : 280,
+          x: isMobile ? (isOpen ? 0 : -280) : 0 
         }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
         className={cn(
           "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col transition-all duration-300",
-          open !== undefined ? "lg:translate-x-0" : ""
+          !isMobile && "translate-x-0"
         )}
       >
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border shrink-0">
           <AnimatePresence mode="wait">
-            {!collapsed && (
+            {!isCollapsed && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
                   <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7">
@@ -170,7 +173,7 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
               </motion.div>
             )}
           </AnimatePresence>
-          {collapsed && (
+          {isCollapsed && (
             <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow mx-auto">
               <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7">
                 <ellipse cx="20" cy="20" rx="17" ry="11" fill="white" fillOpacity="0.18" />
@@ -188,7 +191,7 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
         {/* Navigation */}
         <nav className="flex-1 py-3 px-2 overflow-y-auto space-y-0.5 scrollbar-thin">
           {menuGroups.map((group) => {
-            const isGroupCollapsed = !collapsed && collapsedGroups.has(group.title);
+            const isGroupCollapsed = !isCollapsed && collapsedGroups.has(group.title);
             const hasActive = group.items.some(item =>
               item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
             );
@@ -196,7 +199,7 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
             return (
               <div key={group.title} className="mb-1">
                 {/* Group header */}
-                {!collapsed && (
+                {!isCollapsed && (
                   <button
                     onClick={() => toggleGroup(group.title)}
                     className={cn(
@@ -229,21 +232,21 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
                           <Link
                             key={item.path}
                             to={item.path}
-                            onClick={() => onOpenChange?.(false)}
+                            onClick={() => setIsOpen(false)}
                             className={cn(
                               'flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative touch-target',
                               isActive
                                 ? 'bg-primary/10 text-primary'
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                             )}
-                            title={collapsed ? item.label : undefined}
+                            title={isCollapsed ? item.label : undefined}
                           >
                             {isActive && (
                               <motion.div layoutId="activeIndicator" className="absolute left-0 w-1 h-5 bg-primary rounded-r-full" transition={{ duration: 0.2 }} />
                             )}
                             <item.icon className={cn('w-4 h-4 flex-shrink-0', isActive && 'text-primary')} />
                             <AnimatePresence mode="wait">
-                              {!collapsed && (
+                              {!isCollapsed && (
                                 <motion.span
                                   initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
                                   className="font-medium whitespace-nowrap text-sm flex-1"
@@ -252,7 +255,7 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
                                 </motion.span>
                               )}
                             </AnimatePresence>
-                            {!collapsed && item.badge && (
+                            {!isCollapsed && item.badge && (
                               <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground leading-none">
                                 {item.badge}
                               </span>
@@ -270,10 +273,10 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
 
         {/* Collapse toggle - Hide on mobile */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-card border border-border hidden lg:flex items-center justify-center hover:bg-muted transition-colors z-10"
         >
-          {collapsed
+          {isCollapsed
             ? <ChevronRight className="w-4 h-4 text-muted-foreground" />
             : <ChevronLeft className="w-4 h-4 text-muted-foreground" />
           }
@@ -282,7 +285,7 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
         {/* Footer */}
         <div className="p-3 border-t border-sidebar-border shrink-0">
           <AnimatePresence mode="wait">
-            {!collapsed && (
+            {!isCollapsed && (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="flex items-center gap-2"
@@ -305,7 +308,7 @@ export function Sidebar({ open, onOpenChange }: { open?: boolean; onOpenChange?:
                 </button>
               </motion.div>
             )}
-            {collapsed && (
+            {isCollapsed && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center">
                 <button
                   onClick={handleLogout}

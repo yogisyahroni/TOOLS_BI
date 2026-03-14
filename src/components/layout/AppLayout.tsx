@@ -1,8 +1,10 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { useGlobalShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { Menu, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useSidebar } from '@/hooks/use-sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -14,7 +16,8 @@ function ShortcutProvider({ children }: { children: ReactNode }) {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isOpen, setIsOpen, isCollapsed } = useSidebar();
+  const isMobile = useIsMobile();
 
   return (
     <ShortcutProvider>
@@ -30,16 +33,19 @@ export function AppLayout({ children }: AppLayoutProps) {
             <span className="font-bold text-foreground">DataLens</span>
           </div>
           <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            onClick={() => setIsOpen(!isOpen)}
             className="p-2 rounded-lg bg-muted text-foreground touch-target"
           >
-            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </header>
 
-        <Sidebar open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen} />
+        <Sidebar />
         
-        <main className="lg:ml-[280px] min-h-screen transition-all duration-300 pt-16 lg:pt-0">
+        <main className={cn(
+          "min-h-screen transition-all duration-300 pt-16 lg:pt-0",
+          !isMobile && (isCollapsed ? "lg:ml-[80px]" : "lg:ml-[280px]")
+        )}>
           <div className="p-4 lg:p-8">
             {children}
           </div>
