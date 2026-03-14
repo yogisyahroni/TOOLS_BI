@@ -164,7 +164,9 @@ export const authApi = {
 export const datasetApi = {
     list: () => api.get<{ data: DatasetItem[] }>('/datasets'),
     upload: (formData: FormData) =>
-        api.post<DatasetItem>('/datasets/upload', formData),
+        api.post<DatasetItem>('/datasets/upload', formData, {
+            headers: { 'Content-Type': undefined }
+        }),
     get: (id: string) => api.get<DatasetItem>(`/datasets/${id}`),
     data: (id: string, params?: DataQueryParams) =>
         api.get<DataQueryResult>(`/datasets/${id}/data`, { params }),

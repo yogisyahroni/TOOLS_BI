@@ -23,7 +23,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	excelize "github.com/xuri/excelize/v2"
+	"github.com/rs/zerolog/log"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
 
@@ -82,6 +83,7 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
+		log.Error().Err(err).Msg("UploadDataset: Failed to get form file 'file'")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "File is required: " + err.Error()})
 	}
 
@@ -98,6 +100,7 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 
 	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	if ext != ".csv" && ext != ".xlsx" && ext != ".xls" {
+		log.Error().Str("filename", fileHeader.Filename).Str("ext", ext).Msg("UploadDataset: Unsupported file extension")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Only CSV and Excel files are supported"})
 	}
 
