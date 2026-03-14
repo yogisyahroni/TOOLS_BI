@@ -3,7 +3,7 @@ package middleware
 import (
 	"fmt"
 	"regexp"
-Section
+
 	"github.com/gofiber/fiber/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
