@@ -50,13 +50,18 @@ func main() {
 
 	// --- Phase 32: OpenTelemetry distributed tracing ---
 	// No-op exporter in prod unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
-	tp, otelErr := telemetry.InitTracer(context.Background(), "datalens-backend", cfg.Server.Env)
+	// Security: Use timed context for OTel init
+	initOtelCtx, cancelOtel := context.WithTimeout(context.Background(), 10*time.Second)
+	tp, otelErr := telemetry.InitTracer(initOtelCtx, "datalens-backend", cfg.Server.Env)
+	cancelOtel() // cancel immediately as we don't need it after init
 	if otelErr != nil {
 		log.Warn().Err(otelErr).Msg("OpenTelemetry tracer init failed (non-fatal — tracing disabled)")
 	} else {
 		log.Info().Msg("OpenTelemetry tracing initialised")
 		defer func() {
-			if shutdownErr := tp.Shutdown(context.Background()); shutdownErr != nil {
+			shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelShutdown()
+			if shutdownErr := tp.Shutdown(shutdownCtx); shutdownErr != nil {
 				log.Warn().Err(shutdownErr).Msg("OTel tracer shutdown error")
 			}
 		}()

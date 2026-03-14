@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"datalens/internal/config"
 	"datalens/internal/crypto"
@@ -125,9 +126,11 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	resp, err := (&http.Client{}).Do(httpReq)
+	// Reliability: Use timed client instead of default
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(httpReq)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusGatewayTimeout).JSON(fiber.Map{"error": "AI provider timeout: " + err.Error()})
 	}
 	defer resp.Body.Close()
 
@@ -480,9 +483,11 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	resp, err := (&http.Client{}).Do(httpReq)
+	// Reliability: Use timeout
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("AI request timeout: %w", err)
 	}
 	defer resp.Body.Close()
 

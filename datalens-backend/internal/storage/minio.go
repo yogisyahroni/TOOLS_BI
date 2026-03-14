@@ -27,13 +27,16 @@ func NewMinIOStorage(endpoint, accessKey, secretKey, bucket string, useSSL bool)
 	}
 
 	// Ensure bucket exists
-	ctx := context.Background()
-	exists, err := client.BucketExists(ctx, bucket)
+	// Security: Use timed context for initialization
+	initCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	exists, err := client.BucketExists(initCtx, bucket)
 	if err != nil {
 		return nil, fmt.Errorf("minio bucket check: %w", err)
 	}
 	if !exists {
-		if err := client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+		if err := client.MakeBucket(initCtx, bucket, minio.MakeBucketOptions{}); err != nil {
 			return nil, fmt.Errorf("minio create bucket: %w", err)
 		}
 	}

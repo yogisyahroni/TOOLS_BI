@@ -12,6 +12,7 @@ package telemetry
 import (
 	"context"
 	"os"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -69,10 +70,25 @@ func InitTracer(ctx context.Context, serviceName, env string) (*TracerProvider, 
 		return nil, err
 	}
 
+	// Security: Use configured batch settings via env or defaults
+	batchTimeout := 5 * time.Second
+	if val := os.Getenv("OTEL_BATCH_TIMEOUT"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			batchTimeout = d
+		}
+	}
+
+	maxBatchSize := 512
+	if val := os.Getenv("OTEL_MAX_EXPORT_BATCH_SIZE"); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			maxBatchSize = i
+		}
+	}
+
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter,
-			sdktrace.WithBatchTimeout(5*time.Second),
-			sdktrace.WithMaxExportBatchSize(512),
+			sdktrace.WithBatchTimeout(batchTimeout),
+			sdktrace.WithMaxExportBatchSize(maxBatchSize),
 		),
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(sampleRate(env))),
