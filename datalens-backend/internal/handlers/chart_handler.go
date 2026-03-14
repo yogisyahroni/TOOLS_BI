@@ -131,10 +131,12 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 		}
-		h.hub.SendToUser(userID, realtime.Event{
-			Type:    realtime.EventETLComplete,
-			Payload: fiber.Map{"action": "chart_created", "chartId": created.ID},
-		})
+		if h.hub != nil {
+			h.hub.SendToUser(userID, realtime.Event{
+				Type:    realtime.EventETLComplete,
+				Payload: fiber.Map{"action": "chart_created", "chartId": created.ID},
+			})
+		}
 		return c.Status(fiber.StatusCreated).JSON(created)
 	}
 
@@ -143,10 +145,12 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 		log.Error().Err(err).Interface("chart_payload", chart).Msg("Failed to insert chart into DB")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create chart", "details": err.Error()})
 	}
-	h.hub.SendToUser(userID, realtime.Event{
-		Type:    realtime.EventETLComplete,
-		Payload: fiber.Map{"action": "chart_created", "chartId": chart.ID},
-	})
+	if h.hub != nil {
+		h.hub.SendToUser(userID, realtime.Event{
+			Type:    realtime.EventETLComplete,
+			Payload: fiber.Map{"action": "chart_created", "chartId": chart.ID},
+		})
+	}
 	return c.Status(fiber.StatusCreated).JSON(chart)
 }
 
