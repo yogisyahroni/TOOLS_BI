@@ -42,12 +42,14 @@ graph TD
 
 ### 🛠️ Data Engineering & ETL
 *Designed for complex data lifecycles.*
+
 - **Visual ETL Engine**: Drag-and-drop pipeline for data ingestion (S3/CSV/JSON), transformation, and warehouse mapping.
 - **Smart Schema Discovery**: Automated database profiling and relationship visualization (ERD Generation).
 - **Hybrid Data Strategy**: Concurrent support for localized metadata management and high-volume remote data warehousing via optimized connection pooling.
 
 ### 🧠 AI Optimization (NL2SQL)
 *Beyond simple API wrappers.*
+
 - **High-Fidelity Prompting**: Hybrid persona implementation (Data Engineer + Statistician) to prevent SQL hallucination.
 - **Contextual Grounding**: Dynamic injection of current schema metadata and statistical row samples into the inference loop.
 - **SSE Streaming**: Real-time analytical streaming delivering a highly responsive "chat-with-your-data" experience.
@@ -56,6 +58,16 @@ graph TD
 - **Zero-Trust Auth**: Dual-layered security with short-lived JWTs and Redis-tracked Refresh Tokens (HTTP-Only/Secure).
 - **Data Governance**: Implementation of Row-Level Security (RLS) and Granular Access Control for sensitive report sharing.
 - **Performance Tuning**: Sub-50ms API response times achieved through Go Fiber's non-blocking I/O and optimized GORM queries.
+
+---
+
+## 📈 Scalability & Performance Matrix
+DataLens is engineered to scale from **GB-level prototypes to TB-level enterprise environments**.
+
+- **Hybrid Data Sharding**: Decouples application metadata (1-100GB) from analytical warehouse data (**1TB+**), utilizing high-performance connection pooling (PgBouncer).
+- **Infinite Vertical Scaling**: Built on **Go Fiber**, the backend handles massive concurrent analytical streams using non-blocking I/O and low-memory footprints.
+- **Analytical Optimization**: AI-driven query generation is paired with **Context Grounding**, ensuring the LLM only processes metadata, while the SQL engine handles Petabyte-scale execution independently.
+- **Stateless Architecture**: Fully compatible with horizontal scaling via Docker/K8s for high-availability production deployments.
 
 ---
 
@@ -79,10 +91,28 @@ graph TD
 
 ---
 
+## 📂 Project Structure
+
+```text
+.
+├── datalens-backend/      # Go Fiber API, GraphQL Schemas, & AI Logic
+│   ├── cmd/server/        # Entry point
+│   ├── internal/          # Core logic (handlers, models, services)
+│   └── migrations/        # SQL migration files
+├── src/                   # React Frontend Source
+│   ├── components/        # Reusable UI components & Layouts
+│   ├── hooks/             # Custom React Hooks (Sidebar, GraphQL, Auth)
+│   ├── pages/             # Managed BI Feature Pages (ETL, Dashboard, etc.)
+│   └── lib/               # Infrastructure logic (API client, utils)
+└── README.md
+```
+
+---
+
 ## ⚙️ Development Highlights
 - **Deployment**: Automated CI/CD via GitHub Actions; Frontend on Vercel Edge; Backend on Render/Docker.
 - **Quality**: Robust testing strategy covering authentication logic, data transformation, and schema validation.
-- **UI/UX**: meticulous attention to design systems, glass-morphism, and Apple-standard micro-interactions.
+- **UI/UX**: Meticulous attention to design systems, glass-morphism, and Apple-standard micro-interactions.
 
 ---
 
