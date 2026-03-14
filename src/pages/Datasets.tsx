@@ -57,21 +57,21 @@ export default function Datasets() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 lg:space-y-8">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-            <Database className="w-5 h-5 text-primary-foreground" />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-2">
+          <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
+            <Database className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
               Datasets <HelpTooltip text="Daftar semua dataset yang sudah diunggah. Klik Eye untuk preview data, Download untuk ekspor, atau Trash untuk menghapus." />
             </h1>
-            <p className="text-muted-foreground">Manage and explore your uploaded data</p>
+            <p className="text-muted-foreground text-sm lg:text-base">Manage and explore your uploaded data</p>
           </div>
-          <div className="ml-auto">
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+          <div className="sm:ml-auto">
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading} className="w-full sm:w-auto touch-target">
               <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
             </Button>
           </div>
@@ -82,15 +82,15 @@ export default function Datasets() {
       {datasets.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
-          className="bg-card rounded-xl p-12 border border-border shadow-card text-center"
+          className="bg-card rounded-xl p-8 lg:p-12 border border-border shadow-card text-center"
         >
           <Database className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-foreground mb-2">No datasets yet</h3>
           <p className="text-muted-foreground mb-4">Upload your first dataset to get started with analysis</p>
-          <Button asChild><a href="/upload">Upload Data</a></Button>
+          <Button asChild className="touch-target"><a href="/upload">Upload Data</a></Button>
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           {datasets.map((ds, index) => (
             <motion.div
               key={ds.id}

@@ -187,7 +187,7 @@ export function AIChatPanel({
             ) : (
               <>
                 {/* Messages */}
-                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[500px] min-h-[250px]">
+                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[60vh] md:max-h-[500px] min-h-[250px]">
                   {messages.length === 0 && (
                     <div className="text-center py-6">
                       <Bot className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />

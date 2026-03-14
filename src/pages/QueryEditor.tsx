@@ -1,7 +1,7 @@
 import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Table as TableIcon, Code2, Play, Save, Download, Clock, Database, Sparkles } from 'lucide-react';
+import { Table as TableIcon, Code2, Play, Save, Download, Clock, Database, Sparkles, X } from 'lucide-react';
 import { AIChatPanel } from '@/components/AIChatPanel';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -267,7 +267,7 @@ The JSON MUST conform exactly to this structure:
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Left Panel - Schema + AI */}
+        {/* Left Panel - Schema + AI (Desktop) / Collapsible (Mobile) */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
           <div className="bg-card rounded-xl p-5 border border-border shadow-card">
             <h3 className="font-semibold text-foreground mb-3">Data Source</h3>
@@ -279,51 +279,122 @@ The JSON MUST conform exactly to this structure:
             </Select>
           </div>
 
-          {dataset && (
-            <div className="bg-card rounded-xl p-5 border border-border shadow-card">
-              <div className="flex items-center gap-2 mb-3">
-                <TableIcon className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-foreground">Schema</h3>
+          <div className="lg:block hidden space-y-4">
+            {dataset && (
+              <div className="bg-card rounded-xl p-5 border border-border shadow-card">
+                <div className="flex items-center gap-2 mb-3">
+                  <TableIcon className="w-4 h-4 text-primary" />
+                  <h3 className="font-semibold text-foreground">Schema</h3>
+                </div>
+                <div className="space-y-1">
+                  {dataset.columns.map(col => (
+                    <div key={col.name} className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/30 text-sm">
+                      <span className="text-foreground font-mono text-xs">{col.name}</span>
+                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{col.type}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">{dataset.rowCount.toLocaleString()} rows</p>
               </div>
-              <div className="space-y-1">
-                {dataset.columns.map(col => (
-                  <div key={col.name} className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/30 text-sm">
-                    <span className="text-foreground font-mono text-xs">{col.name}</span>
-                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{col.type}</span>
+            )}
+
+            {savedQueries.length > 0 && (
+              <div className="bg-card rounded-xl p-5 border border-border shadow-card">
+                <h3 className="font-semibold text-foreground mb-3">Saved Queries</h3>
+                <div className="space-y-2">
+                  {savedQueries.map(sq => (
+                    <button
+                      key={sq.id}
+                      onClick={() => { setQuery(sq.query); setSelectedDataSet(sq.dataSetId); }}
+                      className="w-full text-left p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                    >
+                      <p className="text-sm font-medium text-foreground">{sq.name}</p>
+                      <p className="text-xs text-muted-foreground truncate font-mono">{sq.query}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Collapsible Panels */}
+          <div className="lg:hidden space-y-2">
+            {dataset && (
+              <details className="bg-card rounded-xl border border-border shadow-card group">
+                <summary className="p-4 font-semibold text-foreground cursor-pointer flex items-center justify-between list-none">
+                  <div className="flex items-center gap-2">
+                    <TableIcon className="w-4 h-4 text-primary" />
+                    <span>Schema</span>
                   </div>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground mt-3">{dataset.rowCount.toLocaleString()} rows</p>
-            </div>
-          )}
+                  <span className="text-muted-foreground group-open:rotate-180 transition-transform">↓</span>
+                </summary>
+                <div className="p-4 pt-0 space-y-1">
+                  {dataset.columns.map(col => (
+                    <div key={col.name} className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/30 text-sm">
+                      <span className="text-foreground font-mono text-xs">{col.name}</span>
+                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{col.type}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
 
-          {savedQueries.length > 0 && (
-            <div className="bg-card rounded-xl p-5 border border-border shadow-card">
-              <h3 className="font-semibold text-foreground mb-3">Saved Queries</h3>
-              <div className="space-y-2">
-                {savedQueries.map(sq => (
-                  <button
-                    key={sq.id}
-                    onClick={() => { setQuery(sq.query); setSelectedDataSet(sq.dataSetId); }}
-                    className="w-full text-left p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                  >
-                    <p className="text-sm font-medium text-foreground">{sq.name}</p>
-                    <p className="text-xs text-muted-foreground truncate font-mono">{sq.query}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+            {savedQueries.length > 0 && (
+              <details className="bg-card rounded-xl border border-border shadow-card group">
+                <summary className="p-4 font-semibold text-foreground cursor-pointer flex items-center justify-between list-none">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-primary" />
+                    <span>Saved Queries</span>
+                  </div>
+                  <span className="text-muted-foreground group-open:rotate-180 transition-transform">↓</span>
+                </summary>
+                <div className="p-4 pt-0 space-y-2">
+                  {savedQueries.map(sq => (
+                    <button
+                      key={sq.id}
+                      onClick={() => { setQuery(sq.query); setSelectedDataSet(sq.dataSetId); }}
+                      className="w-full text-left p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                    >
+                      <p className="text-sm font-medium text-foreground">{sq.name}</p>
+                      <p className="text-xs text-muted-foreground truncate font-mono">{sq.query}</p>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
 
-          {/* AI Chat */}
-          <AIChatPanel
-            systemPrompt={getAIPrompt()}
-            title="Enterprise Data Assistant"
-            placeholder="e.g., Analyze this data and suggest useful views..."
-            onAIResponse={handleAIResponse}
-            onCreateViews={handleCreateViews}
-            isCreatingViews={isCreatingViews}
-          />
+          {/* AI Chat Layout (Drawer on Mobile, Sidebar on Desktop) */}
+          <div className="lg:block hidden">
+            <AIChatPanel
+              systemPrompt={getAIPrompt()}
+              title="Enterprise Data Assistant"
+              placeholder="e.g., Analyze this data and suggest useful views..."
+              onAIResponse={handleAIResponse}
+              onCreateViews={handleCreateViews}
+              isCreatingViews={isCreatingViews}
+            />
+          </div>
+
+          <div className="lg:hidden fixed bottom-6 right-6 z-50">
+            <details className="group relative">
+              <summary className="w-14 h-14 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/30 cursor-pointer list-none hover:scale-105 active:scale-95 transition-all">
+                <Sparkles className="w-6 h-6 text-primary-foreground group-open:hidden" />
+                <X className="w-6 h-6 text-primary-foreground hidden group-open:block" />
+              </summary>
+              <div className="absolute bottom-16 right-0 w-[calc(100vw-3rem)] max-w-[360px] animate-in slide-in-from-bottom-4 duration-300">
+                <AIChatPanel
+                  systemPrompt={getAIPrompt()}
+                  title="AI Assistant"
+                  placeholder="Ask AI about this data..."
+                  onAIResponse={handleAIResponse}
+                  onCreateViews={handleCreateViews}
+                  isCreatingViews={isCreatingViews}
+                  className="shadow-2xl border-primary/20 h-[500px]"
+                />
+              </div>
+            </details>
+          </div>
         </motion.div>
 
         {/* Right Panel - Editor & Results */}

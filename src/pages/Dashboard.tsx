@@ -73,31 +73,31 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 lg:space-y-8">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-            <Sparkles className="w-5 h-5 text-primary-foreground" />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-2">
+          <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
+            <Sparkles className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
               Dashboard <HelpTooltip text="Ringkasan KPI real-time dari backend API: jumlah dataset, record, report, dan pipeline aktif." />
             </h1>
-            <p className="text-muted-foreground">Welcome back! Here's your live analytics overview.</p>
+            <p className="text-muted-foreground text-sm lg:text-base">Welcome back! Here's your live analytics overview.</p>
           </div>
         </div>
       </motion.div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
         {stats.map((stat, index) => (
           <StatsCard key={stat.title} {...stat} delay={index * 0.1} />
         ))}
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
         <DataChart
           data={trendData.length > 0 ? trendData : [
             { name: 'Jan', value: 0 }, { name: 'Feb', value: 0 }, { name: 'Mar', value: 0 },
@@ -113,42 +113,58 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
         <RecentReports reports={reports} />
 
         {/* Quick Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}
-          className="bg-card rounded-xl p-6 border border-border shadow-card"
+          className="bg-card rounded-xl p-4 lg:p-6 border border-border shadow-card"
         >
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-foreground">Quick Actions</h3>
             <Clock className="w-5 h-5 text-primary" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Link to="/upload" className="p-4 rounded-lg bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group">
-              <Database className="w-8 h-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-              <p className="font-medium text-foreground">Upload Data</p>
-              <p className="text-xs text-muted-foreground mt-1">CSV, Excel, JSON</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
+            <Link to="/upload" className="flex items-center gap-4 p-4 rounded-xl bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group touch-target">
+              <div className="w-12 h-12 rounded-xl bg-background flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+                <Database className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Upload Data</p>
+                <p className="text-xs text-muted-foreground">CSV, Excel, JSON</p>
+              </div>
             </Link>
 
-            <Link to="/ai-reports" className="p-4 rounded-lg bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group">
-              <Sparkles className="w-8 h-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-              <p className="font-medium text-foreground">Generate Report</p>
-              <p className="text-xs text-muted-foreground mt-1">AI-powered insights</p>
+            <Link to="/ai-reports" className="flex items-center gap-4 p-4 rounded-xl bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group touch-target">
+              <div className="w-12 h-12 rounded-xl bg-background flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+                <Sparkles className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">AI Reports</p>
+                <p className="text-xs text-muted-foreground">Get insights</p>
+              </div>
             </Link>
 
-            <Link to="/etl" className="p-4 rounded-lg bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group">
-              <BarChart3 className="w-8 h-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-              <p className="font-medium text-foreground">ETL Pipeline</p>
-              <p className="text-xs text-muted-foreground mt-1">Transform your data</p>
+            <Link to="/etl" className="flex items-center gap-4 p-4 rounded-xl bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group touch-target">
+              <div className="w-12 h-12 rounded-xl bg-background flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+                <BarChart3 className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Pipelines</p>
+                <p className="text-xs text-muted-foreground">ETL Jobs</p>
+              </div>
             </Link>
 
-            <Link to="/privacy" className="p-4 rounded-lg bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group">
-              <Shield className="w-8 h-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-              <p className="font-medium text-foreground">Data Privacy</p>
-              <p className="text-xs text-muted-foreground mt-1">Protect your data</p>
+            <Link to="/privacy" className="flex items-center gap-4 p-4 rounded-xl bg-muted/50 hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-all group touch-target">
+              <div className="w-12 h-12 rounded-xl bg-background flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+                <Shield className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Privacy</p>
+                <p className="text-xs text-muted-foreground">Data Safety</p>
+              </div>
             </Link>
           </div>
         </motion.div>

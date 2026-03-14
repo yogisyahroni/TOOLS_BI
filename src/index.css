@@ -166,4 +166,17 @@
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
+
+  /* Mobile Utilities */
+  .mobile-only {
+    @apply lg:hidden;
+  }
+
+  .desktop-only {
+    @apply hidden lg:flex;
+  }
+
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
 }

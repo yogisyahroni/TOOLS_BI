@@ -3,7 +3,7 @@ import ReactECharts from 'echarts-for-react';
 import axios from 'axios';
 import { API_BASE } from '@/lib/api';
 import { Loader2, Zap } from 'lucide-react';
-import type { Dashboard, Widget } from '@/types/data';
+import type { DashboardConfig as Dashboard, Widget } from '@/types/data';
 
 // Helper hook to fetch dataset data anonymously via token
 function useEmbedDatasetData(token: string, datasetId: string) {
@@ -228,7 +228,7 @@ export function DashboardViewer({ dashboard, token }: { dashboard: Dashboard, to
                     <div className="p-3 border-b flex items-center justify-between border-border bg-muted/20">
                         <span className="font-semibold text-foreground text-sm">{widget.title || 'Untitled'}</span>
                     </div>
-                    <div className={`p-4 ${widget.type === 'stat' ? 'h-[180px]' : (widget.type === 'text' || widget.type === 'action') ? 'h-[180px]' : 'h-[300px]'}`}>
+                    <div className={`p-4 ${widget.type === 'stat' ? 'h-[160px]' : (widget.type === 'text' || widget.type === 'action') ? 'h-[140px]' : 'h-[250px] md:h-[300px]'}`}>
                         <WidgetChartRenderer widget={widget} token={token} />
                     </div>
                 </div>
