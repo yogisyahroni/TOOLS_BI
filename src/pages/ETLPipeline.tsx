@@ -379,6 +379,11 @@ export default function ETLPipelinePage() {
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<Record<string, Record<string, any>[]>>({});
 
+  // Exploratory Mode State
+  const [draftSteps, setDraftSteps] = useState<ETLStep[]>([]);
+  const [draftPreview, setDraftPreview] = useState<any[]>([]);
+  const [isDraftRunning, setIsDraftRunning] = useState(false);
+
   const createPipeline = async () => {
     if (!newPipelineName.trim() || !selectedSource) {
       toast({ title: 'Missing information', description: 'Please provide a pipeline name and select a source dataset.', variant: 'destructive' });
@@ -436,12 +441,20 @@ export default function ETLPipelinePage() {
     }
   };
 
-  const handleRemovePipeline = async (pipelineId: string) => {
+  const runDraftLocal = async (sourceId: string, steps: ETLStep[]) => {
+    const sourceDs = dataSets.find(ds => ds.id === sourceId);
+    if (!sourceDs) return;
+
+    setIsDraftRunning(true);
     try {
-      await deletePipelineMut.mutateAsync(pipelineId);
-      toast({ title: 'Pipeline deleted', description: 'The pipeline has been removed.' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to delete pipeline', variant: 'destructive' });
+      const response = await datasetApi.data(sourceDs.id, { limit: 1000 });
+      const sourceData = response.data.data || [];
+      const result = await runWorker<Record<string, any>[]>('EXECUTE_ETL', { data: sourceData, steps });
+      setDraftPreview(result);
+    } catch (err: any) {
+      toast({ title: 'Draft Preview Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsDraftRunning(false);
     }
   };
 
@@ -506,14 +519,28 @@ export default function ETLPipelinePage() {
 
   const handleAIResponse = async (response: string) => {
     try {
-      // Try to parse JSON array of steps from AI
       const jsonMatch = response.match(/\[[\s\S]*\]/);
       if (!jsonMatch) return;
       const steps: any[] = JSON.parse(jsonMatch[0]);
 
-      // Find the last pipeline or create message
+      // 1. If in Exploration Mode (Source selected but not saved)
+      if (selectedSource && pipelines.length === 0) {
+        const newSteps: ETLStep[] = steps.map((s, i) => ({
+          id: generateId(),
+          type: s.type,
+          config: s.config || {},
+          order: draftSteps.length + i,
+        }));
+        const finalSteps = [...draftSteps, ...newSteps];
+        setDraftSteps(finalSteps);
+        runDraftLocal(selectedSource, finalSteps);
+        toast({ title: 'AI Recommendation Applied', description: `${newSteps.length} steps added to preview.` });
+        return;
+      }
+
+      // 2. Original behavior for existing pipelines
       if (pipelines.length === 0) {
-        toast({ title: 'Create a pipeline first', description: 'Please create a pipeline then AI will add steps.', variant: 'destructive' });
+        toast({ title: 'Create a pipeline first', description: 'Please create a pipeline or select a source, then AI will add steps.', variant: 'destructive' });
         return;
       }
 
@@ -530,7 +557,7 @@ export default function ETLPipelinePage() {
       await updatePipelineMut.mutateAsync({ id: lastPipeline.id, payload: { steps: finalSteps as any } });
       toast({ title: 'AI Steps Added', description: `${newSteps.length} steps added to ${lastPipeline.name}` });
     } catch {
-      // AI responded with text, not steps - that's OK
+      // Not JSON JSON formatted
     }
   };
 
@@ -582,20 +609,81 @@ When the user asks in natural language, generate the appropriate steps. Return O
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Create Pipeline */}
+          {/* Create Pipeline / Exploration */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-xl p-6 border border-border shadow-card">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Create New Pipeline</h3>
-            <div className="flex flex-col md:flex-row gap-4">
-              <Input placeholder="Pipeline name" value={newPipelineName} onChange={e => setNewPipelineName(e.target.value)} className="flex-1 bg-muted/50 border-border" />
-              <Select value={selectedSource} onValueChange={setSelectedSource}>
-                <SelectTrigger className="w-full md:w-[200px] bg-muted/50 border-border"><SelectValue placeholder="Select source" /></SelectTrigger>
-                <SelectContent>
-                  {dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Button onClick={createPipeline} className="gradient-primary text-primary-foreground">
-                <Plus className="w-4 h-4 mr-2" /> Create
-              </Button>
+            <h3 className="text-lg font-semibold text-foreground mb-4">Discovery & Exploration</h3>
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row gap-4">
+                <Select value={selectedSource} onValueChange={setSelectedSource}>
+                  <SelectTrigger className="flex-1 bg-muted/50 border-border h-12 text-lg"><SelectValue placeholder="Step 1: Select a data source to explore..." /></SelectTrigger>
+                  <SelectContent>
+                    {dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {selectedSource && (
+                  <Input 
+                    placeholder="Step 2: Give it a name..." 
+                    value={newPipelineName} 
+                    onChange={e => setNewPipelineName(e.target.value)} 
+                    className="md:w-[250px] bg-muted/50 border-border h-12" 
+                  />
+                )}
+                {selectedSource && newPipelineName && (
+                  <Button 
+                    onClick={async () => {
+                      const res = await createPipelineMut.mutateAsync({ name: newPipelineName, sourceDatasetId: selectedSource, steps: draftSteps });
+                      setDraftSteps([]);
+                      setDraftPreview([]);
+                      setNewPipelineName('');
+                      setSelectedSource('');
+                      toast({ title: 'Pipeline Built!', description: `${newPipelineName} is now live.` });
+                    }} 
+                    className="gradient-primary text-primary-foreground h-12 px-8"
+                  >
+                    <Save className="w-4 h-4 mr-2" /> Build & Save
+                  </Button>
+                )}
+              </div>
+
+              {selectedSource && !newPipelineName && (
+                <p className="text-sm text-muted-foreground animate-pulse">
+                  💡 Ask AI Assistant on the right: "What should I do with this data?"
+                </p>
+              )}
+
+              {/* Draft Preview */}
+              {selectedSource && draftSteps.length > 0 && (
+                <div className="mt-6 border-t border-border pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
+                      <Layers className="w-4 h-4" /> AI Simulation Preview ({draftSteps.length} steps applied)
+                    </h4>
+                    <Button variant="ghost" size="sm" onClick={() => { setDraftSteps([]); setDraftPreview([]); }} className="text-xs text-muted-foreground h-7">
+                      Clear Draft
+                    </Button>
+                  </div>
+                  <div className="overflow-auto max-h-[150px] rounded-lg border border-border bg-muted/20">
+                    <table className="w-full text-[10px]">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          {draftPreview.length > 0 && Object.keys(draftPreview[0]).map(col => (
+                            <th key={col} className="px-2 py-1 text-left text-muted-foreground font-mono">{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftPreview.slice(0, 5).map((row, i) => (
+                          <tr key={i} className="border-t border-border">
+                            {Object.values(row).map((val, j) => (
+                              <td key={j} className="px-2 py-0.5 font-mono text-muted-foreground">{String(val)}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
 
