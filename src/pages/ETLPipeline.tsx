@@ -383,6 +383,7 @@ export default function ETLPipelinePage() {
   const [draftSteps, setDraftSteps] = useState<ETLStep[]>([]);
   const [draftPreview, setDraftPreview] = useState<any[]>([]);
   const [isDraftRunning, setIsDraftRunning] = useState(false);
+  const [showDraftSteps, setShowDraftSteps] = useState(false);
 
   const createPipeline = async () => {
     if (!newPipelineName.trim() || !selectedSource) {
@@ -542,6 +543,7 @@ export default function ETLPipelinePage() {
         }));
         const finalSteps = [...draftSteps, ...newSteps];
         setDraftSteps(finalSteps);
+        setShowDraftSteps(true);
         runDraftLocal(selectedSource, finalSteps);
         toast({ title: 'Discovery Steps Applied', description: `${newSteps.length} steps added to exploration preview.` });
         return;
@@ -672,13 +674,54 @@ Always prioritize business value and data quality.`;
               {selectedSource && draftSteps.length > 0 && (
                 <div className="mt-6 border-t border-border pt-4">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-semibold text-primary flex items-center gap-2">
+                    <h4 
+                      className="text-sm font-semibold text-primary flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => setShowDraftSteps(!showDraftSteps)}
+                    >
                       <Layers className="w-4 h-4" /> AI Simulation Preview ({draftSteps.length} steps applied)
+                      {showDraftSteps ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     </h4>
-                    <Button variant="ghost" size="sm" onClick={() => { setDraftSteps([]); setDraftPreview([]); }} className="text-xs text-muted-foreground h-7">
+                    <Button variant="ghost" size="sm" onClick={() => { setDraftSteps([]); setDraftPreview([]); setShowDraftSteps(false); }} className="text-xs text-muted-foreground h-7">
                       Clear Draft
                     </Button>
                   </div>
+
+                  {showDraftSteps && (
+                    <div className="mb-4 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                      {draftSteps.map((step, i) => {
+                        const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
+                        return (
+                          <div key={step.id} className="flex items-center justify-between bg-muted/30 rounded-lg p-2 border border-border/50">
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{i + 1}</span>
+                              <div className="w-6 h-6 rounded flex items-center justify-center bg-primary/10">
+                                <StepIcon className="w-3 h-3 text-primary" />
+                              </div>
+                              <span className="text-xs font-medium text-foreground capitalize">{step.type.replace('_', ' ')}</span>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => {
+                                const nextSteps = draftSteps.filter(s => s.id !== step.id);
+                                setDraftSteps(nextSteps);
+                                if (nextSteps.length > 0) {
+                                  runDraftLocal(selectedSource, nextSteps);
+                                } else {
+                                  setDraftPreview([]);
+                                  setShowDraftSteps(false);
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <div className="overflow-auto max-h-[150px] rounded-lg border border-border bg-muted/20">
                     <table className="w-full text-[10px]">
                       <thead>
