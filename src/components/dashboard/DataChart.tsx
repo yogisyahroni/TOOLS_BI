@@ -67,7 +67,12 @@ export function DataChart({
                 backgroundColor: 'hsl(var(--popover))',
                 border: '1px solid hsl(var(--border))',
                 borderRadius: '8px',
+                padding: '8px 12px',
+              }}
+              itemStyle={{
                 color: 'hsl(var(--popover-foreground))',
+                fontSize: '12px',
+                fontWeight: 500,
               }}
             />
             <Area

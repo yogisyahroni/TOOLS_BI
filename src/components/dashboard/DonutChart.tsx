@@ -51,9 +51,15 @@ export function DonutChart({ data, title }: DonutChartProps) {
                 backgroundColor: 'hsl(var(--popover))',
                 border: '1px solid hsl(var(--border))',
                 borderRadius: '8px',
-                color: 'hsl(var(--popover-foreground))',
+                padding: '8px 12px',
               }}
-              formatter={(value: number) => [`${value}`, 'Value']}
+              itemStyle={{
+                color: 'hsl(var(--popover-foreground))',
+                fontSize: '12px',
+                fontWeight: 500,
+              }}
+              cursor={{ fill: 'transparent' }}
+              formatter={(value: number) => [`${value}`, 'Records']}
             />
             <Legend
               verticalAlign="bottom"
