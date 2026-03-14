@@ -164,9 +164,7 @@ export const authApi = {
 export const datasetApi = {
     list: () => api.get<{ data: DatasetItem[] }>('/datasets'),
     upload: (formData: FormData) =>
-        api.post<DatasetItem>('/datasets/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+        api.post<DatasetItem>('/datasets/upload', formData),
     get: (id: string) => api.get<DatasetItem>(`/datasets/${id}`),
     data: (id: string, params?: DataQueryParams) =>
         api.get<DataQueryResult>(`/datasets/${id}/data`, { params }),
@@ -310,9 +308,7 @@ export const reportTemplateApi = {
     import: (file: File) => {
         const formData = new FormData();
         formData.append('file', file);
-        return api.post<UserReportTemplate>('/templates/import', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        return api.post<UserReportTemplate>('/templates/import', formData);
     },
 };
 
@@ -514,6 +510,7 @@ export interface ETLPipeline {
     steps: unknown[];
     status: string;
     lastRunAt?: string;
+    error?: string;
     createdAt: string;
 }
 

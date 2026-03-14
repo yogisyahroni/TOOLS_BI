@@ -792,6 +792,19 @@ Always prioritize business value and data quality.`;
                       </div>
                     </div>
 
+                    {/* Pipeline Error */}
+                    {pipeline.status === 'error' && pipeline.error && (
+                      <div className="px-4 pb-2">
+                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-3">
+                          <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                          <div className="text-xs text-destructive">
+                            <p className="font-bold mb-1">Execution Error:</p>
+                            <p className="font-mono bg-destructive/5 p-1 rounded border border-destructive/10">{pipeline.error}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Add Steps Buttons */}
                     <div className="px-4 pb-3">
                       <h4 className="text-xs font-semibold text-muted-foreground mb-2">Available Actions</h4>
