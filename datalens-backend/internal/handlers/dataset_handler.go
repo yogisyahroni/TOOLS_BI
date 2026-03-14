@@ -157,8 +157,11 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 	}
 
 	if err := h.storage.Upload(c.Context(), storageKey, fileSeeker, fileHeader.Size, "application/octet-stream"); err != nil {
+		fileSeeker.Close()
+		log.Error().Err(err).Str("key", storageKey).Msg("UploadDataset: Failed to upload to storage")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to store file: " + err.Error()})
 	}
+	fileSeeker.Close()
 
 	// Create dynamic PostgreSQL table for this dataset
 	datasetID := uuid.New().String()
@@ -631,14 +634,19 @@ func detectColumnTypes(headers []string, rows [][]string) []models.ColumnDef {
 		def.Nullable = nullCount > 0
 		def.SampleVals = sampleVals
 
-		threshold := totalSamples - nullCount
-		if threshold <= 0 {
-			threshold = 1
-		}
-		if numericCount >= threshold/2 {
-			def.Type = "number"
-		} else if dateCount >= threshold/2 {
-			def.Type = "date"
+		// Robust detection: A column is only a 'number' or 'date' if ALL non-null samples match.
+		// If even ONE sample is a string that doesn't fit, we fallback to 'string' (TEXT).
+		nonNullCount := totalSamples - nullCount
+		if nonNullCount > 0 {
+			if numericCount == nonNullCount {
+				def.Type = "number"
+			} else if dateCount == nonNullCount {
+				def.Type = "date"
+			} else {
+				def.Type = "string"
+			}
+		} else {
+			def.Type = "string"
 		}
 
 		defs[i] = def
@@ -954,6 +962,7 @@ func bulkInsertRows(db *gorm.DB, tableName string, headers []string, rows [][]st
 		}
 
 		if err := db.Exec(sb.String(), args...).Error; err != nil {
+			log.Error().Err(err).Str("table", tableName).Int("batch_start", batchStart).Msg("bulkInsertRows: Batch insert failed")
 			return fmt.Errorf("batch insert failed at row %d: %w", batchStart, err)
 		}
 	}

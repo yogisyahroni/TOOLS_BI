@@ -522,8 +522,13 @@ export default function ETLPipelinePage() {
       await uploadDatasetMut.mutateAsync(formData);
 
       toast({ title: 'Output saved', description: `Saved as dataset "${pipeline.name} (Output)". It is now available for reports and charts.` });
-    } catch (error) {
-      toast({ title: 'Failed to save', description: 'Could not upload the processed dataset.', variant: 'destructive' });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Could not upload the processed dataset.';
+      toast({ 
+        title: 'Failed to save', 
+        description: errorMsg, 
+        variant: 'destructive' 
+      });
     }
   };
 
