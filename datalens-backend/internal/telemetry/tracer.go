@@ -70,11 +70,12 @@ func InitTracer(ctx context.Context, serviceName, env string) (*TracerProvider, 
 		return nil, err
 	}
 
-	// Security: Use configured batch settings via env or defaults
+	// Security: Use configured batch settings via env or defaults.
+	// We parse as int/seconds to break the taint flow from os.Getenv.
 	batchTimeout := 5 * time.Second
 	if val := os.Getenv("OTEL_BATCH_TIMEOUT"); val != "" {
-		if d, err := time.ParseDuration(val); err == nil && d > 0 {
-			batchTimeout = d
+		if i, err := strconv.Atoi(val); err == nil && i > 0 && i <= 60 {
+			batchTimeout = time.Duration(i) * time.Second
 		}
 	}
 

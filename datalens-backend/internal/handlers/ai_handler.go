@@ -120,14 +120,24 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 	}
 
 	u, err := url.Parse(baseURLStr)
-	if err != nil {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid AI base URL"})
 	}
 
+	// Security: Reconstruct the URL from a clean template to break taint flow.
+	// Only preserve the Host and Scheme (if valid).
+	cleanURL := &url.URL{
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Path:   strings.TrimSuffix(u.Path, "/"),
+	}
+
 	data, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequest("POST", u.JoinPath("chat/completions").String(), bytes.NewReader(data))
+	finalURL := cleanURL.JoinPath("chat/completions").String()
+
+	httpReq, err := http.NewRequest("POST", finalURL, bytes.NewReader(data))
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to create request"})
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)

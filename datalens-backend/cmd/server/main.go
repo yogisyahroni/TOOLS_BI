@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -532,11 +533,13 @@ func main() {
 	// Serve the built frontend from ../dist/ if it exists.
 	// All non-API routes return index.html (SPA client-side routing).
 	distDir := cfg.Static.Dir
-	if distDir == "" {
-		distDir = "../dist"
-	}
-	// Security: Ensure path is cleaned
+	// Security: Stricter directory sanitization.
+	// We allow relative paths but ensure they are cleaned and absolute-checked.
+	distDir = filepath.FromSlash(distDir)
 	distDir = filepath.Clean(distDir)
+	if abs, err := filepath.Abs(distDir); err == nil {
+		distDir = abs
+	}
 
 	if _, statErr := os.Stat(distDir); statErr == nil {
 		app.Static("/", distDir, fiber.Static{
@@ -558,7 +561,11 @@ func main() {
 		log.Warn().Str("dir", distDir).Msg("Frontend dist/ not found — API-only mode")
 	}
 
-	addr := "0.0.0.0:" + cfg.Server.Port
+	port := cfg.Server.Port
+	if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
+		log.Fatal().Str("port", port).Msg("Invalid server port (must be 1-65535)")
+	}
+	addr := "0.0.0.0:" + port
 	log.Info().Str("address", addr).Str("env", cfg.Server.Env).Msg("DataLens API starting")
 
 	// Graceful shutdown

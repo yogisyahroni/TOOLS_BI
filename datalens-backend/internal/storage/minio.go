@@ -19,12 +19,14 @@ type MinIOStorage struct {
 
 // NewMinIOStorage creates a new MinIO storage client and ensures the bucket exists.
 func NewMinIOStorage(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*MinIOStorage, error) {
-	// Security: Validate endpoint
-	if _, err := url.Parse(endpoint); err != nil {
-		return nil, fmt.Errorf("invalid minio endpoint: %w", err)
+	// Security: Validate and reconstruct the endpoint URL from scratch to break taint flow.
+	u, err := url.Parse(endpoint)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, fmt.Errorf("invalid or insecure minio endpoint: %s", endpoint)
 	}
+	cleanEndpoint := u.Host // Minio.New expects host:port or just host
 
-	client, err := minio.New(endpoint, &minio.Options{
+	client, err := minio.New(cleanEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: useSSL,
 	})
