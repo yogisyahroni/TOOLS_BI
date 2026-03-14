@@ -269,6 +269,7 @@ export const pipelineApi = {
     update: (id: string, payload: Partial<PipelineCreate>) => api.patch<ETLPipeline>(`/pipelines/${id}`, payload),
     delete: (id: string) => api.delete(`/pipelines/${id}`),
     run: (id: string) => api.post<{ runId: string; status: string; startedAt: string }>(`/pipelines/${id}/run`),
+    saveAsDataset: (id: string) => api.post<DatasetItem>(`/pipelines/${id}/save-as-dataset`),
     runs: (id: string) => api.get<{ data: PipelineRun[] }>(`/pipelines/${id}/runs`),
 };
 

@@ -229,3 +229,73 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		outputRows: int64(len(result.Rows)),
 	}
 }
+
+// SaveAsDataset converts a pipeline's output table into a permanent SQL dataset.
+// POST /api/v1/pipelines/:id/save-as-dataset
+func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	var pipeline models.ETLPipeline
+	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&pipeline).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Pipeline not found"})
+	}
+
+	if pipeline.OutputTableName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Pipeline has no output table. Run it first."})
+	}
+
+	// 1. Inspect the table to get column metadata
+	columnTypes, err := h.db.Migrator().ColumnTypes(pipeline.OutputTableName)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to inspect output table: %v", err)})
+	}
+
+	var cols []models.ColumnDef
+	for _, ct := range columnTypes {
+		colType := "string"
+		dbType := strings.ToUpper(ct.DatabaseTypeName())
+		if strings.Contains(dbType, "INT") || strings.Contains(dbType, "DOUBLE") || strings.Contains(dbType, "FLOAT") || strings.Contains(dbType, "NUMERIC") || strings.Contains(dbType, "DECIMAL") {
+			colType = "number"
+		} else if strings.Contains(dbType, "BOOL") {
+			colType = "boolean"
+		} else if strings.Contains(dbType, "TIMESTAMP") || strings.Contains(dbType, "DATE") {
+			colType = "date"
+		}
+
+		cols = append(cols, models.ColumnDef{
+			Name:     ct.Name(),
+			Type:     colType,
+			Nullable: true,
+		})
+	}
+
+	colJSON, _ := json.Marshal(cols)
+
+	// 2. Count rows
+	var rowCount int64
+	h.db.Table(pipeline.OutputTableName).Count(&rowCount)
+
+	// 3. Create or update Dataset record
+	datasetID := uuid.New().String()
+	name := fmt.Sprintf("%s (Result)", pipeline.Name)
+
+	datasetRec := models.Dataset{
+		ID:            datasetID,
+		UserID:        userID,
+		Name:          name,
+		FileName:      fmt.Sprintf("%s_output.sql", strings.ToLower(strings.ReplaceAll(pipeline.Name, " ", "_"))),
+		Columns:       colJSON,
+		RowCount:      int(rowCount),
+		DataTableName: pipeline.OutputTableName,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	if err := h.db.Create(&datasetRec).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create dataset record"})
+	}
+
+	// Link back to pipeline
+	h.db.Model(&pipeline).Update("output_dataset_id", datasetID)
+
+	return c.JSON(datasetRec)
+}

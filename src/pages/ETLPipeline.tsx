@@ -14,7 +14,6 @@ import { AIChatPanel } from '@/components/AIChatPanel';
 import type { ETLPipeline as ETLPipelineType, ETLStep } from '@/types/data';
 import { cn } from '@/lib/utils';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import Papa from 'papaparse';
 import { useDataWorker } from '@/hooks/useDataWorker';
 import {
   useDatasets,
@@ -25,7 +24,7 @@ import {
   useRunPipeline,
   useUploadDataset
 } from '@/hooks/useApi';
-import { datasetApi } from '@/lib/api';
+import { datasetApi, pipelineApi } from '@/lib/api';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -495,35 +494,21 @@ export default function ETLPipelinePage() {
   };
 
   const saveOutput = async (pipelineId: string) => {
-    const data = previewData[pipelineId];
     const pipeline = pipelines.find(p => p.id === pipelineId);
-    if (!data || !pipeline || data.length === 0) return;
+    if (!pipeline) return;
 
     try {
-      // 1. Generate CSV from JSON data, removing internal backend fields
-      const cleanData = data.map((row: any) => {
-        const { _row_id, ...rest } = row;
-        return rest;
+      await pipelineApi.saveAsDataset(pipelineId);
+
+      toast({ 
+        title: 'Output saved', 
+        description: `Successfully saved as a high-performance dataset. It is now available for reports and charts.`,
       });
-      const csvStr = Papa.unparse(cleanData);
-
-      // 2. Create a Blob and File from CSV string
-      const blob = new Blob([csvStr], { type: 'text/csv' });
-      const cleanName = pipeline.name.replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-      const filename = `${cleanName.replace(/\s+/g, '_').toLowerCase()}_output.csv`;
-      const file = new File([blob], filename, { type: 'text/csv' });
-
-      // 3. Prepare FormData
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('name', `${pipeline.name} (Output)`); // Set a nice name for the dataset
-
-      // 4. Upload to backend
-      await uploadDatasetMut.mutateAsync(formData);
-
-      toast({ title: 'Output saved', description: `Saved as dataset "${pipeline.name} (Output)". It is now available for reports and charts.` });
+      
+      // Refresh datasets list
+      window.location.reload(); 
     } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Could not upload the processed dataset.';
+      const errorMsg = error.response?.data?.error || error.message || 'Could not save the processed dataset.';
       toast({ 
         title: 'Failed to save', 
         description: errorMsg, 
