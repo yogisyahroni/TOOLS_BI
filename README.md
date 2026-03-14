@@ -69,6 +69,9 @@ DataLens is engineered to scale from **GB-level prototypes to TB-level enterpris
 - **Analytical Optimization**: AI-driven query generation is paired with **Context Grounding**, ensuring the LLM only processes metadata, while the SQL engine handles Petabyte-scale execution independently.
 - **Stateless Architecture**: Fully compatible with horizontal scaling via Docker/K8s for high-availability production deployments.
 
+> [!TIP]
+> View our detailed [Load Test Results & Performance Benchmarks](PERFORMANCE_TEST.md) for empirical verification.
+
 ---
 
 ## 📊 Feature Highlights
