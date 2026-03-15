@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { authApi, setAccessToken, setRefreshToken, clearTokens, type UserProfile } from '@/lib/api';
+import { authApi, setAccessToken, setRefreshToken, clearTokens, type UserProfile, getAccessToken } from '@/lib/api';
+import { realtimeClient } from '@/lib/websocket';
 
 interface AuthContextType {
     user: UserProfile | null;
@@ -30,6 +31,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const { data } = await authApi.me();
             setUser(data);
             setIsAuthenticated(true);
+            const token = getAccessToken();
+            if (token) realtimeClient.connect(token);
         } catch {
             clearTokens();
             setUser(null);
@@ -51,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setRefreshToken(data.refreshToken);
             setUser(data.user);
             setIsAuthenticated(true);
+            realtimeClient.connect(data.accessToken);
         } finally {
             setIsLoading(false);
         }
@@ -67,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setRefreshToken(data.refreshToken);
                 setUser(data.user);
                 setIsAuthenticated(true);
+                realtimeClient.connect(data.accessToken);
             }
         } finally {
             setIsLoading(false);
@@ -78,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await authApi.logout();
         } finally {
             clearTokens();
+            realtimeClient.disconnect();
             setUser(null);
             setIsAuthenticated(false);
         }

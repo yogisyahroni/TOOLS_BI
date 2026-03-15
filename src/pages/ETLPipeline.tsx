@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   GitBranch, Plus, Play, Trash2, Filter, Shuffle, Layers,
@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { AIChatPanel } from '@/components/AIChatPanel';
+import { useQueryClient } from '@tanstack/react-query';
+import { useWSEvent } from '@/lib/websocket';
 import type { ETLPipeline as ETLPipelineType, ETLStep } from '@/types/data';
 import { cn } from '@/lib/utils';
 import { HelpTooltip } from '@/components/HelpTooltip';
@@ -370,9 +372,20 @@ export default function ETLPipelinePage() {
   const deletePipelineMut = useDeletePipeline();
   const runPipelineMut = useRunPipeline();
   const uploadDatasetMut = useUploadDataset();
-
   const { data: dataSets = [] } = useDatasets();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Listen for ETL complete event
+  useWSEvent('REALTIME_EVENT_ETL_COMPLETE', useCallback((payload: any) => {
+    if (payload?.pipelineId) {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+      toast({
+        title: 'ETL Complete',
+        description: `Pipeline execution finished with status: ${payload.status}`,
+      });
+    }
+  }, [queryClient, toast]));
   const [newPipelineName, setNewPipelineName] = useState('');
   const [selectedSource, setSelectedSource] = useState('');
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
