@@ -26,6 +26,7 @@ package engine
 //   // result.NodeOutputs — each node's output, keyed by node ID
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -61,7 +62,7 @@ type PipelineResult struct {
 
 // RunVisualPipeline executes a visual ETL pipeline and returns the result.
 // The result of the last node in topological order is the final output.
-func RunVisualPipeline(db *gorm.DB, spec PipelineSpec) (*PipelineResult, error) {
+func RunVisualPipeline(ctx context.Context, db *gorm.DB, spec PipelineSpec) (*PipelineResult, error) {
 	order, err := topoSort(spec.Nodes)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline DAG error: %w", err)
@@ -93,7 +94,7 @@ func RunVisualPipeline(db *gorm.DB, spec PipelineSpec) (*PipelineResult, error) 
 			inputRows = append(inputRows, rows)
 		}
 
-		rows, err := runNode(db, node, inputRows)
+		rows, err := runNode(ctx, db, node, inputRows)
 		if err != nil {
 			result.Errors[id] = err.Error()
 			rows = nil // continue with empty
@@ -162,7 +163,7 @@ func topoSort(nodes []NodeSpec) ([]string, error) {
 
 // ─── Node runner — dispatches by type ────────────────────────────────────────
 
-func runNode(db *gorm.DB, node NodeSpec, inputs [][]map[string]interface{}) ([]map[string]interface{}, error) {
+func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[string]interface{}) ([]map[string]interface{}, error) {
 	cfg := node.Config
 	if cfg == nil {
 		cfg = map[string]interface{}{}
@@ -269,16 +270,28 @@ func runNode(db *gorm.DB, node NodeSpec, inputs [][]map[string]interface{}) ([]m
 		if newCol == "" || formula == "" {
 			return rows, nil
 		}
+
+		// Pre-parse formula once for the whole node optimization
+		expr, err := ParseFormula(formula)
+		if err != nil {
+			return nil, fmt.Errorf("derive: formula error: %w", err)
+		}
+
 		out := make([]map[string]interface{}, 0, len(rows))
 		aggCache := make(map[string]interface{})
 		for _, row := range rows {
+			// Respect context timeout/cancellation
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+
 			newRow := copyRow(row)
-			ctx := FormulaContext{
+			fctx := FormulaContext{
 				Rows:       rows,
 				CurrentRow: row,
 				AggCache:   aggCache,
 			}
-			val, err := Evaluate(formula, ctx)
+			val, err := expr.eval(fctx)
 			if err != nil {
 				newRow[newCol] = nil
 			} else {

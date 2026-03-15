@@ -184,27 +184,31 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 
+		// Run the pipeline execution logic
+		// NOTE: We do NOT wrap the entire transformation in a transaction because it can be 
+		// long-running and cause deadlocks or performance regressions. 
+		// Each ETL run creates its own fresh table, ensuring isolation.
 		result := h.executePipelineInternal(ctx, &pipeline)
 		now := time.Now()
 
 		fmt.Printf("[ETL] Pipeline %s finished with status: %s, rows: %d\n", pipeline.Name, result.status, result.outputRows)
 
-		// Use a transaction for the final update
+		// Persist the status updates in a small transaction (SUB-ROUTINE BETA protocol)
 		err := h.db.Transaction(func(tx *gorm.DB) error {
-			// Update the Run record
+			// 1. Update the Run record
 			runUpdates := map[string]interface{}{
 				"status":       result.status,
 				"error":        result.errMsg,
 				"completed_at": &now,
 			}
-			if result.outputRows > 0 {
+			if result.outputRows >= 0 {
 				runUpdates["output_rows"] = int(result.outputRows)
 			}
 			if err := tx.Model(&run).Updates(runUpdates).Error; err != nil {
 				return err
 			}
 
-			// Update the Pipeline record
+			// 2. Update the Pipeline record
 			pipelineUpdates := map[string]interface{}{
 				"status":            result.status,
 				"last_run_at":       &now,
@@ -267,8 +271,8 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		return pipelineExecResult{status: "error", errMsg: "Invalid pipeline specification"}
 	}
 
-	// 1. Run the transformation engine
-	result, err := engine.RunVisualPipeline(h.db, spec)
+	// 2. Run visual pipeline engine
+	result, err := engine.RunVisualPipeline(ctx, h.db, spec)
 	if err != nil {
 		return pipelineExecResult{status: "error", errMsg: err.Error()}
 	}

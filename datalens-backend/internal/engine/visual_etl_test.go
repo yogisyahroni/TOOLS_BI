@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"context"
 	"testing"
 
 	"datalens/internal/engine"
@@ -17,7 +18,7 @@ func TestTopoSort_LinearChain(t *testing.T) {
 			{ID: "C", Type: "limit", Inputs: []string{"B"}},
 		},
 	}
-	result, err := engine.RunVisualPipeline(nil, spec)
+	result, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	// source node needs DB, but topo sort + limit can work on nil data
 	// We expect a result object (no panic) and Errors may include source error
 	if err != nil {
@@ -48,7 +49,7 @@ func TestTopoSort_CycleDetected(t *testing.T) {
 			{ID: "B", Type: "filter", Inputs: []string{"A"}},
 		},
 	}
-	_, err := engine.RunVisualPipeline(nil, spec)
+	_, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err == nil {
 		t.Error("expected error for cyclic graph")
 	}
@@ -73,7 +74,7 @@ func TestNode_Filter(t *testing.T) {
 		},
 	}
 	// Seed src output manually via a custom run
-	result, _ := engine.RunVisualPipeline(nil, spec)
+	result, _ := engine.RunVisualPipeline(context.Background(), nil, spec)
 	// src is union with no inputs → 0 rows
 	// filter gets 0 rows → 0 output (no panic)
 	_ = result
@@ -111,7 +112,7 @@ func TestNode_Select(t *testing.T) {
 	spec := buildTwoNodeSpec(rows, "select", map[string]interface{}{
 		"columns": []interface{}{"a", "c"},
 	})
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -135,7 +136,7 @@ func TestNode_Rename(t *testing.T) {
 	spec := buildTwoNodeSpec(rows, "rename", map[string]interface{}{
 		"from": "old_name", "to": "new_name",
 	})
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestNode_Limit(t *testing.T) {
 	spec := buildTwoNodeSpec(rows, "limit", map[string]interface{}{
 		"n": float64(3),
 	})
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -177,7 +178,7 @@ func TestNode_Sort_Ascending(t *testing.T) {
 	spec := buildTwoNodeSpec(rows, "sort", map[string]interface{}{
 		"column": "v", "desc": false,
 	})
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -203,7 +204,7 @@ func TestNode_Union(t *testing.T) {
 			{ID: "union", Type: "union", Inputs: []string{"left", "right"}},
 		},
 	}
-	res, _ := engine.RunVisualPipeline(nil, spec)
+	res, _ := engine.RunVisualPipeline(context.Background(), nil, spec)
 	// Both seeds produce 0 rows → union = 0
 	_ = res
 	_ = rows1
@@ -222,7 +223,7 @@ func TestNode_Dedup(t *testing.T) {
 	spec := buildTwoNodeSpec(rows, "dedup", map[string]interface{}{
 		"keys": []interface{}{"id"},
 	})
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -244,7 +245,7 @@ func TestNode_Aggregate(t *testing.T) {
 		"metric":      "v",
 		"aggregation": "sum",
 	})
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -272,7 +273,7 @@ func TestNode_Derive(t *testing.T) {
 		"column":  "profit",
 		"formula": "SUM(sales) - SUM(cost)", // 300 - 150 = 150 for all rows
 	})
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -291,7 +292,7 @@ func TestNode_UnknownType_ErrorRecorded(t *testing.T) {
 			{ID: "bad", Type: "notanode", Inputs: nil},
 		},
 	}
-	res, err := engine.RunVisualPipeline(nil, spec)
+	res, err := engine.RunVisualPipeline(context.Background(), nil, spec)
 	if err != nil {
 		t.Fatalf("RunVisualPipeline should not hard-fail for unknown node: %v", err)
 	}

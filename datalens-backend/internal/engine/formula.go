@@ -51,6 +51,15 @@ type FormulaContext struct {
 // Evaluate parses and evaluates a formula string against a FormulaContext.
 // Returns float64 for numeric results; string for text; nil for BLANK.
 func Evaluate(formula string, ctx FormulaContext) (interface{}, error) {
+	expr, err := ParseFormula(formula)
+	if err != nil {
+		return nil, err
+	}
+	return expr.eval(ctx)
+}
+
+// ParseFormula parses a formula string into an expression node for reuse.
+func ParseFormula(formula string) (exprNode, error) {
 	formula = strings.TrimSpace(formula)
 	if formula == "" {
 		return nil, fmt.Errorf("formula is empty")
@@ -60,7 +69,7 @@ func Evaluate(formula string, ctx FormulaContext) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("formula parse error: %w", err)
 	}
-	return expr.eval(ctx)
+	return expr, nil
 }
 
 // ─── AST node interface ───────────────────────────────────────────────────────
