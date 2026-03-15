@@ -16,6 +16,7 @@ type ETLPipeline struct {
 	OutputData      json.RawMessage `json:"outputData" gorm:"type:jsonb;default:'[]'"`
 	Steps           json.RawMessage `json:"steps" gorm:"type:jsonb;default:'[]'"`
 	Status          string          `json:"status" gorm:"default:idle"` // idle,running,completed,error
+	Error           string          `json:"error" gorm:"type:text"`
 	LastRunAt       *time.Time      `json:"lastRunAt"`
 	CreatedAt       time.Time       `json:"createdAt"`
 }

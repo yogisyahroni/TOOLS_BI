@@ -133,12 +133,13 @@ func (h *ETLHandler) DeletePipeline(c *fiber.Ctx) error {
 		}
 	}
 
-	// 3. Delete the pipeline record
-	if err := h.db.Delete(&pipeline).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Delete failed"})
+	id := c.Params("id")
+
+	if err := h.db.Delete(&models.ETLPipeline{}, "id = ? AND user_id = ?", id, userID).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete pipeline: " + err.Error()})
 	}
 
-	return c.Status(fiber.StatusNoContent).Send(nil)
+	return c.JSON(fiber.Map{"message": "Pipeline deleted successfully"})
 }
 
 // RunPipeline triggers async ETL pipeline execution.
@@ -159,12 +160,10 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 	if err := h.db.Model(&pipeline).Select("Status", "OutputTableName", "Error").Updates(models.ETLPipeline{
 		Status:          "running",
 		OutputTableName: pipeline.OutputTableName,
-		// Error:           "", // Clear previous error
+		Error:           "", // Clear previous error
 	}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update pipeline status"})
 	}
-	// Explicitly clear error if the above Updates didn't (GORM sometimes skips empty strings in struct updates)
-	h.db.Model(&pipeline).Update("error", "")
 
 	run := models.PipelineRun{
 		ID:          uuid.New().String(),
