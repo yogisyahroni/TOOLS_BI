@@ -287,6 +287,34 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		return pipelineExecResult{status: "error", errMsg: "Invalid pipeline specification"}
 	}
 
+	// 0. Fetch the source dataset
+	var sourceDataset models.Dataset
+	if err := h.db.First(&sourceDataset, "id = ?", p.SourceDatasetID).Error; err != nil {
+		return pipelineExecResult{status: "error", errMsg: "Source dataset not found"}
+	}
+
+	// Create a source node
+	sourceNodeID := "auto_source_node"
+	sourceNode := engine.NodeSpec{
+		ID:     sourceNodeID,
+		Type:   "source",
+		Label:  "Source Dataset",
+		Config: map[string]interface{}{"table": sourceDataset.DataTableName},
+		Inputs: []string{},
+	}
+
+	// Sequence the nodes based on their array index
+	// Since frontend doesn't pass 'inputs', we chain them linearly
+	previousNodeID := sourceNodeID
+	for i := range spec.Nodes {
+		// Replace their inputs to just point to the previous node
+		spec.Nodes[i].Inputs = []string{previousNodeID}
+		previousNodeID = spec.Nodes[i].ID
+	}
+
+	// Prepend the source node
+	spec.Nodes = append([]engine.NodeSpec{sourceNode}, spec.Nodes...)
+
 	// 1. Run visual pipeline engine
 	result, err := engine.RunVisualPipeline(ctx, h.db, spec)
 	if err != nil {
@@ -306,42 +334,44 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 	}
 
 	// 3. Persist results to a physical SQL table (SUB-ROUTINE BETA protocol)
-	if len(result.Rows) > 0 {
-		// a. Drop existing table if it exists (Ensures idempotency)
-		h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
+	if len(result.Rows) == 0 {
+		return pipelineExecResult{status: "error", errMsg: "Pipeline execution resulted in 0 rows. Output table cannot be created without structure."}
+	}
 
-		// b. Create table structure based on the first row
-		firstRow := result.Rows[0]
-		var colDefs []string
-		for colName, val := range firstRow {
-			sqlType := "TEXT"
-			switch val.(type) {
-			case int, int64:
-				sqlType = "BIGINT"
-			case float64:
-				sqlType = "NUMERIC"
-			case bool:
-				sqlType = "BOOLEAN"
-			}
-			colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
+	// a. Drop existing table if it exists (Ensures idempotency)
+	h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
+
+	// b. Create table structure based on the first row
+	firstRow := result.Rows[0]
+	var colDefs []string
+	for colName, val := range firstRow {
+		sqlType := "TEXT"
+		switch val.(type) {
+		case int, int64:
+			sqlType = "BIGINT"
+		case float64:
+			sqlType = "NUMERIC"
+		case bool:
+			sqlType = "BOOLEAN"
 		}
+		colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
+	}
 
-		createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, p.OutputTableName, strings.Join(colDefs, ", "))
-		if err := h.db.Exec(createSQL).Error; err != nil {
-			return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to create output table: %v", err)}
+	createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, p.OutputTableName, strings.Join(colDefs, ", "))
+	if err := h.db.Exec(createSQL).Error; err != nil {
+		return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to create output table: %v", err)}
+	}
+
+	// c. Batch insert data (SUB-ROUTINE BETA: Using batch size of 500)
+	batchSize := 500
+	for i := 0; i < len(result.Rows); i += batchSize {
+		end := i + batchSize
+		if end > len(result.Rows) {
+			end = len(result.Rows)
 		}
-
-		// c. Batch insert data (SUB-ROUTINE BETA: Using batch size of 500)
-		batchSize := 500
-		for i := 0; i < len(result.Rows); i += batchSize {
-			end := i + batchSize
-			if end > len(result.Rows) {
-				end = len(result.Rows)
-			}
-			batch := result.Rows[i:end]
-			if err := h.db.Table(p.OutputTableName).CreateInBatches(batch, len(batch)).Error; err != nil {
-				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
-			}
+		batch := result.Rows[i:end]
+		if err := h.db.Table(p.OutputTableName).CreateInBatches(batch, len(batch)).Error; err != nil {
+			return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
 		}
 	}
 
