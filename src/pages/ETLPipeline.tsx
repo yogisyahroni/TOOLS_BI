@@ -41,7 +41,7 @@ const stepTypes = [
   { value: 'deduplicate', label: 'Remove Duplicates', icon: Layers, description: 'Remove duplicate rows' },
   { value: 'parse_date', label: 'Parse Date', icon: Clock, description: 'Format and extract dates' },
   { value: 'json_extract', label: 'JSON Extractor', icon: Layers, description: 'Extract value from JSON string' },
-  { value: 'cast_type', label: 'Type Casting', icon: Shuffle, description: 'Convert data types (e.g. String to Number)' },
+  { value: 'cast', label: 'Type Casting', icon: Shuffle, description: 'Convert data types (e.g. String to Number)' },
   { value: 'data_cleansing', label: 'Data Cleansing', icon: AlertCircle, description: 'Handle missing or null values' },
 ];
 
@@ -301,7 +301,7 @@ function StepConfigEditor({
         </div>
       );
 
-    case 'cast_type':
+    case 'cast':
       return (
         <div className="grid grid-cols-3 gap-2">
           <div>
@@ -651,7 +651,7 @@ CRITICAL: You MUST include your recommendation as a valid JSON array object. Wra
 CRITICAL: Do NOT suggest operation types that require multiple datasets, such as 'merge', 'join', or 'union'. We are using a strictly LINEAR data pipeline targeting a single table. Suggesting 'merge' or 'join' will break the application.
 
 Each step must have:
-- type: (filter | transform | aggregate | select | sort | deduplicate | parse_date | json_extract | cast_type | data_cleansing)
+- type: (filter | transform | aggregate | select | sort | deduplicate | parse_date | json_extract | cast | data_cleansing)
 - config: specific object for the step type.
 
 Config Examples:
@@ -660,7 +660,7 @@ Config Examples:
 - Aggregate: { groupBy: string[], aggregations: { column: string, function: "sum"|"avg"|"min"|"max"|"count", alias: string }[] }
 - Select: { columns: string[] }
 - Sort: { column: string, direction: "asc"|"desc" }
-- Cast_type: { column: string, targetType: "string"|"number"|"boolean" }
+- Cast: { column: string, targetType: "string"|"number"|"boolean" }
 - Parse_date: { column: string, extract: "iso"|"year"|"month"|"day", newColumn?: string }
 - JSON_extract: { column: string, jsonPath: string, newColumn?: string }
 - Data_cleansing: { column: string, action: "drop_null"|"fill_null", fillValue?: string }
