@@ -27,7 +27,7 @@ export interface ETLPipeline {
 
 export interface ETLStep {
   id: string;
-  type: 'filter' | 'transform' | 'aggregate' | 'join' | 'sort' | 'select' | 'deduplicate' | 'parse_date' | 'json_extract' | 'cast_type' | 'data_cleansing';
+  type: 'filter' | 'transform' | 'aggregate' | 'join' | 'sort' | 'select' | 'deduplicate' | 'parse_date' | 'json_extract' | 'cast' | 'data_cleansing';
   config: Record<string, any>;
   order: number;
 }

@@ -779,7 +779,8 @@ Always prioritize business value and data quality.`;
                     </div>
                   )}
 
-                  <div className="overflow-auto max-h-[150px] rounded-lg border border-border bg-muted/20">
+                  {draftPreview && draftPreview.length > 0 && (
+                    <div className="overflow-auto max-h-[250px] rounded-lg border border-border bg-muted/20">
                     <table className="w-full text-[10px]">
                       <thead>
                         <tr className="bg-muted/50">
@@ -799,6 +800,7 @@ Always prioritize business value and data quality.`;
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               )}
             </div>
