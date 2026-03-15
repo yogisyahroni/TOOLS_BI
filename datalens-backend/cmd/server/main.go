@@ -37,13 +37,22 @@ import (
 func main() {
 	// --- Logging ---
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	// BUG-DEPLOY-R1: In production, use standard JSON logging for better compatibility with Render/log aggregators.
+	// Use ConsoleWriter only in development for readability.
+	if os.Getenv("ENV") == "production" || os.Getenv("NODE_ENV") == "production" {
+		log.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
+	} else {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	}
+	log.Debug().Msg("Logger initialised")
 
 	// --- Configuration ---
+	log.Debug().Msg("Loading configuration...")
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load config")
 	}
+	log.Info().Str("env", cfg.Server.Env).Msg("Configuration loaded successfully")
 
 	if cfg.Server.Env == "production" {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
@@ -238,20 +247,27 @@ func main() {
 			dbOK = sqlDB.Ping() == nil
 		}
 
-		// Redis liveness probe
-		redisOK := rdb.Ping(c.Context()).Err() == nil
+		// Redis liveness probe (Non-fatal for health status)
+		redisOK := true
+		if rdb != nil {
+			redisOK = rdb.Ping(c.Context()).Err() == nil
+		}
 
 		// Circuit breaker state
 		cbState := apiCB.State()
 
 		overallStatus := "ok"
-		if !dbOK || !redisOK {
+		if !dbOK {
+			overallStatus = "down"
+		} else if !redisOK {
 			overallStatus = "degraded"
 		}
+
 		httpStatus := fiber.StatusOK
-		if overallStatus == "degraded" {
+		if !dbOK {
 			httpStatus = fiber.StatusServiceUnavailable
 		}
+
 		return c.Status(httpStatus).JSON(fiber.Map{
 			"status":         overallStatus,
 			"db":             boolStatus(dbOK),
@@ -565,15 +581,26 @@ func main() {
 	}
 
 	port := cfg.Server.Port
+	// Render priority: always honor $PORT if set.
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		port = envPort
+	}
+
 	// Security: Map known ports to literal strings to break taint flow.
 	cleanPort := "8080" // default literal
 	switch port {
-	case "80": cleanPort = "80"
-	case "443": cleanPort = "443"
-	case "3000": cleanPort = "3000"
-	case "8000": cleanPort = "8000"
-	case "8080": cleanPort = "8080"
-	case "9000": cleanPort = "9000"
+	case "80":
+		cleanPort = "80"
+	case "443":
+		cleanPort = "443"
+	case "3000":
+		cleanPort = "3000"
+	case "8000":
+		cleanPort = "8000"
+	case "8080":
+		cleanPort = "8080"
+	case "9000":
+		cleanPort = "9000"
 	default:
 		// Fallback to validated string if not in common list
 		portRegex := `^[0-9]{2,5}$`
