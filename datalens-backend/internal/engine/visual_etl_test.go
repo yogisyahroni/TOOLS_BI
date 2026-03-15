@@ -94,7 +94,7 @@ func TestNode_Filter(t *testing.T) {
 	spec3 := buildTwoNodeSpec(rows, "filter", map[string]interface{}{
 		"column": "sales", "operator": ">", "value": float64(75),
 	})
-	res3, err := engine.RunVisualPipeline(nil, spec3)
+	res3, err := engine.RunVisualPipeline(context.Background(), nil, spec3)
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
