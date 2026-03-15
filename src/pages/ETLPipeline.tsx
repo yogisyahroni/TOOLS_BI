@@ -852,7 +852,7 @@ Always prioritize business value and data quality.`;
                     {/* Add Steps Buttons */}
                     <div className="px-4 pb-3">
                       <h4 className="text-xs font-semibold text-muted-foreground mb-2">Available Actions</h4>
-                      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                      <div className="flex flex-wrap items-center gap-2 pb-2">
                         {stepTypes.map(st => (
                           <Button
                             key={st.value}
