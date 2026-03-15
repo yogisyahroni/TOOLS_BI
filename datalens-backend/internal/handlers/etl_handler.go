@@ -114,13 +114,30 @@ func (h *ETLHandler) UpdatePipeline(c *fiber.Ctx) error {
 	return c.JSON(pipeline)
 }
 
-// DeletePipeline deletes an ETL pipeline.
+// DeletePipeline deletes an ETL pipeline and its associated output table.
 // DELETE /api/v1/pipelines/:id
 func (h *ETLHandler) DeletePipeline(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
-	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).Delete(&models.ETLPipeline{}).Error; err != nil {
+	var pipeline models.ETLPipeline
+	
+	// 1. Fetch to find the output table name
+	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&pipeline).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Pipeline not found"})
+	}
+
+	// 2. Drop the physical table if it exists (SUB-ROUTINE BETA: Cleanup protocol)
+	if pipeline.OutputTableName != "" {
+		if err := h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, pipeline.OutputTableName)).Error; err != nil {
+			fmt.Printf("[ETL] Warning: Failed to drop output table %s on deletion: %v\n", pipeline.OutputTableName, err)
+			// We continue anyway to ensure the metadata is deleted
+		}
+	}
+
+	// 3. Delete the pipeline record
+	if err := h.db.Delete(&pipeline).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Delete failed"})
 	}
+
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
 
@@ -271,7 +288,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		return pipelineExecResult{status: "error", errMsg: "Invalid pipeline specification"}
 	}
 
-	// 2. Run visual pipeline engine
+	// 1. Run visual pipeline engine
 	result, err := engine.RunVisualPipeline(ctx, h.db, spec)
 	if err != nil {
 		return pipelineExecResult{status: "error", errMsg: err.Error()}
@@ -289,10 +306,56 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		return pipelineExecResult{status: "error", errMsg: "Output table name missing"}
 	}
 
-	// 3. Persist results to JSONB column in Supabase
-	outputJSON, _ := json.Marshal(result.Rows)
+	// 3. Persist results to a physical SQL table (SUB-ROUTINE BETA protocol)
+	if len(result.Rows) > 0 {
+		// a. Drop existing table if it exists (Ensures idempotency)
+		h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
+
+		// b. Create table structure based on the first row
+		firstRow := result.Rows[0]
+		var colDefs []string
+		for colName, val := range firstRow {
+			sqlType := "TEXT"
+			switch val.(type) {
+			case int, int64:
+				sqlType = "BIGINT"
+			case float64:
+				sqlType = "NUMERIC"
+			case bool:
+				sqlType = "BOOLEAN"
+			}
+			colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
+		}
+
+		createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, p.OutputTableName, strings.Join(colDefs, ", "))
+		if err := h.db.Exec(createSQL).Error; err != nil {
+			return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to create output table: %v", err)}
+		}
+
+		// c. Batch insert data (SUB-ROUTINE BETA: Using batch size of 500)
+		batchSize := 500
+		for i := 0; i < len(result.Rows); i += batchSize {
+			end := i + batchSize
+			if end > len(result.Rows) {
+				end = len(result.Rows)
+			}
+			batch := result.Rows[i:end]
+			if err := h.db.Table(p.OutputTableName).CreateInBatches(batch, len(batch)).Error; err != nil {
+				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
+			}
+		}
+	}
+
+	// 4. Save a small sample (first 100 rows) to JSONB for instant preview
+	sampleSize := 100
+	if len(result.Rows) < sampleSize {
+		sampleSize = len(result.Rows)
+	}
+	sampleRows := result.Rows[:sampleSize]
+	outputJSON, _ := json.Marshal(sampleRows)
+	
 	if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
-		return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Storage failed: %v", err)}
+		fmt.Printf("[ETL] Warning: Failed to save preview sample: %v\n", err)
 	}
 
 	return pipelineExecResult{
