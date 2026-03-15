@@ -478,16 +478,20 @@ export default function ETLPipelinePage() {
     }
 
     try {
-      // 1. Run pipeline on backend
+      // 1. Trigger backend execution
       await runPipelineMut.mutateAsync(pipelineId);
-
-      // 2. Run local executePipeline to get preview output data on frontend
-      const response = await datasetApi.data(sourceDs.id, { limit: 50000 });
+      
+      // 2. Local preview for immediate feedback (simulated)
+      // Note: Backend runs truly async, this local run informs the UI what the data *should* look like
+      const response = await datasetApi.data(sourceDs.id, { limit: 1000 });
       const sourceData = response.data.data || [];
       const result = await runWorker<Record<string, any>[]>('EXECUTE_ETL', { data: sourceData, steps: (pipeline.steps as ETLStep[]) || [] });
       setPreviewData(prev => ({ ...prev, [pipelineId]: result }));
 
-      toast({ title: 'Pipeline completed', description: `${result.length} rows processed via backend.` });
+      toast({ 
+        title: 'Pipeline started', 
+        description: `Processing started on server. You can save output once it's complete.`,
+      });
     } catch (err: any) {
       toast({ title: 'Pipeline error', description: err.message || 'An error occurred during execution', variant: 'destructive' });
     }
@@ -768,12 +772,30 @@ Always prioritize business value and data quality.`;
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(pipeline.status)}
-                        <Button size="sm" onClick={() => runPipeline(pipeline.id)} disabled={pipeline.status === 'running' || pipelineSteps.length === 0} className="gradient-primary text-primary-foreground">
-                          <Play className="w-4 h-4 mr-1" /> Run
+                        <Button 
+                          size="sm" 
+                          onClick={() => runPipeline(pipeline.id)} 
+                          disabled={pipeline.status === 'running' || pipelineSteps.length === 0} 
+                          className="gradient-primary text-primary-foreground"
+                        >
+                          {pipeline.status === 'running' ? (
+                            <><div className="w-3 h-3 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" /> Running</>
+                          ) : (
+                            <><Play className="w-4 h-4 mr-1" /> Run</>
+                          )}
                         </Button>
                         {preview && (
-                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => saveOutput(pipeline.id)}>
-                            <Save className="w-4 h-4 mr-1" /> Save Output
+                          <Button 
+                            size="sm" 
+                            className={cn(
+                              "text-white transition-all",
+                              pipeline.status === 'completed' ? "bg-green-600 hover:bg-green-700" : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+                            )} 
+                            onClick={() => pipeline.status === 'completed' && saveOutput(pipeline.id)}
+                            disabled={pipeline.status !== 'completed'}
+                          >
+                            <Save className="w-4 h-4 mr-1" /> 
+                            {pipeline.status === 'running' ? 'Processing on Server...' : 'Save Output'}
                           </Button>
                         )}
                         <Button size="sm" variant="destructive" onClick={() => handleRemovePipeline(pipeline.id)}>

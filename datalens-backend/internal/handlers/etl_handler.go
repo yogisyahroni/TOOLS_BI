@@ -134,18 +134,20 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 	}
 
 	// Generate output table name if not exists before starting async run
-	// MANDATORY: This must be persisted immediately to avoid empty table names in workers
 	if pipeline.OutputTableName == "" {
 		pipeline.OutputTableName = fmt.Sprintf("etl_out_%s", strings.ReplaceAll(uuid.New().String(), "-", "_"))
 	}
 
 	// Persist the status and output table name IMMEDIATELY
-	if err := h.db.Model(&pipeline).Select("Status", "OutputTableName").Updates(models.ETLPipeline{
+	if err := h.db.Model(&pipeline).Select("Status", "OutputTableName", "Error").Updates(models.ETLPipeline{
 		Status:          "running",
 		OutputTableName: pipeline.OutputTableName,
+		// Error:           "", // Clear previous error
 	}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update pipeline status"})
 	}
+	// Explicitly clear error if the above Updates didn't (GORM sometimes skips empty strings in struct updates)
+	h.db.Model(&pipeline).Update("error", "")
 
 	run := models.PipelineRun{
 		ID:          uuid.New().String(),
@@ -155,18 +157,35 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 		TriggeredBy: "manual",
 	}
 	if err := h.db.Create(&run).Error; err != nil {
-		// Log but don't fail the whole run if stats fail
-		fmt.Printf("Warning: Failed to create pipeline run record: %v\n", err)
+		fmt.Printf("[ETL] Warning: Failed to create pipeline run record: %v\n", err)
 	}
 
 	// Async execution
 	go func() {
-		// Pass a copy of the pipeline to avoid race conditions with other requests
+		// Panic recovery is CRITICAL for long-running goroutines
+		defer func() {
+			if r := recover(); r != nil {
+				errMsg := fmt.Sprintf("PANIC in ETL pipeline: %v", r)
+				fmt.Printf("[ETL] %s\n", errMsg)
+				h.db.Model(&pipeline).Updates(map[string]interface{}{
+					"status": "error",
+					"error":  errMsg,
+				})
+				h.db.Model(&run).Updates(map[string]interface{}{
+					"status": "error",
+					"error":  errMsg,
+				})
+			}
+		}()
+
+		fmt.Printf("[ETL] Starting pipeline %s (%s)\n", pipeline.Name, pipeline.ID)
 		result := h.executePipelineInternal(context.Background(), &pipeline)
 		now := time.Now()
 
-		// Use a transaction for the final update to ensure consistency
-		h.db.Transaction(func(tx *gorm.DB) error {
+		fmt.Printf("[ETL] Pipeline %s finished with status: %s, rows: %d\n", pipeline.Name, result.status, result.outputRows)
+
+		// Use a transaction for the final update
+		err := h.db.Transaction(func(tx *gorm.DB) error {
 			// Update the Run record
 			runUpdates := map[string]interface{}{
 				"status":       result.status,
@@ -176,23 +195,27 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 			if result.outputRows > 0 {
 				runUpdates["output_rows"] = int(result.outputRows)
 			}
-			tx.Model(&run).Updates(runUpdates)
+			if err := tx.Model(&run).Updates(runUpdates).Error; err != nil {
+				return err
+			}
 
 			// Update the Pipeline record
 			pipelineUpdates := map[string]interface{}{
 				"status":            result.status,
 				"last_run_at":       &now,
 				"output_table_name": pipeline.OutputTableName,
+				"error":             result.errMsg,
 			}
-			if result.errMsg != "" {
-				pipelineUpdates["error"] = result.errMsg
-			} else {
-				pipelineUpdates["error"] = "" // Clear previous error on success
+			if err := tx.Model(&pipeline).Updates(pipelineUpdates).Error; err != nil {
+				return err
 			}
-			tx.Model(&pipeline).Updates(pipelineUpdates)
 
 			return nil
 		})
+
+		if err != nil {
+			fmt.Printf("[ETL] Failed to persist results in transaction: %v\n", err)
+		}
 
 		// Notify user via WebSocket
 		h.hub.SendToUser(userID, realtime.Event{
