@@ -133,6 +133,18 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Pipeline not found"})
 	}
 
+	// Generate output table name if not exists before starting async run
+	if pipeline.OutputTableName == "" {
+		pipeline.OutputTableName = fmt.Sprintf("etl_out_%s", strings.ReplaceAll(uuid.New().String(), "-", "_"))
+	}
+
+	if err := h.db.Model(&pipeline).Updates(map[string]interface{}{
+		"status":            "running",
+		"output_table_name": pipeline.OutputTableName,
+	}).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update pipeline status"})
+	}
+
 	run := models.PipelineRun{
 		ID:          uuid.New().String(),
 		PipelineID:  pipeline.ID,
@@ -214,9 +226,9 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 	}
 
-	// 2. Generate output table name if not exists
+	// 2. Output table name should already be set by RunPipeline
 	if p.OutputTableName == "" {
-		p.OutputTableName = fmt.Sprintf("etl_out_%s", strings.ReplaceAll(uuid.New().String(), "-", "_"))
+		return pipelineExecResult{status: "error", errMsg: "Output table name missing"}
 	}
 
 	// 3. Persist results
@@ -239,8 +251,8 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Pipeline not found"})
 	}
 
-	if pipeline.OutputTableName == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Pipeline has no output table. Run it first."})
+	if pipeline.OutputTableName == "" || pipeline.Status != "completed" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Pipeline has no output table or is not completed. Run it first and wait for completion."})
 	}
 
 	// 1. Inspect the table to get column metadata

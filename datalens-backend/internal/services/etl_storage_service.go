@@ -58,11 +58,11 @@ func (s *ETLStorageService) ensureTableExists(db *gorm.DB, tableName string, sam
 		return fmt.Errorf("invalid table name: %s", tableName)
 	}
 
-	// Optimization: check if table exists first
+	// For ETL, we always want a fresh table to avoid data corruption or stale data from previous runs.
 	if db.Migrator().HasTable(tableName) {
-		// For now, we assume schema is stable per run or use AutoMigrate
-		// A more advanced version would diff the keys and add missing columns
-		return nil
+		if err := db.Migrator().DropTable(tableName); err != nil {
+			return fmt.Errorf("failed to drop existing table %s: %w", tableName, err)
+		}
 	}
 
 	// GORM's AutoMigrate needs a struct or map with types. 
