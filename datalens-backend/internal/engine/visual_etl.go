@@ -27,9 +27,12 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -477,6 +480,153 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 		}
 		return rows, nil
 
+	// ── transform ─────────────────────────────────────────────────────────────
+	case "transform":
+		rows := firstInput(inputs)
+		col := cfgStr(cfg, "column")
+		op := strings.ToLower(cfgStr(cfg, "operation"))
+		operand := cfgFloat(cfg, "operand")
+
+		out := make([]map[string]interface{}, 0, len(rows))
+		for _, row := range rows {
+			newRow := copyRow(row)
+			val := row[col]
+
+			if val != nil {
+				switch op {
+				case "uppercase":
+					newRow[col] = strings.ToUpper(fmt.Sprintf("%v", val))
+				case "lowercase":
+					newRow[col] = strings.ToLower(fmt.Sprintf("%v", val))
+				case "trim":
+					newRow[col] = strings.TrimSpace(fmt.Sprintf("%v", val))
+				case "round":
+					if f, ok := toFloat(val); ok {
+						newRow[col] = math.Round(f)
+					}
+				case "abs":
+					if f, ok := toFloat(val); ok {
+						newRow[col] = math.Abs(f)
+					}
+				case "add":
+					if f, ok := toFloat(val); ok {
+						newRow[col] = f + operand
+					}
+				case "multiply":
+					if f, ok := toFloat(val); ok {
+						newRow[col] = f * operand
+					}
+				}
+			}
+			out = append(out, newRow)
+		}
+		return out, nil
+
+	// ── parse_date ────────────────────────────────────────────────────────────
+	case "parse_date", "parsedate":
+		rows := firstInput(inputs)
+		col := cfgStr(cfg, "column")
+		part := strings.ToLower(cfgStr(cfg, "part")) // year, month, day, iso
+		
+		out := make([]map[string]interface{}, 0, len(rows))
+		for _, row := range rows {
+			newRow := copyRow(row)
+			var parsedTime time.Time
+			var ok bool
+			var err error
+			
+			val := row[col]
+			if val != nil {
+				strVal := fmt.Sprintf("%v", val)
+				parsedTime, err = parseTimeLoose(strVal)
+				if err == nil {
+					ok = true
+				}
+			}
+
+			if ok {
+				switch part {
+				case "year":
+					newRow[col] = int64(parsedTime.Year())
+				case "month":
+					newRow[col] = int64(parsedTime.Month())
+				case "day":
+					newRow[col] = int64(parsedTime.Day())
+				case "iso":
+					newRow[col] = parsedTime.Format(time.RFC3339)
+				default:
+					newRow[col] = parsedTime.Format(time.RFC3339)
+				}
+			} else {
+				newRow[col] = nil // Could not parse
+			}
+			out = append(out, newRow)
+		}
+		return out, nil
+
+	// ── json_extract ──────────────────────────────────────────────────────────
+	case "json_extract":
+		rows := firstInput(inputs)
+		col := cfgStr(cfg, "column")
+		keyPath := cfgStr(cfg, "key")
+		newColName := cfgStr(cfg, "newColumn")
+		if newColName == "" {
+			newColName = col + "_extracted"
+		}
+		
+		out := make([]map[string]interface{}, 0, len(rows))
+		for _, row := range rows {
+			newRow := copyRow(row)
+			
+			if val, ok := row[col]; ok && val != nil {
+				strVal := strings.TrimSpace(fmt.Sprintf("%v", val))
+				var jsonData interface{}
+				if err := json.Unmarshal([]byte(strVal), &jsonData); err == nil {
+					newRow[newColName] = extractJSONPath(jsonData, keyPath)
+				} else {
+					newRow[newColName] = nil
+				}
+			} else {
+				newRow[newColName] = nil
+			}
+			
+			out = append(out, newRow)
+		}
+		return out, nil
+
+	// ── data_cleansing ────────────────────────────────────────────────────────
+	case "data_cleansing", "datacleansing":
+		rows := firstInput(inputs)
+		col := cfgStr(cfg, "column")
+		action := strings.ToLower(cfgStr(cfg, "action")) // drop_null, fill_null
+		fillValue := cfg["fillValue"]
+		
+		var out []map[string]interface{}
+		for _, row := range rows {
+			val := row[col]
+			isNull := val == nil || fmt.Sprintf("%v", val) == "" || fmt.Sprintf("%v", val) == "null"
+			
+			if action == "drop_null" {
+				if isNull {
+					continue // skip row
+				}
+				out = append(out, copyRow(row))
+			} else if action == "fill_null" {
+				newRow := copyRow(row)
+				if isNull {
+					newRow[col] = fillValue
+				}
+				out = append(out, newRow)
+			} else {
+				// unknown action, preserve row
+				out = append(out, copyRow(row))
+			}
+		}
+		if out == nil {
+			out = make([]map[string]interface{}, 0)
+		}
+		return out, nil
+
 	default:
 		return nil, fmt.Errorf("unknown node type %q", node.Type)
 	}
@@ -555,4 +705,37 @@ func copyRow(row map[string]interface{}) map[string]interface{} {
 		newRow[k] = v
 	}
 	return newRow
+}
+
+func parseTimeLoose(val string) (time.Time, error) {
+	formats := []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05Z",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+		"01/02/2006",
+		"2006/01/02",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, val); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("could not parse date")
+}
+
+func extractJSONPath(data interface{}, path string) interface{} {
+	if path == "" {
+		return data
+	}
+	parts := strings.Split(path, ".")
+	current := data
+	for _, part := range parts {
+		if m, ok := current.(map[string]interface{}); ok {
+			current = m[part]
+		} else {
+			return nil
+		}
+	}
+	return current
 }

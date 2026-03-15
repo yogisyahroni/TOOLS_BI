@@ -333,3 +333,88 @@ func buildTwoNodeSpec(rows []map[string]interface{}, nodeType string, cfg map[st
 		},
 	}
 }
+
+// ─── Transform node ───────────────────────────────────────────────────────────
+
+func TestNode_Transform(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"txt": " HELLO ", "num": float64(10.5)},
+	}
+
+	// uppercase
+	res, _ := engine.RunVisualPipeline(context.Background(), nil, buildTwoNodeSpec(rows, "transform", map[string]interface{}{
+		"column": "txt", "operation": "trim",
+	}))
+	if res.Rows[0]["txt"] != "HELLO" {
+		t.Errorf("expected trimmed HELLO, got %q", res.Rows[0]["txt"])
+	}
+
+	res, _ = engine.RunVisualPipeline(context.Background(), nil, buildTwoNodeSpec(rows, "transform", map[string]interface{}{
+		"column": "num", "operation": "multiply", "operand": float64(2),
+	}))
+	if res.Rows[0]["num"] != float64(21) {
+		t.Errorf("expected 21, got %v", res.Rows[0]["num"])
+	}
+}
+
+// ─── Parse Date node ──────────────────────────────────────────────────────────
+
+func TestNode_ParseDate(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"dt": "2024-05-12T10:00:00Z"},
+	}
+
+	res, _ := engine.RunVisualPipeline(context.Background(), nil, buildTwoNodeSpec(rows, "parse_date", map[string]interface{}{
+		"column": "dt", "part": "year",
+	}))
+	if res.Rows[0]["dt"].(int64) != 2024 {
+		t.Errorf("expected year 2024, got %v", res.Rows[0]["dt"])
+	}
+}
+
+// ─── JSON Extract node ────────────────────────────────────────────────────────
+
+func TestNode_JSONExtract(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"raw": `{"user":{"id": 42, "name": "alice"}}`},
+	}
+
+	res, _ := engine.RunVisualPipeline(context.Background(), nil, buildTwoNodeSpec(rows, "json_extract", map[string]interface{}{
+		"column": "raw", "key": "user.name", "newColumn": "user_name",
+	}))
+	if res.Rows[0]["user_name"] != "alice" {
+		t.Errorf("expected json extracted alice, got %v", res.Rows[0]["user_name"])
+	}
+}
+
+// ─── Data Cleansing node ──────────────────────────────────────────────────────
+
+func TestNode_DataCleansing(t *testing.T) {
+	rows := []map[string]interface{}{
+		{"val": "good"},
+		{"val": nil}, // explicitly null
+		{"val": "null"}, // string literal null
+	}
+
+	// Drop null
+	res, _ := engine.RunVisualPipeline(context.Background(), nil, buildTwoNodeSpec(rows, "data_cleansing", map[string]interface{}{
+		"column": "val", "action": "drop_null",
+	}))
+	if len(res.Rows) != 1 {
+		t.Errorf("expected 1 row after drop_null, got %d", len(res.Rows))
+	}
+	if res.Rows[0]["val"] != "good" {
+		t.Errorf("expected 'good', got %v", res.Rows[0]["val"]) // only the valid row remains
+	}
+
+	// Fill null
+	res2, _ := engine.RunVisualPipeline(context.Background(), nil, buildTwoNodeSpec(rows, "data_cleansing", map[string]interface{}{
+		"column": "val", "action": "fill_null", "fillValue": "fixed",
+	}))
+	if len(res2.Rows) != 3 {
+		t.Fatalf("expected 3 rows after fill_null")
+	}
+	if res2.Rows[1]["val"] != "fixed" {
+		t.Errorf("expected second row to be filled with 'fixed'")
+	}
+}
