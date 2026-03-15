@@ -379,3 +379,61 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 
 	return c.JSON(datasetRec)
 }
+
+// GetPipelinePreview returns the first 100 rows of a completed pipeline's output.
+// GET /api/v1/pipelines/:id/preview
+func (h *ETLHandler) GetPipelinePreview(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	var pipeline models.ETLPipeline
+	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&pipeline).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Pipeline not found"})
+	}
+
+	if pipeline.OutputTableName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Pipeline has no output table. Run it first."})
+	}
+
+	if pipeline.Status != "completed" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Pipeline status is '%s'. It must be 'completed' to get preview.", pipeline.Status)})
+	}
+
+	// 1. Fetch data
+	var data []map[string]interface{}
+	if err := h.db.Table(pipeline.OutputTableName).Limit(100).Find(&data).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to fetch preview data: %v", err)})
+	}
+
+	// 2. Get columns from table metadata
+	columnTypes, err := h.db.Migrator().ColumnTypes(pipeline.OutputTableName)
+	if err != nil {
+		// Fallback to empty columns if inspection fails but data exists
+		return c.JSON(fiber.Map{
+			"data":    data,
+			"columns": []models.ColumnDef{},
+		})
+	}
+
+	var cols []models.ColumnDef
+	for _, ct := range columnTypes {
+		colType := "string"
+		dbType := strings.ToUpper(ct.DatabaseTypeName())
+		if strings.Contains(dbType, "INT") || strings.Contains(dbType, "DOUBLE") || strings.Contains(dbType, "FLOAT") || strings.Contains(dbType, "NUMERIC") || strings.Contains(dbType, "DECIMAL") {
+			colType = "number"
+		} else if strings.Contains(dbType, "BOOL") {
+			colType = "boolean"
+		} else if strings.Contains(dbType, "TIMESTAMP") || strings.Contains(dbType, "DATE") {
+			colType = "date"
+		}
+
+		cols = append(cols, models.ColumnDef{
+			Name:     ct.Name(),
+			Type:     colType,
+			Nullable: true,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"data":    data,
+		"columns": cols,
+	})
+}

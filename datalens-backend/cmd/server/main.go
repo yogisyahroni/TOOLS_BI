@@ -443,6 +443,7 @@ func main() {
 	pipelines.Delete("/:id", etlH.DeletePipeline)
 	pipelines.Post("/:id/run", etlH.RunPipeline)
 	pipelines.Post("/:id/save-as-dataset", etlH.SaveAsDataset)
+	pipelines.Get("/:id/preview", etlH.GetPipelinePreview)
 	pipelines.Get("/:id/runs", etlH.GetPipelineRuns)
 
 	// DB Connection / Schema routes

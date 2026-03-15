@@ -271,6 +271,7 @@ export const pipelineApi = {
     run: (id: string) => api.post<{ runId: string; status: string; startedAt: string }>(`/pipelines/${id}/run`),
     saveAsDataset: (id: string) => api.post<DatasetItem>(`/pipelines/${id}/save-as-dataset`),
     runs: (id: string) => api.get<{ data: PipelineRun[] }>(`/pipelines/${id}/runs`),
+    preview: (id: string) => api.get<DataQueryResult>(`/pipelines/${id}/preview`),
 };
 
 // DB Connections

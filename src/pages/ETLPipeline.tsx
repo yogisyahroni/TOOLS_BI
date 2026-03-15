@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   GitBranch, Plus, Play, Trash2, Filter, Shuffle, Layers,
@@ -380,6 +380,14 @@ export default function ETLPipelinePage() {
   useWSEvent('REALTIME_EVENT_ETL_COMPLETE', useCallback((payload: any) => {
     if (payload?.pipelineId) {
       queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+      
+      // Update preview data if completed
+      if (payload.status === 'completed') {
+        pipelineApi.preview(payload.pipelineId).then(res => {
+          setPreviewData(prev => ({ ...prev, [payload.pipelineId]: res.data.data }));
+        }).catch(err => console.error(`WS Update: Failed to fetch preview for ${payload.pipelineId}:`, err));
+      }
+
       toast({
         title: 'ETL Complete',
         description: `Pipeline execution finished with status: ${payload.status}`,
@@ -390,6 +398,17 @@ export default function ETLPipelinePage() {
   const [selectedSource, setSelectedSource] = useState('');
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<Record<string, Record<string, any>[]>>({});
+
+  // Background fetch for completed pipelines preview
+  useEffect(() => {
+    pipelines.forEach(p => {
+      if (p.status === 'completed' && !previewData[p.id]) {
+        pipelineApi.preview(p.id).then(res => {
+          setPreviewData(prev => ({ ...prev, [p.id]: res.data.data }));
+        }).catch(err => console.error(`Failed to fetch preview for ${p.id}:`, err));
+      }
+    });
+  }, [pipelines, previewData]);
 
   // Exploratory Mode State
   const [draftSteps, setDraftSteps] = useState<ETLStep[]>([]);
@@ -797,18 +816,18 @@ Always prioritize business value and data quality.`;
                             <><Play className="w-4 h-4 mr-1" /> Run</>
                           )}
                         </Button>
-                        {preview && (
+                        {(preview || pipeline.status === 'completed') && (
                           <Button 
                             size="sm" 
                             className={cn(
                               "text-white transition-all",
-                              pipeline.status === 'completed' ? "bg-green-600 hover:bg-green-700" : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+                              pipeline.status === 'completed' ? "bg-green-600 hover:bg-green-700 font-bold shadow-lg" : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
                             )} 
                             onClick={() => pipeline.status === 'completed' && saveOutput(pipeline.id)}
                             disabled={pipeline.status !== 'completed'}
                           >
                             <Save className="w-4 h-4 mr-1" /> 
-                            {pipeline.status === 'running' ? 'Processing on Server...' : 'Save Output'}
+                            {pipeline.status === 'running' ? 'Processing...' : 'Save Output'}
                           </Button>
                         )}
                         <Button size="sm" variant="destructive" onClick={() => handleRemovePipeline(pipeline.id)}>
