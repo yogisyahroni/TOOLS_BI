@@ -134,13 +134,15 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 	}
 
 	// Generate output table name if not exists before starting async run
+	// MANDATORY: This must be persisted immediately to avoid empty table names in workers
 	if pipeline.OutputTableName == "" {
 		pipeline.OutputTableName = fmt.Sprintf("etl_out_%s", strings.ReplaceAll(uuid.New().String(), "-", "_"))
 	}
 
-	if err := h.db.Model(&pipeline).Updates(map[string]interface{}{
-		"status":            "running",
-		"output_table_name": pipeline.OutputTableName,
+	// Persist the status and output table name IMMEDIATELY
+	if err := h.db.Model(&pipeline).Select("Status", "OutputTableName").Updates(models.ETLPipeline{
+		Status:          "running",
+		OutputTableName: pipeline.OutputTableName,
 	}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update pipeline status"})
 	}
@@ -152,25 +154,47 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 		StartedAt:   time.Now(),
 		TriggeredBy: "manual",
 	}
-	h.db.Create(&run)
+	if err := h.db.Create(&run).Error; err != nil {
+		// Log but don't fail the whole run if stats fail
+		fmt.Printf("Warning: Failed to create pipeline run record: %v\n", err)
+	}
 
 	// Async execution
 	go func() {
+		// Pass a copy of the pipeline to avoid race conditions with other requests
 		result := h.executePipelineInternal(context.Background(), &pipeline)
 		now := time.Now()
-		run.Status = result.status
-		run.Error = result.errMsg
-		run.CompletedAt = &now
-		if result.outputRows > 0 {
-			rows := int(result.outputRows)
-			run.OutputRows = &rows
-		}
-		h.db.Save(&run)
-		h.db.Model(&pipeline).Updates(map[string]interface{}{
-			"status":            result.status,
-			"last_run_at":       &now,
-			"output_table_name": pipeline.OutputTableName,
+
+		// Use a transaction for the final update to ensure consistency
+		h.db.Transaction(func(tx *gorm.DB) error {
+			// Update the Run record
+			runUpdates := map[string]interface{}{
+				"status":       result.status,
+				"error":        result.errMsg,
+				"completed_at": &now,
+			}
+			if result.outputRows > 0 {
+				runUpdates["output_rows"] = int(result.outputRows)
+			}
+			tx.Model(&run).Updates(runUpdates)
+
+			// Update the Pipeline record
+			pipelineUpdates := map[string]interface{}{
+				"status":            result.status,
+				"last_run_at":       &now,
+				"output_table_name": pipeline.OutputTableName,
+			}
+			if result.errMsg != "" {
+				pipelineUpdates["error"] = result.errMsg
+			} else {
+				pipelineUpdates["error"] = "" // Clear previous error on success
+			}
+			tx.Model(&pipeline).Updates(pipelineUpdates)
+
+			return nil
 		})
+
+		// Notify user via WebSocket
 		h.hub.SendToUser(userID, realtime.Event{
 			Type: realtime.EventETLComplete,
 			Payload: fiber.Map{
@@ -178,6 +202,7 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 				"status":     result.status,
 				"outputRows": result.outputRows,
 				"tableName":  pipeline.OutputTableName,
+				"error":      result.errMsg,
 			},
 		})
 	}()
@@ -186,6 +211,7 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 		"runId":     run.ID,
 		"status":    "running",
 		"startedAt": run.StartedAt,
+		"tableName": pipeline.OutputTableName,
 	})
 }
 
@@ -247,18 +273,28 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	var pipeline models.ETLPipeline
+	
+	// Fetch fresh from DB to make sure we have the latest status
 	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&pipeline).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Pipeline not found"})
 	}
 
-	if pipeline.OutputTableName == "" || pipeline.Status != "completed" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Pipeline has no output table or is not completed. Run it first and wait for completion."})
+	if pipeline.OutputTableName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Pipeline has no output table. Run it first."})
+	}
+	
+	if pipeline.Status == "running" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Pipeline is still running. Please wait for the 'completed' status."})
+	}
+	
+	if pipeline.Status != "completed" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Pipeline status is '%s'. It must be 'completed' to save output.", pipeline.Status)})
 	}
 
 	// 1. Inspect the table to get column metadata
 	columnTypes, err := h.db.Migrator().ColumnTypes(pipeline.OutputTableName)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to inspect output table: %v", err)})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to inspect output table: %v. Ensure the pipeline run was successful.", err)})
 	}
 
 	var cols []models.ColumnDef
