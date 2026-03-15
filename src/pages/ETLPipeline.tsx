@@ -561,7 +561,21 @@ export default function ETLPipelinePage() {
 
       // 1. If a source is selected for Discovery/Exploration, prioritize it
       if (selectedSource) {
-        const newSteps: ETLStep[] = parsedSteps.map((s, i) => ({
+        // Filter out hallucinated node types
+        const validTypes = stepTypes.map(t => t.value);
+        const validParsedSteps = parsedSteps.filter(s => validTypes.includes(s.type));
+        
+        if (validParsedSteps.length < parsedSteps.length) {
+          toast({ 
+            title: 'Unsupported Steps Removed', 
+            description: `AI suggested ${parsedSteps.length - validParsedSteps.length} unsupported operations (e.g. merge/join) which were ignored.`,
+            variant: 'destructive'
+          });
+        }
+        
+        if (validParsedSteps.length === 0) return;
+
+        const newSteps: ETLStep[] = validParsedSteps.map((s, i) => ({
           id: generateId(),
           type: s.type,
           config: s.config || {},
@@ -579,7 +593,22 @@ export default function ETLPipelinePage() {
       if (pipelines.length > 0) {
         const lastPipeline = pipelines[pipelines.length - 1];
         const currentSteps = (lastPipeline.steps as ETLStep[]) || [];
-        const newSteps: ETLStep[] = parsedSteps.map((s, i) => ({
+        
+        // Filter out hallucinated node types
+        const validTypes = stepTypes.map(t => t.value);
+        const validParsedSteps = parsedSteps.filter(s => validTypes.includes(s.type));
+        
+        if (validParsedSteps.length < parsedSteps.length) {
+          toast({ 
+            title: 'Unsupported Steps Removed', 
+            description: `AI suggested ${parsedSteps.length - validParsedSteps.length} unsupported operations (e.g. merge/join) which were ignored.`,
+            variant: 'destructive'
+          });
+        }
+        
+        if (validParsedSteps.length === 0) return;
+
+        const newSteps: ETLStep[] = validParsedSteps.map((s, i) => ({
           id: generateId(),
           type: s.type,
           config: s.config || {},
@@ -619,6 +648,7 @@ Your goal is to suggest high-quality ETL (Extract, Transform, Load) steps based 
 Provide a brief analysis of what needs to be done, then provide the pipeline steps in a structured JSON block.
 
 CRITICAL: You MUST include your recommendation as a valid JSON array object. Wrap the JSON in a markdown code block: \`\`\`json [your json] \`\`\`.
+CRITICAL: Do NOT suggest operation types that require multiple datasets, such as 'merge', 'join', or 'union'. We are using a strictly LINEAR data pipeline targeting a single table. Suggesting 'merge' or 'join' will break the application.
 
 Each step must have:
 - type: (filter | transform | aggregate | select | sort | deduplicate | parse_date | json_extract | cast_type | data_cleansing)
@@ -626,13 +656,14 @@ Each step must have:
 
 Config Examples:
 - Filter: { column: string, operator: ">"|"<"|"="|"!="|">="|"<="|"contains", value: string }
-- Transform: { column: string, operation: "uppercase"|"lowercase"|"round"|"abs"|"trim"|"sqrt", newColumn?: string, operand?: number }
-- Aggregate: { groupBy: string[], metrics: { column: string, op: "sum"|"avg"|"min"|"max"|"count", alias: string }[] }
+- Transform: { column: string, operation: "uppercase"|"lowercase"|"round"|"abs"|"trim"|"add"|"multiply", newColumn?: string, operand?: number }
+- Aggregate: { groupBy: string[], aggregations: { column: string, function: "sum"|"avg"|"min"|"max"|"count", alias: string }[] }
 - Select: { columns: string[] }
 - Sort: { column: string, direction: "asc"|"desc" }
-- Cast_type: { column: string, toType: "string"|"number"|"boolean"|"date" }
-- Parse_date: { column: string, format: string }
-- Data_cleansing: { column: string, strategy: "remove_null"|"fill_zero"|"fill_mean" }
+- Cast_type: { column: string, targetType: "string"|"number"|"boolean" }
+- Parse_date: { column: string, extract: "iso"|"year"|"month"|"day", newColumn?: string }
+- JSON_extract: { column: string, jsonPath: string, newColumn?: string }
+- Data_cleansing: { column: string, action: "drop_null"|"fill_null", fillValue?: string }
 
 Always prioritize business value and data quality.`;
   };
