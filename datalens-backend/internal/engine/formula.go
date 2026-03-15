@@ -45,6 +45,7 @@ import (
 type FormulaContext struct {
 	Rows       []map[string]interface{} // full dataset
 	CurrentRow map[string]interface{}   // set when evaluating row-level formulas
+	AggCache   map[string]interface{}   // cache for aggregate results (O(N) optimization)
 }
 
 // Evaluate parses and evaluates a formula string against a FormulaContext.
@@ -167,7 +168,15 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		return sumCol(ctx.Rows, col), nil
+		cacheKey := "SUM:" + col
+		if v, ok := ctx.AggCache[cacheKey]; ok && ctx.AggCache != nil {
+			return v, nil
+		}
+		res := sumCol(ctx.Rows, col)
+		if ctx.AggCache != nil {
+			ctx.AggCache[cacheKey] = res
+		}
+		return res, nil
 
 	// ── SUMIF(col, op, val) ──────────────────────────────────────────────────
 	case "SUMIF":
@@ -187,6 +196,12 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 			return nil, err
 		}
 		tf, _ := toFloat(threshold)
+
+		cacheKey := fmt.Sprintf("SUMIF:%s:%s:%v", col, opStr, tf)
+		if v, ok := ctx.AggCache[cacheKey]; ok && ctx.AggCache != nil {
+			return v, nil
+		}
+
 		var total float64
 		for _, row := range ctx.Rows {
 			v, ok := parseFloat(row[col])
@@ -197,6 +212,9 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 				total += v
 			}
 		}
+		if ctx.AggCache != nil {
+			ctx.AggCache[cacheKey] = total
+		}
 		return total, nil
 
 	// ── AVERAGE(col) ─────────────────────────────────────────────────────────
@@ -205,11 +223,19 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		vals := extractFloats(ctx.Rows, col)
-		if len(vals) == 0 {
-			return 0.0, nil
+		cacheKey := "AVERAGE:" + col
+		if v, ok := ctx.AggCache[cacheKey]; ok && ctx.AggCache != nil {
+			return v, nil
 		}
-		return sumSlice(vals) / float64(len(vals)), nil
+		vals := extractFloats(ctx.Rows, col)
+		var res float64
+		if len(vals) > 0 {
+			res = sumSlice(vals) / float64(len(vals))
+		}
+		if ctx.AggCache != nil {
+			ctx.AggCache[cacheKey] = res
+		}
+		return res, nil
 
 	// ── COUNT(col) ───────────────────────────────────────────────────────────
 	case "COUNT":
@@ -217,13 +243,21 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
+		cacheKey := "COUNT:" + col
+		if v, ok := ctx.AggCache[cacheKey]; ok && ctx.AggCache != nil {
+			return v, nil
+		}
 		count := 0
 		for _, row := range ctx.Rows {
 			if !isBlankVal(row[col]) {
 				count++
 			}
 		}
-		return float64(count), nil
+		res := float64(count)
+		if ctx.AggCache != nil {
+			ctx.AggCache[cacheKey] = res
+		}
+		return res, nil
 
 	// ── COUNTIF(col, op, val) ────────────────────────────────────────────────
 	case "COUNTIF":
@@ -238,8 +272,17 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		threshold, _ := f.args[2].eval(ctx)
-		tf, _ := toFloat(threshold)
+		thresholdVal, err := f.args[2].eval(ctx)
+		if err != nil {
+			return nil, err
+		}
+		tf, _ := toFloat(thresholdVal)
+
+		cacheKey := fmt.Sprintf("COUNTIF:%s:%s:%v", col, opStr, tf)
+		if v, ok := ctx.AggCache[cacheKey]; ok && ctx.AggCache != nil {
+			return v, nil
+		}
+
 		count := 0
 		for _, row := range ctx.Rows {
 			v, ok := parseFloat(row[col])
@@ -247,7 +290,11 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 				count++
 			}
 		}
-		return float64(count), nil
+		res := float64(count)
+		if ctx.AggCache != nil {
+			ctx.AggCache[cacheKey] = res
+		}
+		return res, nil
 
 	// ── DISTINCTCOUNT(col) ───────────────────────────────────────────────────
 	case "DISTINCTCOUNT":
@@ -255,13 +302,21 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
+		cacheKey := "DISTINCTCOUNT:" + col
+		if v, ok := ctx.AggCache[cacheKey]; ok && ctx.AggCache != nil {
+			return v, nil
+		}
 		seen := map[string]bool{}
 		for _, row := range ctx.Rows {
 			if v := row[col]; v != nil {
 				seen[fmt.Sprintf("%v", v)] = true
 			}
 		}
-		return float64(len(seen)), nil
+		res := float64(len(seen))
+		if ctx.AggCache != nil {
+			ctx.AggCache[cacheKey] = res
+		}
+		return res, nil
 
 	// ── MIN(col) / MAX(col) ───────────────────────────────────────────────────
 	case "MIN", "MAX":
@@ -269,18 +324,25 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		vals := extractFloats(ctx.Rows, col)
-		if len(vals) == 0 {
-			return 0.0, nil
+		cacheKey := name + ":" + col
+		if v, ok := ctx.AggCache[cacheKey]; ok && ctx.AggCache != nil {
+			return v, nil
 		}
-		res := vals[0]
-		for _, v := range vals[1:] {
-			if name == "MIN" && v < res {
-				res = v
+		vals := extractFloats(ctx.Rows, col)
+		var res float64
+		if len(vals) > 0 {
+			res = vals[0]
+			for _, v := range vals[1:] {
+				if name == "MIN" && v < res {
+					res = v
+				}
+				if name == "MAX" && v > res {
+					res = v
+				}
 			}
-			if name == "MAX" && v > res {
-				res = v
-			}
+		}
+		if ctx.AggCache != nil {
+			ctx.AggCache[cacheKey] = res
 		}
 		return res, nil
 

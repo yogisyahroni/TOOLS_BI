@@ -179,7 +179,12 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 		}()
 
 		fmt.Printf("[ETL] Starting pipeline %s (%s)\n", pipeline.Name, pipeline.ID)
-		result := h.executePipelineInternal(context.Background(), &pipeline)
+		
+		// Create a timeout context to prevent "Infinite Running" (SUB-ROUTINE BETA protocol)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		result := h.executePipelineInternal(ctx, &pipeline)
 		now := time.Now()
 
 		fmt.Printf("[ETL] Pipeline %s finished with status: %s, rows: %d\n", pipeline.Name, result.status, result.outputRows)

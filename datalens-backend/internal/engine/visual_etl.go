@@ -270,9 +270,14 @@ func runNode(db *gorm.DB, node NodeSpec, inputs [][]map[string]interface{}) ([]m
 			return rows, nil
 		}
 		out := make([]map[string]interface{}, 0, len(rows))
+		aggCache := make(map[string]interface{})
 		for _, row := range rows {
 			newRow := copyRow(row)
-			ctx := FormulaContext{Rows: rows, CurrentRow: row}
+			ctx := FormulaContext{
+				Rows:       rows,
+				CurrentRow: row,
+				AggCache:   aggCache,
+			}
 			val, err := Evaluate(formula, ctx)
 			if err != nil {
 				newRow[newCol] = nil

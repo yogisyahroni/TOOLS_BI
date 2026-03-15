@@ -33,8 +33,8 @@ func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName stri
 		return fmt.Errorf("local db: failed to ensure table: %w", err)
 	}
 
-	// 2. Insert into local DB
-	if err := s.localDB.WithContext(ctx).Table(tableName).Create(rows).Error; err != nil {
+	// 2. Insert into local DB in batches of 1000 to prevent memory spikes and SQL limits
+	if err := s.localDB.WithContext(ctx).Table(tableName).CreateInBatches(rows, 1000).Error; err != nil {
 		return fmt.Errorf("local db: failed to insert rows: %w", err)
 	}
 
@@ -43,7 +43,7 @@ func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName stri
 		if err := s.ensureTableExists(s.supabaseDB, tableName, rows[0]); err != nil {
 			return fmt.Errorf("supabase db: failed to ensure table: %w", err)
 		}
-		if err := s.supabaseDB.WithContext(ctx).Table(tableName).Create(rows).Error; err != nil {
+		if err := s.supabaseDB.WithContext(ctx).Table(tableName).CreateInBatches(rows, 1000).Error; err != nil {
 			return fmt.Errorf("supabase db: failed to insert rows: %w", err)
 		}
 	}
