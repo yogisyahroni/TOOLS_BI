@@ -377,7 +377,7 @@ export default function ETLPipelinePage() {
   const queryClient = useQueryClient();
 
   // Listen for ETL complete event
-  useWSEvent('REALTIME_EVENT_ETL_COMPLETE', useCallback((payload: any) => {
+  useWSEvent('etl_complete', useCallback((payload: any) => {
     if (payload?.pipelineId) {
       queryClient.invalidateQueries({ queryKey: ['pipelines'] });
       
