@@ -443,10 +443,13 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 		}
 		return out, nil
 
-	// ── dedup ─────────────────────────────────────────────────────────────────
-	case "dedup":
+	// ── dedup / deduplicate ──────────────────────────────────────────────────
+	case "dedup", "deduplicate":
 		rows := firstInput(inputs)
 		keys := cfgStrSlice(cfg, "keys")
+		if len(keys) == 0 {
+			keys = cfgStrSlice(cfg, "columns") // Frontend and AI Assistant use "columns"
+		}
 		seen := map[string]bool{}
 		var out []map[string]interface{}
 		for _, row := range rows {
