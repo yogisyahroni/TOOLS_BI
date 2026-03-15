@@ -210,7 +210,7 @@ function handleEtl({ data, steps }: any) {
       }
       case 'select': {
         const { columns } = config;
-        if (!columns?.length) break;
+        if (!columns || !Array.isArray(columns) || !columns.length) break;
         result = result.map(row => {
           const newRow: Record<string, any> = {};
           columns.forEach((c: string) => { if (c in row) newRow[c] = row[c]; });
@@ -230,7 +230,7 @@ function handleEtl({ data, steps }: any) {
       }
       case 'deduplicate': {
         const { columns } = config;
-        if (!columns || columns.length === 0) {
+        if (!columns || !Array.isArray(columns) || columns.length === 0) {
           const seen = new Set();
           result = result.filter(row => {
             const str = JSON.stringify(row);
@@ -282,7 +282,7 @@ function handleEtl({ data, steps }: any) {
         });
         break;
       }
-      case 'cast_type': {
+      case 'cast': {
         const { column, newColumn, targetType } = config;
         if (!column || !targetType) break;
         const targetCol = newColumn || column;
