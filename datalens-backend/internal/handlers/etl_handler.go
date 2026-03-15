@@ -289,8 +289,9 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		return pipelineExecResult{status: "error", errMsg: "Output table name missing"}
 	}
 
-	// 3. Persist results
-	if err := h.storageSvc.PersistETLResult(ctx, p.OutputTableName, result.Rows); err != nil {
+	// 3. Persist results to JSONB column in Supabase
+	outputJSON, _ := json.Marshal(result.Rows)
+	if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
 		return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Storage failed: %v", err)}
 	}
 
@@ -397,39 +398,30 @@ func (h *ETLHandler) GetPipelinePreview(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Pipeline status is '%s'. It must be 'completed' to get preview.", pipeline.Status)})
 	}
 
-	// 1. Fetch data
+	// 1. Fetch data from the output_data column
 	var data []map[string]interface{}
-	if err := h.db.Table(pipeline.OutputTableName).Limit(100).Find(&data).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to fetch preview data: %v", err)})
+	if err := json.Unmarshal(pipeline.OutputData, &data); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to parse stored output data"})
 	}
 
-	// 2. Get columns from table metadata
-	columnTypes, err := h.db.Migrator().ColumnTypes(pipeline.OutputTableName)
-	if err != nil {
-		// Fallback to empty columns if inspection fails but data exists
-		return c.JSON(fiber.Map{
-			"data":    data,
-			"columns": []models.ColumnDef{},
-		})
-	}
-
+	// 2. Infer columns from the data (since we're using JSONB now)
 	var cols []models.ColumnDef
-	for _, ct := range columnTypes {
-		colType := "string"
-		dbType := strings.ToUpper(ct.DatabaseTypeName())
-		if strings.Contains(dbType, "INT") || strings.Contains(dbType, "DOUBLE") || strings.Contains(dbType, "FLOAT") || strings.Contains(dbType, "NUMERIC") || strings.Contains(dbType, "DECIMAL") {
-			colType = "number"
-		} else if strings.Contains(dbType, "BOOL") {
-			colType = "boolean"
-		} else if strings.Contains(dbType, "TIMESTAMP") || strings.Contains(dbType, "DATE") {
-			colType = "date"
+	if len(data) > 0 {
+		firstRow := data[0]
+		for name, val := range firstRow {
+			colType := "string"
+			switch val.(type) {
+			case int, int64, float64:
+				colType = "number"
+			case bool:
+				colType = "boolean"
+			}
+			cols = append(cols, models.ColumnDef{
+				Name:     name,
+				Type:     colType,
+				Nullable: true,
+			})
 		}
-
-		cols = append(cols, models.ColumnDef{
-			Name:     ct.Name(),
-			Type:     colType,
-			Nullable: true,
-		})
 	}
 
 	return c.JSON(fiber.Map{
