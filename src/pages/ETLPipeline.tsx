@@ -397,6 +397,7 @@ export default function ETLPipelinePage() {
   const [newPipelineName, setNewPipelineName] = useState('');
   const [selectedSource, setSelectedSource] = useState('');
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+  const [expandedPipelines, setExpandedPipelines] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<Record<string, Record<string, any>[]>>({});
 
   // Background fetch for completed pipelines preview
@@ -405,6 +406,10 @@ export default function ETLPipelinePage() {
       if (p.status === 'completed' && !previewData[p.id]) {
         pipelineApi.preview(p.id).then(res => {
           setPreviewData(prev => ({ ...prev, [p.id]: res.data.data }));
+          // Auto-expand completed pipelines that have data
+          if (res.data.data?.length > 0) {
+            setExpandedPipelines(prev => new Set(prev).add(p.id));
+          }
         }).catch(err => console.error(`Failed to fetch preview for ${p.id}:`, err));
       }
     });
@@ -825,157 +830,247 @@ Always prioritize business value and data quality.`;
                 const sourceColumns = sourceDs?.columns.map(c => ({ name: c.name, type: c.type })) || [];
                 const preview = previewData[pipeline.id];
                 const pipelineSteps = (pipeline.steps as ETLStep[]) || [];
+                const isPipelineExpanded = expandedPipelines.has(pipeline.id);
+
+                const togglePipeline = (e: React.MouseEvent) => {
+                  // Don't toggle if clicking buttons
+                  if ((e.target as HTMLElement).closest('button')) return;
+                  
+                  const next = new Set(expandedPipelines);
+                  if (isPipelineExpanded) next.delete(pipeline.id);
+                  else next.add(pipeline.id);
+                  setExpandedPipelines(next);
+                };
 
                 return (
-                  <motion.div key={pipeline.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
+                  <motion.div 
+                    key={pipeline.id} 
+                    initial={{ opacity: 0, y: 20 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    transition={{ delay: index * 0.1 }} 
+                    className={cn(
+                      "bg-card rounded-xl border border-border transition-all duration-300 overflow-hidden",
+                      isPipelineExpanded ? "shadow-glow-sm border-primary/20" : "shadow-sm border-border/50 hover:border-primary/30"
+                    )}
+                  >
                     {/* Pipeline Header */}
-                    <div className="p-4 flex items-center justify-between">
+                    <div 
+                      className={cn(
+                        "p-4 flex items-center justify-between cursor-pointer transition-colors select-none",
+                        isPipelineExpanded ? "bg-muted/10" : "hover:bg-muted/5"
+                      )}
+                      onClick={togglePipeline}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg gradient-secondary flex items-center justify-center">
-                          <GitBranch className="w-4 h-4 text-foreground" />
+                        <div className={cn(
+                          "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+                          isPipelineExpanded ? "gradient-primary shadow-glow-sm" : "bg-muted"
+                        )}>
+                          <GitBranch className={cn("w-4 h-4", isPipelineExpanded ? "text-primary-foreground" : "text-muted-foreground")} />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-foreground">{pipeline.name}</h3>
-                          <p className="text-xs text-muted-foreground">Source: {sourceDs?.name || 'Unknown'} • {pipelineSteps.length} steps</p>
+                          <h3 className={cn("font-semibold transition-colors", isPipelineExpanded ? "text-primary" : "text-foreground")}>
+                            {pipeline.name}
+                          </h3>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+                            {sourceDs?.name || 'Unknown Source'} • {pipelineSteps.length} Steps
+                          </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(pipeline.status)}
-                        <Button
-                          size="sm"
-                          onClick={() => runPipeline(pipeline.id)}
-                          disabled={pipeline.status === 'running' || pipelineSteps.length === 0}
-                          className="gradient-primary text-primary-foreground"
-                        >
-                          {pipeline.status === 'running' ? (
-                            <><div className="w-3 h-3 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" /> Running</>
-                          ) : (
-                            <><Play className="w-4 h-4 mr-1" /> Run</>
-                          )}
-                        </Button>
-                        {(preview || pipeline.status === 'completed') && (
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 pr-2 border-r border-border/50">
+                          {getStatusIcon(pipeline.status)}
+                          <span className={cn(
+                            "text-[10px] font-bold uppercase",
+                            pipeline.status === 'running' ? "text-primary animate-pulse" :
+                            pipeline.status === 'completed' ? "text-success" :
+                            pipeline.status === 'error' ? "text-destructive" : "text-muted-foreground"
+                          )}>
+                            {pipeline.status || 'idle'}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
                           <Button
                             size="sm"
-                            className={cn(
-                              "text-white transition-all",
-                              pipeline.status === 'completed' ? "bg-green-600 hover:bg-green-700 font-bold shadow-lg" : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
-                            )}
-                            onClick={() => pipeline.status === 'completed' && saveOutput(pipeline.id)}
-                            disabled={pipeline.status !== 'completed'}
+                            variant="ghost"
+                            className="h-8 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={(e) => { e.stopPropagation(); runPipeline(pipeline.id); }}
+                            disabled={pipeline.status === 'running' || pipelineSteps.length === 0}
                           >
-                            <Save className="w-4 h-4 mr-1" />
-                            {pipeline.status === 'running' ? 'Processing...' : 'Save Output'}
+                            {pipeline.status === 'running' ? (
+                              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Play className="w-4 h-4" />
+                            )}
                           </Button>
-                        )}
-                        <Button size="sm" variant="destructive" onClick={() => handleRemovePipeline(pipeline.id)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
+                          
+                          {(preview || pipeline.status === 'completed') && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={cn(
+                                "h-8 px-2 transition-all",
+                                pipeline.status === 'completed' ? "text-success hover:bg-success/10" : "text-muted-foreground opacity-30"
+                              )}
+                              onClick={(e) => { e.stopPropagation(); pipeline.status === 'completed' && saveOutput(pipeline.id); }}
+                              disabled={pipeline.status !== 'completed'}
+                            >
+                              <Save className="w-4 h-4" />
+                            </Button>
+                          )}
+                          
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 px-2 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                            onClick={(e) => { e.stopPropagation(); handleRemovePipeline(pipeline.id); }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
 
-                    {/* Pipeline Error */}
-                    {pipeline.status === 'error' && pipeline.error && (
-                      <div className="px-4 pb-2">
-                        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-3">
-                          <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                          <div className="text-xs text-destructive">
-                            <p className="font-bold mb-1">Execution Error:</p>
-                            <p className="font-mono bg-destructive/5 p-1 rounded border border-destructive/10">{pipeline.error}</p>
+                          <div className="ml-2 pl-2 border-l border-border/50">
+                            {isPipelineExpanded ? <ChevronUp className="w-4 h-4 text-primary" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                           </div>
                         </div>
                       </div>
-                    )}
-
-                    {/* Add Steps Buttons */}
-                    <div className="px-4 pb-3">
-                      <h4 className="text-xs font-semibold text-muted-foreground mb-2">Available Actions</h4>
-                      <div className="flex flex-wrap items-center gap-2 pb-2">
-                        {stepTypes.map(st => (
-                          <Button
-                            key={st.value}
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 shrink-0 whitespace-nowrap bg-muted/50 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
-                            onClick={() => addStep(pipeline.id, st.value as ETLStep['type'])}
-                          >
-                            <st.icon className="w-3 h-3 mr-1" /> {st.label}
-                          </Button>
-                        ))}
-                      </div>
                     </div>
 
-                    {/* Steps */}
-                    {pipelineSteps.length > 0 && (
-                      <div className="border-t border-border">
-                        {pipelineSteps.map((step, si) => {
-                          const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
-                          const isExpanded = expandedSteps.has(step.id);
-                          return (
-                            <div key={step.id} className="border-b border-border last:border-b-0">
-                              <div
-                                className="px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-muted/20"
-                                onClick={() => {
-                                  const next = new Set(expandedSteps);
-                                  isExpanded ? next.delete(step.id) : next.add(step.id);
-                                  setExpandedSteps(next);
-                                }}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-muted-foreground w-5">{si + 1}.</span>
-                                  <StepIcon className="w-4 h-4 text-primary" />
-                                  <span className="text-sm font-medium text-foreground capitalize">{step.type}</span>
-                                  {Object.keys(step.config).filter(k => !k.startsWith('_')).length > 0 && (
-                                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">configured</span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <button onClick={e => { e.stopPropagation(); removeStep(pipeline.id, step.id); }} className="text-muted-foreground hover:text-destructive p-1">
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                  {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                                </div>
+                    <motion.div
+                      initial={false}
+                      animate={{ height: isPipelineExpanded ? "auto" : 0, opacity: isPipelineExpanded ? 1 : 0 }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                    >
+                      <div className="p-4 pt-0 space-y-4">
+                        {/* Pipeline Error */}
+                        {pipeline.status === 'error' && pipeline.error && (
+                          <div className="mt-2">
+                            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-3">
+                              <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                              <div className="text-xs text-destructive">
+                                <p className="font-bold mb-1 uppercase tracking-tight">Execution Error</p>
+                                <p className="font-mono bg-destructive/5 p-2 rounded border border-destructive/10 leading-relaxed">{pipeline.error}</p>
                               </div>
-                              {isExpanded && (
-                                <div className="px-4 pb-3 pl-11">
-                                  <StepConfigEditor
-                                    step={step}
-                                    columns={sourceColumns}
-                                    onUpdate={config => updateStepConfig(pipeline.id, step.id, config)}
-                                  />
-                                </div>
-                              )}
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          </div>
+                        )}
 
-                    {/* Preview */}
-                    {preview && (
-                      <div className="border-t border-border p-4">
-                        <h4 className="text-sm font-semibold text-foreground mb-2">Output Preview ({preview.length} rows)</h4>
-                        <div className="overflow-auto max-h-[200px] rounded-lg border border-border">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="bg-muted/30">
-                                {preview.length > 0 && Object.keys(preview[0]).map(col => (
-                                  <th key={col} className="px-2 py-1.5 text-left text-muted-foreground font-mono">{col}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {preview.slice(0, 20).map((row, i) => (
-                                <tr key={i} className="border-t border-border hover:bg-muted/10">
-                                  {Object.values(row).map((val, j) => (
-                                    <td key={j} className="px-2 py-1 font-mono text-foreground">{String(val)}</td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        {/* Add Steps Buttons */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Settings2 className="w-3 h-3 text-muted-foreground" />
+                            <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Available Actions</h4>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 pb-2">
+                            {stepTypes.map(st => (
+                              <Button
+                                key={st.value}
+                                variant="outline"
+                                size="sm"
+                                className="text-[10px] h-7 px-3 shrink-0 bg-muted/30 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all border-dashed"
+                                onClick={() => addStep(pipeline.id, st.value as ETLStep['type'])}
+                              >
+                                <st.icon className="w-3 h-3 mr-1.5" /> {st.label}
+                              </Button>
+                            ))}
+                          </div>
                         </div>
+
+                        {/* Steps */}
+                        {pipelineSteps.length > 0 && (
+                          <div className="bg-muted/20 rounded-xl border border-border/50 overflow-hidden">
+                            {pipelineSteps.map((step, si) => {
+                              const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
+                              const isStepExpanded = expandedSteps.has(step.id);
+                              return (
+                                <div key={step.id} className="border-b border-border/50 last:border-b-0">
+                                  <div
+                                    className={cn(
+                                      "px-4 py-2.5 flex items-center justify-between cursor-pointer transition-colors",
+                                      isStepExpanded ? "bg-primary/5" : "hover:bg-primary/5"
+                                    )}
+                                    onClick={() => {
+                                      const next = new Set(expandedSteps);
+                                      isStepExpanded ? next.delete(step.id) : next.add(step.id);
+                                      setExpandedSteps(next);
+                                    }}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-[10px] font-mono font-bold text-muted-foreground/60 w-4">{si + 1}.</span>
+                                      <div className={cn(
+                                        "w-6 h-6 rounded flex items-center justify-center transition-colors",
+                                        isStepExpanded ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                                      )}>
+                                        <StepIcon className="w-3 h-3" />
+                                      </div>
+                                      <span className="text-xs font-semibold text-foreground capitalize truncate max-w-[150px]">{step.type.replace('_', ' ')}</span>
+                                      {Object.keys(step.config).filter(k => !k.startsWith('_')).length > 0 && (
+                                        <div className="flex items-center gap-1 text-[9px] text-success font-bold bg-success/10 px-1.5 py-0.5 rounded uppercase">
+                                          <CheckCircle className="w-2.5 h-2.5" /> configured
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button 
+                                        onClick={e => { e.stopPropagation(); removeStep(pipeline.id, step.id); }} 
+                                        className="text-muted-foreground hover:text-destructive p-1 transition-colors"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                      {isStepExpanded ? <ChevronUp className="w-4 h-4 text-primary" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                    </div>
+                                  </div>
+                                  <motion.div
+                                    initial={false}
+                                    animate={{ height: isStepExpanded ? "auto" : 0, opacity: isStepExpanded ? 1 : 0 }}
+                                    transition={{ duration: 0.2 }}
+                                  >
+                                    <div className="px-4 pb-4 pl-[52px]">
+                                      <StepConfigEditor
+                                        step={step}
+                                        columns={sourceColumns}
+                                        onUpdate={config => updateStepConfig(pipeline.id, step.id, config)}
+                                      />
+                                    </div>
+                                  </motion.div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Preview */}
+                        {preview && preview.length > 0 && (
+                          <div className="bg-muted/10 rounded-xl border border-border/50 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                <Layers className="w-3 h-3" /> Output Preview ({preview.length} rows)
+                              </h4>
+                            </div>
+                            <div className="overflow-auto max-h-[300px] rounded-lg border border-border/50 bg-card">
+                              <table className="w-full text-[10px]">
+                                <thead>
+                                  <tr className="bg-muted/50">
+                                    {Object.keys(preview[0]).map(col => (
+                                      <th key={col} className="px-3 py-2 text-left text-muted-foreground font-mono uppercase tracking-tighter border-b border-border/50">{col}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {preview.slice(0, 20).map((row, i) => (
+                                    <tr key={i} className="border-t border-border/40 hover:bg-muted/20 transition-colors">
+                                      {Object.values(row).map((val, j) => (
+                                        <td key={j} className="px-3 py-1.5 font-mono text-foreground/80">{String(val)}</td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </motion.div>
                   </motion.div>
                 );
               })}
