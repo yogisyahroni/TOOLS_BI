@@ -312,7 +312,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 		defer dbConn.Close()
 
-		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, sourceDataset.DataTableName)
+		sqlQuery := fmt.Sprintf(`SELECT * FROM "%s"`, sourceDataset.DataTableName)
 		res, err := dbConn.Query(ctx, sqlQuery, 50000) // limit ETL external buffer to 50k for safety
 		if err != nil {
 			return pipelineExecResult{status: "error", errMsg: "Failed to query external database: " + err.Error()}

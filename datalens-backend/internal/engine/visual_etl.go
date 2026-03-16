@@ -312,19 +312,41 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 	case "aggregate":
 		rows := firstInput(inputs)
 		groupBy := cfgStrSlice(cfg, "groupBy")
-		metric := cfgStr(cfg, "metric")
-		aggFn := strings.ToLower(cfgStr(cfg, "aggregation"))
 
-		// Group rows by key
+		// Identify aggregations to perform
+		var aggs []map[string]interface{}
+		if rawAggs, ok := cfg["aggregations"].([]interface{}); ok {
+			for _, a := range rawAggs {
+				if am, ok := a.(map[string]interface{}); ok {
+					aggs = append(aggs, am)
+				}
+			}
+		} else {
+			// Fallback legacy support
+			metric := cfgStr(cfg, "metric")
+			fn := strings.ToLower(cfgStr(cfg, "aggregation"))
+			if metric != "" {
+				aggs = append(aggs, map[string]interface{}{
+					"column":   metric,
+					"function": fn,
+					"alias":    metric,
+				})
+			}
+		}
+
+		if len(aggs) == 0 {
+			return rows, nil
+		}
+
+		// Grouping structure
 		type group struct {
-			vals  []float64
+			rows  []map[string]interface{}
 			label map[string]interface{}
 		}
 		groups := map[string]*group{}
-		keys := []string{} // preserve insertion order
+		keys := []string{}
 
 		for _, row := range rows {
-			// Build group key
 			keyParts := make([]string, len(groupBy))
 			for i, g := range groupBy {
 				keyParts[i] = fmt.Sprintf("%v", row[g])
@@ -339,47 +361,61 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 				groups[key] = &group{label: label}
 				keys = append(keys, key)
 			}
-			if f, ok := parseFloat(row[metric]); ok {
-				groups[key].vals = append(groups[key].vals, f)
-			}
+			groups[key].rows = append(groups[key].rows, row)
 		}
 
 		out := make([]map[string]interface{}, 0, len(groups))
 		for _, key := range keys {
 			g := groups[key]
-			row := copyRow(g.label)
-			vals := g.vals
-			var agg float64
-			switch aggFn {
-			case "sum":
-				agg = sumSlice(vals)
-			case "avg", "average":
-				if len(vals) > 0 {
-					agg = sumSlice(vals) / float64(len(vals))
+			resRow := copyRow(g.label)
+
+			for _, agg := range aggs {
+				col := fmt.Sprintf("%v", agg["column"])
+				fn := strings.ToLower(fmt.Sprintf("%v", agg["function"]))
+				alias := fmt.Sprintf("%v", agg["alias"])
+				if alias == "" || alias == "<nil>" {
+					alias = fmt.Sprintf("%s_%s", fn, col)
 				}
-			case "min":
-				if len(vals) > 0 {
-					agg = vals[0]
-					for _, v := range vals[1:] {
-						if v < agg {
-							agg = v
-						}
+
+				var vals []float64
+				for _, r := range g.rows {
+					if f, ok := parseFloat(r[col]); ok {
+						vals = append(vals, f)
 					}
 				}
-			case "max":
-				if len(vals) > 0 {
-					agg = vals[0]
-					for _, v := range vals[1:] {
-						if v > agg {
-							agg = v
+
+				var result float64
+				switch fn {
+				case "sum":
+					result = sumSlice(vals)
+				case "avg", "average":
+					if len(vals) > 0 {
+						result = sumSlice(vals) / float64(len(vals))
+					}
+				case "min":
+					if len(vals) > 0 {
+						result = vals[0]
+						for _, v := range vals[1:] {
+							if v < result {
+								result = v
+							}
 						}
 					}
+				case "max":
+					if len(vals) > 0 {
+						result = vals[0]
+						for _, v := range vals[1:] {
+							if v > result {
+								result = v
+							}
+						}
+					}
+				case "count":
+					result = float64(len(g.rows))
 				}
-			default: // count
-				agg = float64(len(vals))
+				resRow[alias] = result
 			}
-			row[metric] = agg
-			out = append(out, row)
+			out = append(out, resRow)
 		}
 		return out, nil
 

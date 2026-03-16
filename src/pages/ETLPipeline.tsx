@@ -380,7 +380,7 @@ export default function ETLPipelinePage() {
   useWSEvent('etl_complete', useCallback((payload: any) => {
     if (payload?.pipelineId) {
       queryClient.invalidateQueries({ queryKey: ['pipelines'] });
-      
+
       // Update preview data if completed
       if (payload.status === 'completed') {
         pipelineApi.preview(payload.pipelineId).then(res => {
@@ -512,7 +512,7 @@ export default function ETLPipelinePage() {
     try {
       // 1. Trigger backend execution
       await runPipelineMut.mutateAsync(pipelineId);
-      
+
       // 2. Local preview for immediate feedback (simulated)
       // Note: Backend runs truly async, this local run informs the UI what the data *should* look like
       const response = await datasetApi.data(sourceDs.id, { limit: 1000 });
@@ -520,8 +520,8 @@ export default function ETLPipelinePage() {
       const result = await runWorker<Record<string, any>[]>('EXECUTE_ETL', { data: sourceData, steps: (pipeline.steps as ETLStep[]) || [] });
       setPreviewData(prev => ({ ...prev, [pipelineId]: result }));
 
-      toast({ 
-        title: 'Pipeline started', 
+      toast({
+        title: 'Pipeline started',
         description: `Processing started on server. You can save output once it's complete.`,
       });
     } catch (err: any) {
@@ -536,19 +536,19 @@ export default function ETLPipelinePage() {
     try {
       await pipelineApi.saveAsDataset(pipelineId);
 
-      toast({ 
-        title: 'Output saved', 
+      toast({
+        title: 'Output saved',
         description: `Successfully saved as a high-performance dataset. It is now available for reports and charts.`,
       });
-      
+
       // Refresh datasets list
-      window.location.reload(); 
+      window.location.reload();
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || 'Could not save the processed dataset.';
-      toast({ 
-        title: 'Failed to save', 
-        description: errorMsg, 
-        variant: 'destructive' 
+      toast({
+        title: 'Failed to save',
+        description: errorMsg,
+        variant: 'destructive'
       });
     }
   };
@@ -561,18 +561,22 @@ export default function ETLPipelinePage() {
 
       // 1. If a source is selected for Discovery/Exploration, prioritize it
       if (selectedSource) {
-        // Filter out hallucinated node types
+        // Filter out hallucinated node types or unsupported ones
         const validTypes = stepTypes.map(t => t.value);
-        const validParsedSteps = parsedSteps.filter(s => validTypes.includes(s.type));
+        const unsupportedTypes = ['merge', 'join', 'union']; // Explicitly filter these
         
+        const validParsedSteps = parsedSteps.filter(s => 
+          validTypes.includes(s.type) && !unsupportedTypes.includes(s.type)
+        );
+
         if (validParsedSteps.length < parsedSteps.length) {
-          toast({ 
-            title: 'Unsupported Steps Removed', 
+          toast({
+            title: 'Unsupported Steps Removed',
             description: `AI suggested ${parsedSteps.length - validParsedSteps.length} unsupported operations (e.g. merge/join) which were ignored.`,
             variant: 'destructive'
           });
         }
-        
+
         if (validParsedSteps.length === 0) return;
 
         const newSteps: ETLStep[] = validParsedSteps.map((s, i) => ({
@@ -593,19 +597,23 @@ export default function ETLPipelinePage() {
       if (pipelines.length > 0) {
         const lastPipeline = pipelines[pipelines.length - 1];
         const currentSteps = (lastPipeline.steps as ETLStep[]) || [];
-        
-        // Filter out hallucinated node types
+
+        // Filter out hallucinated node types or unsupported ones
         const validTypes = stepTypes.map(t => t.value);
-        const validParsedSteps = parsedSteps.filter(s => validTypes.includes(s.type));
-        
+        const unsupportedTypes = ['merge', 'join', 'union'];
+
+        const validParsedSteps = parsedSteps.filter(s => 
+          validTypes.includes(s.type) && !unsupportedTypes.includes(s.type)
+        );
+
         if (validParsedSteps.length < parsedSteps.length) {
-          toast({ 
-            title: 'Unsupported Steps Removed', 
+          toast({
+            title: 'Unsupported Steps Removed',
             description: `AI suggested ${parsedSteps.length - validParsedSteps.length} unsupported operations (e.g. merge/join) which were ignored.`,
             variant: 'destructive'
           });
         }
-        
+
         if (validParsedSteps.length === 0) return;
 
         const newSteps: ETLStep[] = validParsedSteps.map((s, i) => ({
@@ -639,7 +647,7 @@ export default function ETLPipelinePage() {
   const getAIPrompt = () => {
     const selectedSetName = dataSets.find(ds => ds.id === selectedSource)?.name || 'the current data';
     const dsInfo = dataSets.map(ds => `"${ds.name}" (${ds.columns.map(c => `${c.name}:${c.type}`).join(', ')})`).join('; ');
-    
+
     return `You are an Enterprise Data Preparation Assistant for DataLens. 
 Current Target: Analyze and transform "${selectedSetName}".
 Available Datasets context: ${dsInfo || 'none'}.
@@ -657,13 +665,9 @@ Each step must have:
 Config Examples:
 - Filter: { column: string, operator: ">"|"<"|"="|"!="|">="|"<="|"contains", value: string }
 - Transform: { column: string, operation: "uppercase"|"lowercase"|"round"|"abs"|"trim"|"add"|"multiply", newColumn?: string, operand?: number }
-- Aggregate: { groupBy: string[], aggregations: { column: string, function: "sum"|"avg"|"min"|"max"|"count", alias: string }[] }
-- Select: { columns: string[] }
-- Sort: { column: string, direction: "asc"|"desc" }
-- Cast: { column: string, targetType: "string"|"number"|"boolean" }
-- Parse_date: { column: string, extract: "iso"|"year"|"month"|"day", newColumn?: string }
-- JSON_extract: { column: string, jsonPath: string, newColumn?: string }
-- Data_cleansing: { column: string, action: "drop_null"|"fill_null", fillValue?: string }
+- Aggregate: { groupBy: string, aggregations: { column: string, function: "sum"|"avg"|"min"|"max"|"count", alias: string }[] }
+
+CRITICAL: The 'aggregate' step uses 'groupBy' (string) and 'aggregations' (array of objects). Do NOT use 'metric' or 'aggregation' keys at the top level of the config.
 
 Always prioritize business value and data quality.`;
   };
@@ -697,15 +701,15 @@ Always prioritize business value and data quality.`;
                   </SelectContent>
                 </Select>
                 {selectedSource && (
-                  <Input 
-                    placeholder="Step 2: Give it a name..." 
-                    value={newPipelineName} 
-                    onChange={e => setNewPipelineName(e.target.value)} 
-                    className="md:w-[250px] bg-muted/50 border-border h-12" 
+                  <Input
+                    placeholder="Step 2: Give it a name..."
+                    value={newPipelineName}
+                    onChange={e => setNewPipelineName(e.target.value)}
+                    className="md:w-[250px] bg-muted/50 border-border h-12"
                   />
                 )}
                 {selectedSource && newPipelineName && (
-                  <Button 
+                  <Button
                     onClick={async () => {
                       const res = await createPipelineMut.mutateAsync({ name: newPipelineName, sourceDatasetId: selectedSource, steps: draftSteps as any });
                       setDraftSteps([]);
@@ -713,7 +717,7 @@ Always prioritize business value and data quality.`;
                       setNewPipelineName('');
                       setSelectedSource('');
                       toast({ title: 'Pipeline Built!', description: `${newPipelineName} is now live.` });
-                    }} 
+                    }}
                     className="gradient-primary text-primary-foreground h-12 px-8"
                   >
                     <Save className="w-4 h-4 mr-2" /> Build & Save
@@ -731,7 +735,7 @@ Always prioritize business value and data quality.`;
               {selectedSource && draftSteps.length > 0 && (
                 <div className="mt-6 border-t border-border pt-4">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 
+                    <h4
                       className="text-sm font-semibold text-primary flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
                       onClick={() => setShowDraftSteps(!showDraftSteps)}
                     >
@@ -756,9 +760,9 @@ Always prioritize business value and data quality.`;
                               </div>
                               <span className="text-xs font-medium text-foreground capitalize">{step.type.replace('_', ' ')}</span>
                             </div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                               onClick={() => {
                                 const nextSteps = draftSteps.filter(s => s.id !== step.id);
@@ -781,25 +785,25 @@ Always prioritize business value and data quality.`;
 
                   {draftPreview && draftPreview.length > 0 && (
                     <div className="overflow-auto max-h-[250px] rounded-lg border border-border bg-muted/20">
-                    <table className="w-full text-[10px]">
-                      <thead>
-                        <tr className="bg-muted/50">
-                          {draftPreview.length > 0 && Object.keys(draftPreview[0]).map(col => (
-                            <th key={col} className="px-2 py-1 text-left text-muted-foreground font-mono">{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {draftPreview.slice(0, 5).map((row, i) => (
-                          <tr key={i} className="border-t border-border">
-                            {Object.values(row).map((val, j) => (
-                              <td key={j} className="px-2 py-0.5 font-mono text-muted-foreground">{String(val)}</td>
+                      <table className="w-full text-[10px]">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            {draftPreview.length > 0 && Object.keys(draftPreview[0]).map(col => (
+                              <th key={col} className="px-2 py-1 text-left text-muted-foreground font-mono">{col}</th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {draftPreview.slice(0, 5).map((row, i) => (
+                            <tr key={i} className="border-t border-border">
+                              {Object.values(row).map((val, j) => (
+                                <td key={j} className="px-2 py-0.5 font-mono text-muted-foreground">{String(val)}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               )}
@@ -837,10 +841,10 @@ Always prioritize business value and data quality.`;
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(pipeline.status)}
-                        <Button 
-                          size="sm" 
-                          onClick={() => runPipeline(pipeline.id)} 
-                          disabled={pipeline.status === 'running' || pipelineSteps.length === 0} 
+                        <Button
+                          size="sm"
+                          onClick={() => runPipeline(pipeline.id)}
+                          disabled={pipeline.status === 'running' || pipelineSteps.length === 0}
                           className="gradient-primary text-primary-foreground"
                         >
                           {pipeline.status === 'running' ? (
@@ -850,16 +854,16 @@ Always prioritize business value and data quality.`;
                           )}
                         </Button>
                         {(preview || pipeline.status === 'completed') && (
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             className={cn(
                               "text-white transition-all",
                               pipeline.status === 'completed' ? "bg-green-600 hover:bg-green-700 font-bold shadow-lg" : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
-                            )} 
+                            )}
                             onClick={() => pipeline.status === 'completed' && saveOutput(pipeline.id)}
                             disabled={pipeline.status !== 'completed'}
                           >
-                            <Save className="w-4 h-4 mr-1" /> 
+                            <Save className="w-4 h-4 mr-1" />
                             {pipeline.status === 'running' ? 'Processing...' : 'Save Output'}
                           </Button>
                         )}
