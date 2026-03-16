@@ -64,6 +64,8 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Vite production build
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
         run: npm run build
 
   # ─── 3. Docker Build (main only) ────────────────────────────────────────────
