@@ -3,6 +3,7 @@ package handlers
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"datalens/internal/config"
+	"datalens/internal/connectors"
 	"datalens/internal/crypto"
 	"datalens/internal/middleware"
 	"datalens/internal/models"
@@ -253,8 +255,8 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "AI generated a non-SELECT query. Rejected for safety."})
 	}
 
-	var results []map[string]interface{}
-	if err := h.db.Raw(sqlQuery).Find(&results).Error; err != nil {
+	results, err := h.executeSQL(req.DatasetID, sqlQuery)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "SQL execution failed", "sql": sqlQuery, "dbError": err.Error(),
 		})
@@ -350,8 +352,10 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 	var ds struct {
 		DataTableName string
 		Columns       json.RawMessage
+		StorageKey    string
+		UserID        string
 	}
-	if err := h.db.Table("datasets").Select("data_table_name, columns").
+	if err := h.db.Table("datasets").Select("data_table_name, columns, storage_key, user_id").
 		Where("id = ?", datasetID).Scan(&ds).Error; err != nil || ds.DataTableName == "" {
 		return "", "", "", false
 	}
@@ -386,17 +390,87 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 
 	var samples []map[string]interface{}
 	sampleQuery := fmt.Sprintf("SELECT * FROM %s LIMIT 5", fullTableName)
-	if err := h.db.Raw(sampleQuery).Find(&samples).Error; err == nil && len(samples) > 0 {
-		if b, err := json.MarshalIndent(samples, "", "  "); err == nil {
-			sampleData = string(b)
+
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, ds.UserID).First(&conn).Error; err == nil {
+			opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			dbConn, err := connectors.Open(opts)
+			if err == nil {
+				defer dbConn.Close()
+				res, errQuery := dbConn.Query(ctx, sampleQuery, 5)
+				if errQuery == nil {
+					samples = res.Rows
+				} else {
+					sampleData = fmt.Sprintf("(Failed to query external database: %v)", errQuery)
+				}
+			} else {
+				sampleData = fmt.Sprintf("(Failed to open external DB connection: %v)", err)
+			}
+		} else {
+			sampleData = "(External connection configuration not found)"
+		}
+	} else {
+		if err := h.db.Raw(sampleQuery).Find(&samples).Error; err != nil {
+			sampleData = fmt.Sprintf("(Failed to fetch internal sample data: %v)", err)
 		}
 	}
 
-	if sampleData == "" {
-		sampleData = "(sample data unavailable — analysis based on schema only)"
+	if len(samples) > 0 {
+		if b, err := json.MarshalIndent(samples, "", "  "); err == nil {
+			sampleData = string(b)
+		}
+	} else if sampleData == "" {
+		sampleData = "(Sample data unavailable — table is empty or query failed)"
 	}
 
 	return ds.DataTableName, schemaStr, sampleData, true
+}
+
+// executeSQL executes the generated SQL either locally or via an external connection.
+func (h *AIHandler) executeSQL(datasetID, sqlQuery string) ([]map[string]interface{}, error) {
+	var ds struct {
+		StorageKey string
+		UserID     string
+	}
+	if err := h.db.Table("datasets").Select("storage_key, user_id").
+		Where("id = ?", datasetID).Scan(&ds).Error; err != nil {
+		return nil, fmt.Errorf("dataset not found: %w", err)
+	}
+
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, ds.UserID).First(&conn).Error; err != nil {
+			return nil, fmt.Errorf("external connection not found: %w", err)
+		}
+		
+		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		dbConn, err := connectors.Open(opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open external connection: %w", err)
+		}
+		defer dbConn.Close()
+
+		res, err := dbConn.Query(ctx, sqlQuery, 500) // cap AI query limit to 500 rows for safety
+		if err != nil {
+			return nil, err
+		}
+		return res.Rows, nil
+	}
+
+	var results []map[string]interface{}
+	if err := h.db.Raw(sqlQuery).Find(&results).Error; err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -539,8 +613,8 @@ SQL:`, schemaContext, req.Question)
 		sendSSEEvent(w, "progress", `{"stage":"executing","message":"Running query on your data..."}`)
 		w.Flush()
 
-		var results []map[string]interface{}
-		if dbErr := h.db.Raw(sqlQuery).Find(&results).Error; dbErr != nil {
+		results, dbErr := h.executeSQL(req.DatasetID, sqlQuery)
+		if dbErr != nil {
 			errJSON, _ := json.Marshal(map[string]string{"error": dbErr.Error(), "sql": sqlQuery})
 			sendSSEEvent(w, "error", string(errJSON))
 			sendSSEEvent(w, "done", "{}")
