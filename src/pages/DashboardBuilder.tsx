@@ -8,18 +8,7 @@ import {
   Radar, TrendingUp, Grid3X3, Flame, Box, Settings, Database, Edit2, Columns, Filter,
   HelpCircle, ChevronRight, Share2, Users, Search, Check, Download, MousePointer2, Settings2, AlertCircle, Variable, PenTool, Braces, Link2, Sparkles, MessageSquare, Zap, Gauge, SunMedium, Network, Combine, Hash, Type, FunctionSquare, ExternalLink
 } from 'lucide-react';
-import ReactECharts from 'echarts-for-react';
-import * as echarts from 'echarts';
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Bar,
-  ReferenceLine
-} from 'recharts';
+
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +26,7 @@ import { useMultiplayer } from '@/hooks/useMultiplayer';
 import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { DashboardParameter } from '@/lib/api';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { ChartRenderer } from '../components/ChartRenderer';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -494,255 +484,9 @@ export default function DashboardBuilder() {
     return widget.xAxis;
   };
 
-  const getStandardChartData = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.xAxis || !widget.yAxis) return [];
-
-    // Auto-Join Check
-    const isAutoJoin = widget.xAxis.includes('.') || widget.yAxis.includes('.') || (widget.groupBy && widget.groupBy.includes('.'));
-    const sourceData = isAutoJoin ? (crossDatasetCache[widget.id] || []) : dataset.data;
-
-    let filteredData = sourceData;
-    if (activeFilter) {
-      filteredData = filteredData.filter((row: any) => String(row[activeFilter.column]) === activeFilter.value);
-    }
-    const agg = new Map<string, number>();
-    filteredData.forEach((row: any) => {
-      const key = String(row[widget.xAxis] || 'Unknown');
-      agg.set(key, (agg.get(key) || 0) + (Number(row[widget.yAxis]) || 0));
-    });
-    return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).slice(0, 50);
-  };
-
-  useEffect(() => {
-    if (!activeDashboard) return;
-    safeWidgets.forEach((w: any) => {
-      if (!w.dataSetId || !w.yAxis || !w.xAxis) return;
-
-      const checkMulti = (val: string) => val && val.includes('.');
-      const isAutoJoin = checkMulti(w.xAxis) || checkMulti(w.yAxis) || checkMulti(w.groupBy || '');
-
-      if (isAutoJoin) {
-        const fields = [];
-        const parseCol = (val: string) => {
-          if (!val) return null;
-          if (val.includes('.')) {
-            const [ds, col] = val.split('.');
-            return { datasetId: ds, column: col };
-          }
-          return { datasetId: w.dataSetId, column: val };
-        };
-
-        const xF = parseCol(w.xAxis); if (xF) fields.push(xF);
-        const yF = parseCol(w.yAxis); if (yF) fields.push({ ...yF, aggFn: w.type === 'stat' ? 'count' : 'sum' });
-        const gF = parseCol(w.groupBy || ''); if (gF) fields.push(gF);
-
-        autoJoinMut.mutate({ baseDatasetId: w.dataSetId, fields, limit: 100 }, {
-          onSuccess: (res) => {
-            setCrossDatasetCache(prev => ({ ...prev, [w.id]: res.data }));
-          }
-        });
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDashboard, dataSets]);
-
-  const getWaterfallData = (baseData: any[]) => {
-    let running = 0;
-    return baseData.map(d => {
-      const start = running;
-      running += d.value;
-      return { ...d, start, end: running };
-    });
-  };
-
-  const getHeatmapData = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.xAxis || !widget.yAxis || !widget.groupBy) return { data: [], xLabels: [], yLabels: [] };
-    const xSet = new Set<string>();
-    const ySet = new Set<string>();
-    const map = new Map<string, number>();
-
-    const filteredData = processData(widget, dataset);
-    const currentXAxis = getWidgetXAxis(widget, dataset.id);
-
-    filteredData.forEach((row: any) => {
-      const x = String(row[currentXAxis] || '');
-      const y = String(row[widget.groupBy!] || '');
-      const v = Number(row[widget.yAxis]) || 0;
-      xSet.add(x); ySet.add(y);
-      const key = `${y}__${x}`;
-      map.set(key, (map.get(key) || 0) + v);
-    });
-    const xLabels = Array.from(xSet).slice(0, 20);
-    const yLabels = Array.from(ySet).slice(0, 15);
-    const data = yLabels.map(y => xLabels.map(x => map.get(`${y}__${x}`) || 0));
-    return { data, xLabels, yLabels };
-  };
-
-  const getBoxplotData = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.xAxis || !widget.yAxis) return [];
-    const groups = new Map<string, number[]>();
-
-    const filteredData = processData(widget, dataset);
-    const currentXAxis = getWidgetXAxis(widget, dataset.id);
-
-    filteredData.forEach((row: any) => {
-      const key = String(row[currentXAxis] || 'Unknown');
-      const val = Number(row[widget.yAxis]);
-      if (!isNaN(val)) {
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(val);
-      }
-    });
-    return Array.from(groups.entries()).slice(0, 20).map(([name, vals]) => {
-      vals.sort((a, b) => a - b);
-      const q1 = vals[Math.floor(vals.length * 0.25)] || 0;
-      const median = vals[Math.floor(vals.length * 0.5)] || 0;
-      const q3 = vals[Math.floor(vals.length * 0.75)] || 0;
-      const min = vals[0] || 0;
-      const max = vals[vals.length - 1] || 0;
-      const iqr = q3 - q1;
-      return { name, min, q1, median, q3, max, iqr, low: Math.max(min, q1 - 1.5 * iqr), high: Math.min(max, q3 + 1.5 * iqr) };
-    });
-  };
-
-
-  const getStatValue = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.yAxis) return { value: 0, count: 0, avg: 0 };
-    const filteredData = processData(widget, dataset);
-
-    const nums = filteredData.map((r: any) => Number(r[widget.yAxis])).filter((n: any) => !isNaN(n));
-    const sum = nums.reduce((a: number, b: number) => a + b, 0);
-    return { value: sum, count: nums.length, avg: nums.length ? sum / nums.length : 0 };
-  };
-
-
-  const getGaugeData = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.yAxis) return 0;
-    const stat = getStatValue(widget, dataset);
-    return stat.value;
-  };
-
-
-  const getSunburstData = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.xAxis || !widget.groupBy || !widget.yAxis) return [];
-    const filteredData = processData(widget, dataset);
-    const groups = new Map<string, Map<string, number>>();
-
-
-    filteredData.forEach((row: any) => {
-      const parent = String(row[widget.xAxis] || 'Unknown');
-      const child = String(row[widget.groupBy!] || 'Unknown');
-      const val = Number(row[widget.yAxis]) || 0;
-
-      if (!groups.has(parent)) groups.set(parent, new Map());
-      const childMap = groups.get(parent)!;
-      childMap.set(child, (childMap.get(child) || 0) + val);
-    });
-
-    return Array.from(groups.entries()).map(([parentName, childMap]) => ({
-      name: parentName,
-      children: Array.from(childMap.entries()).map(([childName, val]) => ({
-        name: childName,
-        value: val
-      }))
-    }));
-  };
-
-
-  const getSankeyData = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.xAxis || !widget.groupBy || !widget.yAxis) return { nodes: [], links: [] };
-    const filteredData = processData(widget, dataset);
-
-    const nodesSet = new Set<string>();
-    const linksMap = new Map<string, number>();
-
-
-    filteredData.forEach((row: any) => {
-      const source = String(row[widget.xAxis] || 'Unknown');
-      const target = String(row[widget.groupBy!] || 'Unknown');
-      const val = Number(row[widget.yAxis]) || 0;
-
-      nodesSet.add(source);
-      nodesSet.add(target);
-
-      const key = `${source}->${target}`;
-      linksMap.set(key, (linksMap.get(key) || 0) + val);
-    });
-
-    const nodes = Array.from(nodesSet).map(name => ({ name }));
-    const links = Array.from(linksMap.entries()).map(([key, value]) => {
-      const [source, target] = key.split('->');
-      return { source, target, value };
-    });
-
-    return { nodes, links };
-  };
-
-
-  const getComboData = (widget: Widget, dataset: any) => {
-    if (!dataset || !widget.xAxis || !widget.yAxis) return [];
-    const filteredData = processData(widget, dataset);
-    const agg = new Map<string, { bar: number, line: number }>();
-
-
-    filteredData.forEach((row: any) => {
-      const key = String(row[widget.xAxis] || 'Unknown');
-      const barVal = Number(row[widget.yAxis]) || 0;
-      const lineVal = widget.groupBy ? (Number(row[widget.groupBy]) || 0) : 0;
-
-      if (!agg.has(key)) agg.set(key, { bar: 0, line: 0 });
-      const current = agg.get(key)!;
-      current.bar += barVal;
-      current.line += lineVal;
-    });
-
-    return Array.from(agg.entries()).map(([name, vals]) => ({
-      name,
-      barValue: vals.bar,
-      lineValue: vals.line
-    })).slice(0, 50);
-  };
-
-  const handleChartClick = (widget: Widget, data: any) => {
-    if (data?.activePayload?.[0]?.payload?.name) {
-      const clickedValue = data.activePayload[0].payload.name;
-      const currentXAxis = getWidgetXAxis(widget, widget.dataSetId);
-
-      // Global Cross-Filtering
-      if (activeFilter?.column === currentXAxis && activeFilter?.value === clickedValue) {
-        setActiveFilter(null);
-      } else {
-        setActiveFilter({ column: currentXAxis, value: clickedValue });
-        toast({ title: 'Filter applied', description: `Filtering by ${currentXAxis} = "${clickedValue}". Click again to clear.` });
-      }
-    }
-  };
-
-  const getCellColor = (widget: Widget, dataRow: any, index: number) => {
-    const currentXAxis = getWidgetXAxis(widget, widget.dataSetId);
-    if (activeFilter?.column === currentXAxis && activeFilter?.value === dataRow.name) {
-      return COLORS[3]; // highlight
-    }
-    return COLORS[index % COLORS.length];
-  };
-
   const renderWidgetChart = (widget: Widget, ds: any, isLoading: boolean) => {
     if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
     if (!ds) return <p className="text-muted-foreground text-center mt-8 text-sm">Dataset not found</p>;
-
-    if (widget.type === 'stat') {
-      const stat = getStatValue(widget, ds);
-      return (
-        <div className="flex flex-col items-center justify-center h-full">
-          <p className="text-4xl font-bold text-primary">{stat.value.toLocaleString()}</p>
-          <p className="text-sm text-muted-foreground mt-1">Sum of {widget.yAxis || 'value'}</p>
-          <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-            <span>Count: {stat.count.toLocaleString()}</span>
-            <span>Avg: {stat.avg.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-          </div>
-        </div>
-      );
-    }
 
     if (widget.type === 'action') {
       const isExecuting = executeActionMut.isPending;
@@ -758,7 +502,6 @@ export default function DashboardBuilder() {
               e.stopPropagation();
               if (!widget.actionConfig?.url) return toast({ title: 'URL Not Configured', variant: 'destructive' });
 
-              // Replace parameters in body
               let parsedBody = widget.actionConfig.bodyTemplate || '';
               params.forEach(p => {
                 const ref = `{{${p.name}}}`;
@@ -797,241 +540,33 @@ export default function DashboardBuilder() {
       );
     }
 
-    if (widget.type === 'heatmap') {
-      const heatData = getHeatmapData(widget, ds);
-      if (!heatData.data.length) return (
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground opacity-50">
-          <Flame className="w-10 h-10 mb-2" />
-          <p className="text-sm font-medium">Konfigurasi Belum Lengkap</p>
-          <p className="text-xs">Atur referensi X, Y, dan Group By</p>
-        </div>
-      );
-      return <HeatmapCell {...heatData} />;
-    }
-
-    if (widget.type === 'boxplot') {
-      const boxData = getBoxplotData(widget, ds);
-      if (!boxData.length) return <p className="text-muted-foreground text-sm text-center mt-8">Configure X and Y axes</p>;
-      const tooltipStyle = { backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--popover-foreground))' };
-      return (
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={boxData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={10} angle={-45} textAnchor="end" />
-            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
-            <Tooltip contentStyle={tooltipStyle} content={({ payload }) => {
-              if (!payload?.[0]) return null;
-              const d = payload[0].payload;
-              return (
-                <div className="bg-popover border border-border rounded-lg p-2 text-xs shadow-lg">
-                  <p className="font-semibold">{d.name}</p>
-                  <p>Max: {d.max?.toFixed(1)}</p><p>Q3: {d.q3?.toFixed(1)}</p>
-                  <p>Median: {d.median?.toFixed(1)}</p><p>Q1: {d.q1?.toFixed(1)}</p>
-                  <p>Min: {d.min?.toFixed(1)}</p>
-                </div>
-              );
-            }} />
-            <Bar dataKey="q1" stackId="box" fill="transparent" />
-            <Bar dataKey="iqr" stackId="box" fill="hsl(var(--primary))" fillOpacity={0.6} stroke="hsl(var(--primary))" radius={[2, 2, 2, 2]} cursor="pointer" onClick={(d) => handleChartClick(widget, { activePayload: [{ payload: d }] })} />
-            {boxData.map((d, i) => (
-              <ReferenceLine key={i} y={d.median} stroke="hsl(var(--primary))" strokeWidth={2} />
-            ))}
-          </ComposedChart>
-        </ResponsiveContainer>
-      );
-    }
-
-    const data = getStandardChartData(widget, ds);
-    if (!data.length) return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground opacity-50">
-        <LayoutGrid className="w-10 h-10 mb-2" />
-        <p className="text-sm font-medium">Data Belum Lengkap</p>
-        <p className="text-xs">Atur opsi X / Y Axis pada panel properti widgets</p>
-      </div>
-    );
-
-    const getEchartsOption = () => {
-      const isHorizontal = widget.type === 'horizontal_bar';
-      const categoryNames = data.map(d => String(d.name));
-      const seriesData = data.map((d, i) => ({
-        value: Number(d.value) || 0,
-        name: String(d.name),
-        itemStyle: {
-          color: getCellColor(widget, d, i),
-          borderWidth: activeFilter?.value === String(d.name) ? 2 : 0,
-          borderColor: activeFilter?.value === String(d.name) ? '#f8fafc' : 'transparent'
-        }
-      }));
-
-      // Default axis style to dark mode if not set
-      const axisLabelStyle = { color: '#9ca3af' }; // text-muted-foreground
-      const splitLineStyle = { lineStyle: { color: '#374151' } }; // border
-
-      let option: any = {
-        backgroundColor: 'transparent',
-        tooltip: {
-          trigger: 'item',
-          backgroundColor: '#0f172a', // card
-          borderColor: '#334155', // border
-          textStyle: { color: '#f8fafc' }, // foreground
-          borderRadius: 8
-        },
-      };
-
-      if (['bar', 'line', 'area', 'scatter', 'horizontal_bar', 'waterfall'].includes(widget.type)) {
-        option.xAxis = isHorizontal
-          ? { type: 'value', axisLabel: axisLabelStyle, splitLine: splitLineStyle }
-          : { type: 'category', data: categoryNames, axisLabel: { ...axisLabelStyle, interval: 0, rotate: categoryNames.length > 5 ? 45 : 0 } };
-        option.yAxis = isHorizontal
-          ? { type: 'category', data: categoryNames, axisLabel: { ...axisLabelStyle, width: 60, overflow: 'truncate' } }
-          : { type: 'value', axisLabel: axisLabelStyle, splitLine: splitLineStyle };
-      }
-
-      switch (widget.type) {
-        case 'bar':
-        case 'horizontal_bar':
-          option.series = [{ data: seriesData, type: 'bar', itemStyle: { borderRadius: isHorizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] } }];
-          break;
-        case 'line':
-          option.series = [{ data: seriesData, type: 'line', symbolSize: 6, lineStyle: { width: 3 }, itemStyle: { color: '#0ea5e9' } }];
-          break;
-        case 'area':
-          option.series = [{ data: seriesData, type: 'line', areaStyle: { opacity: 0.2 }, symbolSize: 6, lineStyle: { width: 2 }, itemStyle: { color: '#0ea5e9' } }];
-          break;
-        case 'scatter':
-          option.xAxis = { type: 'category', data: categoryNames, axisLabel: axisLabelStyle };
-          option.series = [{ data: data.map((d, i) => ({ value: [d.name, d.value], itemStyle: { color: getCellColor(widget, d, i) } })), type: 'scatter', symbolSize: 12 }];
-          break;
-        case 'pie':
-          option.series = [{ data: seriesData, type: 'pie', radius: ['45%', '75%'], center: ['50%', '50%'], label: { show: false }, itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 } }];
-          option.tooltip.formatter = '{b}: {c} ({d}%)';
-          break;
-        case 'radar': {
-          const maxVal = Math.max(...data.map(v => Number(v.value) || 0)) * 1.1;
-          option.radar = { indicator: data.map(d => ({ name: String(d.name), max: maxVal })), axisName: { color: '#9ca3af', fontSize: 10 } };
-          option.series = [{ type: 'radar', data: [{ value: data.map(d => d.value), name: widget.yAxis }], areaStyle: { opacity: 0.3 }, itemStyle: { color: '#0ea5e9' }, lineStyle: { color: '#0ea5e9', width: 2 } }];
-          break;
-        }
-        case 'funnel':
-          option.series = [{ type: 'funnel', left: '10%', top: 20, bottom: 20, width: '80%', data: seriesData.sort((a, b) => b.value - a.value), label: { show: true, position: 'inside', formatter: '{b}' }, itemStyle: { borderColor: '#0f172a', borderWidth: 2 } }];
-          break;
-        case 'treemap':
-          option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: '#0f172a' } }];
-          break;
-        case 'waterfall': {
-          const wfData = getWaterfallData(data);
-          const baseSeries = wfData.map(d => ({ value: d.start, itemStyle: { color: 'transparent' } }));
-          const valSeries = wfData.map((d, i) => ({ value: Number(d.value) || 0, itemStyle: { color: getCellColor(widget, d, i), borderRadius: [3, 3, 0, 0] } }));
-          option.series = [
-            { type: 'bar', stack: 'total', data: baseSeries, tooltip: { show: false } },
-            { type: 'bar', stack: 'total', data: valSeries }
-          ];
-
-          option.tooltip.formatter = (params: any) => {
-            const dataIndex = params[params.length - 1].dataIndex;
-            const d = wfData[dataIndex];
-            return `<b>${d.name}</b><br/>Value: ${d.value >= 0 ? '+' : ''}${d.value}<br/>Total: ${d.end}`;
-          };
-          break;
-        }
-        case 'gauge': {
-          const gaugeVal = getGaugeData(widget, ds);
-          const gaugeMax = gaugeVal > 0 ? Math.pow(10, Math.ceil(Math.log10(gaugeVal))) : 100;
-          option = {
-            tooltip: { formatter: '{a} <br/>{b} : {c}' },
-            series: [{
-              name: widget.title || 'KPI',
-              type: 'gauge',
-              max: gaugeMax,
-              progress: { show: true, width: 18, itemStyle: { color: '#0ea5e9' } },
-              axisLine: { lineStyle: { width: 18, color: [[1, '#334155']] } },
-              axisTick: { show: false },
-              splitLine: { show: false },
-              axisLabel: { show: false },
-              detail: { valueAnimation: true, fontSize: 30, color: '#f8fafc', formatter: '{value}' },
-              data: [{ value: gaugeVal, name: widget.yAxis }]
-            }]
-          };
-          break;
-        }
-        case 'sunburst': {
-          const sunburstData = getSunburstData(widget, ds);
-          option.series = [{
-            type: 'sunburst',
-            data: sunburstData,
-            radius: [0, '90%'],
-            itemStyle: { borderRadius: 4, borderWidth: 2, borderColor: '#0f172a' },
-            label: { show: false }
-          }];
-          break;
-        }
-        case 'sankey': {
-          const sankeyData = getSankeyData(widget, ds);
-          option.series = [{
-            type: 'sankey',
-            data: sankeyData.nodes,
-            links: sankeyData.links,
-            emphasis: { focus: 'adjacency' },
-            nodeAlign: 'justify',
-            lineStyle: { color: 'source', curveness: 0.5 },
-            itemStyle: { borderColor: '#0f172a', borderWidth: 1 }
-          }];
-          break;
-        }
-        case 'combo': {
-          const comboData = getComboData(widget, ds);
-          const comboNames = comboData.map(d => d.name);
-          option.xAxis = { type: 'category', data: comboNames, axisLabel: axisLabelStyle, axisPointer: { type: 'shadow' } };
-          option.yAxis = [
-            { type: 'value', name: widget.yAxis, axisLabel: axisLabelStyle, splitLine: splitLineStyle },
-            { type: 'value', name: widget.groupBy || '', axisLabel: axisLabelStyle, splitLine: { show: false } }
-          ];
-          option.series = [
-            {
-              name: widget.yAxis,
-              type: 'bar',
-
-              data: comboData.map((d, i) => ({ value: d.barValue, name: d.name, itemStyle: { color: getCellColor(widget, d as any, i), borderRadius: [3, 3, 0, 0] } }))
-            },
-            {
-              name: widget.groupBy || 'Secondary',
-              type: 'line',
-              yAxisIndex: 1,
-              data: comboData.map(d => ({ value: d.lineValue, name: d.name })),
-              itemStyle: { color: '#ef4444' },
-              lineStyle: { width: 3 },
-              symbolSize: 6
-            }
-          ];
-          break;
-        }
-        default:
-          return null;
-      }
-      return option;
-    };
-
-    const echartsOption = getEchartsOption();
-    if (!echartsOption) return <p className="text-muted-foreground text-center mt-8">Chart type not supported</p>;
-
-    const onEvents = {
-      click: (e: any) => {
-        handleChartClick(widget, { activePayload: [{ payload: { name: e.name || e.data?.name, value: e.value } }] });
-      }
-    };
+    const filteredData = processData(widget, ds);
+    const filteredDataset = { ...ds, data: filteredData };
+    
+    const numericColumns = ds.columns?.filter((c: any) => c.type && ['number', 'numeric', 'int', 'integer', 'float', 'decimal', 'double precision'].some(val => c.type.toLowerCase().includes(val))) || [];
+    const categoricalColumns = ds.columns?.filter((c: any) => !numericColumns.includes(c)) || [];
 
     return (
-      <ReactECharts
-        theme="dark"
-        option={echartsOption}
-        style={{ height: '100%', width: '100%' }}
-        onEvents={onEvents}
-        notMerge={true}
-      />
+      <div className="w-full h-full relative" onClick={() => {
+          // Wrapped with click handler
+          handleChartClick(widget, { activePayload: [] });
+      }}>
+        <ChartRenderer
+          chartTitle={widget.title}
+          chartType={widget.type}
+          xAxis={getWidgetXAxis(widget, widget.dataSetId)}
+          yAxis={widget.yAxis}
+          groupBy={widget.groupBy}
+          dataLimit={String(widget.limit || 50)}
+          dataset={filteredDataset}
+          numericColumns={numericColumns}
+          categoricalColumns={categoricalColumns}
+          sortOrder={widget.sortOrder || 'none'}
+        />
+      </div>
     );
   };
-
-  // Helper to fetch columns for the currently selected widget, including related datasets if semantic layer is active.
+// Helper to fetch columns for the currently selected widget, including related datasets if semantic layer is active.
   const getWidgetColumns = () => {
     if (!selectedWidget || !selectedWidget.dataSetId) return [];
 

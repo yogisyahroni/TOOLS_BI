@@ -1,42 +1,7 @@
-import React from 'react';
-import { useDatasets, useDatasetData, useCharts, useCreateChart, useDeleteChart } from '@/hooks/useApi';
+import React, { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import 'echarts-wordcloud';
-import { useState, useMemo, useRef } from 'react';
-import { motion } from 'framer-motion';
-import {
-  BarChart3, LineChart, PieChart, AreaChart, ScatterChart as ScatterIcon,
-  Radar, TrendingUp, Plus, Trash2, Download, Save, Eye, Flame, Grid3X3, Box,
-  LayoutGrid, Gauge, SunMedium, Network, Combine, Columns, AlignVerticalSpaceAround,
-  Equal, GitCommit, GitPullRequest, ArrowLeftRight, GitCompare, Activity, Tally3,
-  TrendingDown, Spline, ArrowUpRight, Signal, CandlestickChart, Barcode, ListTree,
-  Table, Waves, SplitSquareHorizontal, BoxSelect, RefreshCcw, GitMerge, ArrowDownToLine,
-  GitBranch as SankeyIcon,
-  // Composition Chart Icons
-  Aperture,
-  Sun,
-  GalleryHorizontal,
-  Layers,
-  Triangle,
-  Filter,
-  ArrowDownToDot,
-  Orbit,
-  Flower,
-  UserSquare,
-  Circle,
-  Hexagon,
-  Map as MapIcon,
-  MapPin,
-  Route,
-  CalendarDays,
-  AlignLeft,
-  Type,
-  Hash,
-  Target,
-  CircleDashed,
-  AlignEndVertical,
-  Code
-} from 'lucide-react';
+import { ALL_CHART_TYPES } from '../pages/Sidebar';
 import {
   BarChart, Bar, LineChart as ReLineChart, Line,
   PieChart as RePieChart, Pie, Cell,
@@ -47,140 +12,69 @@ import {
   FunnelChart, Funnel, LabelList, Treemap,
   ComposedChart, ReferenceLine
 } from 'recharts';
-// Removed useDataStore
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
-import { HelpTooltip } from '@/components/HelpTooltip';
-import { ChartTypeSelector } from '@/components/ChartTypeSelector';
 
-import {
-  COMPARISON_CHART_TYPES,
-  TIME_SERIES_CHART_TYPES,
-  COMPOSITION_CHART_TYPES,
-  DISTRIBUTION_CHART_TYPES,
-  CORRELATION_CHART_TYPES,
-  GEOSPATIAL_CHART_TYPES,
-  TEMPORAL_CHART_TYPES,
-  CATEGORICAL_CHART_TYPES,
-  KPI_CHART_TYPES,
-  ADVANCED_CHART_TYPES,
-  ALL_CHART_TYPES,
-  ChartType 
-} from '@/constants/chartTypes';
+export const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
-const COLORS = [
-  'hsl(174, 72%, 46%)', 'hsl(199, 89%, 48%)', 'hsl(142, 76%, 36%)',
-  'hsl(38, 92%, 50%)', 'hsl(280, 65%, 60%)', 'hsl(340, 82%, 52%)',
-  'hsl(210, 80%, 55%)', 'hsl(30, 90%, 55%)', 'hsl(160, 60%, 45%)',
-  'hsl(0, 70%, 55%)', 'hsl(45, 85%, 50%)', 'hsl(260, 50%, 60%)',
-];
+const tooltipStyle = {
+  backgroundColor: 'hsl(var(--popover))',
+  borderColor: 'hsl(var(--border))',
+  borderRadius: '0.5rem',
+  color: 'hsl(var(--popover-foreground))',
+  fontSize: '12px'
+};
 
-function TreemapContent(props: any) {
-  const { x, y, width, height, name, value } = props;
+const EmptyChart = ({ msg = "Select Dataset, X-Axis, and Y-Axis" }: { msg?: string }) => (
+  <div className="flex items-center justify-center h-full border-2 border-dashed border-border rounded-lg bg-muted/20">
+    <div className="flex flex-col items-center gap-2">
+      <div className="p-3 shadow-sm bg-background border border-border rounded-xl">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground w-6 h-6"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      </div>
+      <p className="text-sm font-medium text-muted-foreground text-center px-4">{msg}</p>
+    </div>
+  </div>
+);
+
+const HeatmapCell = ({ value, max }: { value: number, max: number }) => {
+  const intensity = max > 0 ? value / max : 0;
   return (
-    <g>
-      <rect x={x} y={y} width={width} height={height} fill={COLORS[Math.abs(String(name).charCodeAt(0)) % COLORS.length]} stroke="hsl(var(--background))" strokeWidth={2} rx={4} />
-      {width > 50 && height > 30 && (
-        <>
-          <text x={x + width / 2} y={y + height / 2 - 6} textAnchor="middle" fill="white" fontSize={11} fontWeight="bold">{name}</text>
-          <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="white" fontSize={10} opacity={0.8}>{value}</text>
-        </>
-      )}
-    </g>
+    <div
+      className="w-full h-8 rounded-sm transition-all"
+      style={{
+        backgroundColor: `rgba(16, 185, 129, ${Math.max(0.1, intensity)})`,
+        border: '1px solid rgba(16, 185, 129, 0.2)'
+      }}
+      title={value.toString()}
+    />
   );
+};
+
+export interface ChartRendererProps {
+  chartTitle?: string;
+  chartType: string;
+  xAxis: string;
+  yAxis: string;
+  groupBy?: string;
+  dataLimit: string;
+  dataset: any;
+  numericColumns: any[];
+  categoricalColumns: any[];
+  sortOrder?: 'asc' | 'desc' | 'none';
+  showLegend?: boolean;
 }
 
-// HeatmapCell for custom heatmap rendering
-function HeatmapCell({ data, xLabels, yLabels }: { data: number[][]; xLabels: string[]; yLabels: string[] }) {
-  const maxVal = Math.max(...data.flat());
-  const minVal = Math.min(...data.flat());
-  const cellW = 100 / xLabels.length;
-  const cellH = 100 / yLabels.length;
-
-  return (
-    <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="none">
-      {data.map((row, yi) =>
-        row.map((val, xi) => {
-          const intensity = maxVal === minVal ? 0.5 : (val - minVal) / (maxVal - minVal);
-          const hue = 174 - intensity * 140; // teal to red
-          return (
-            <g key={`${yi}-${xi}`}>
-              <rect x={xi * cellW} y={yi * cellH} width={cellW} height={cellH}
-                fill={`hsl(${hue}, 72%, ${50 - intensity * 15}%)`} stroke="hsl(var(--background))" strokeWidth={0.3} rx={0.5} />
-              {cellW > 8 && cellH > 8 && (
-                <text x={xi * cellW + cellW / 2} y={yi * cellH + cellH / 2 + 1.5}
-                  textAnchor="middle" fill="white" fontSize={2.5} fontWeight="bold">{val.toFixed(0)}</text>
-              )}
-            </g>
-          );
-        })
-      )}
-      {/* X labels */}
-      {xLabels.map((l, i) => (
-        <text key={`xl-${i}`} x={i * cellW + cellW / 2} y={100 + 3} textAnchor="middle" fill="hsl(var(--muted-foreground))" fontSize={2}>{l.slice(0, 8)}</text>
-      ))}
-      {/* Y labels */}
-      {yLabels.map((l, i) => (
-        <text key={`yl-${i}`} x={-1} y={i * cellH + cellH / 2 + 1} textAnchor="end" fill="hsl(var(--muted-foreground))" fontSize={2}>{l.slice(0, 8)}</text>
-      ))}
-    </svg>
-  );
-}
-
-export default function ChartBuilder() {
-  const { data: savedCharts = [] } = useCharts();
-  const createChartMut = useCreateChart();
-  const deleteChartMut = useDeleteChart();
-  const { data: dataSets = [] } = useDatasets();
-  const { toast } = useToast();
-  const chartRef = useRef<HTMLDivElement>(null);
-
-  const [chartType, setChartType] = useState<ChartType>('bar');
-  const [selectedDataSet, setSelectedDataSet] = useState('');
-  const [xAxis, setXAxis] = useState('');
-  const [yAxis, setYAxis] = useState('');
-  const [chartTitle, setChartTitle] = useState('Untitled Chart');
-  const [groupBy, setGroupBy] = useState('');
-
-  const [dataLimit, setDataLimit] = useState<string>('50');
-  const [sortOrder, setSortOrder] = useState<'default' | 'asc' | 'desc'>('default');
-  const [dateCol, setDateCol] = useState<string>('all');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-
-  const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(
-    selectedDataSet || '',
-    {
-      limit: 50000,
-      dateCol: dateCol !== 'all' && dateCol !== '' ? dateCol : undefined,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined
-    }
-  );
-  const dataset = React.useMemo(() => {
-    const meta = dataSets.find(ds => ds.id === selectedDataSet);
-    if (!meta) return null;
-    return { ...meta, data: __datasetDataRes?.data || [] };
-  }, [dataSets, selectedDataSet, __datasetDataRes]);
-  const columns = dataset?.columns || [];
-  const dateColumns = columns.filter(c => c.type === 'date');
-  const numericColumnsRaw = columns.filter(c => {
-    if (!c.type) return false;
-    const t = c.type.toLowerCase();
-    return ['number', 'numeric', 'int', 'integer', 'int2', 'int4', 'int8', 'float', 'float4', 'float8', 'decimal', 'double precision'].some(val => t.includes(val));
-  });
-  // Fallback: If for some reason the dataset returns no recognized numeric type (e.g. generic JSON), allow all columns
-  const numericColumns = numericColumnsRaw.length > 0 ? numericColumnsRaw : columns;
-  
-  const categoricalColumns = columns.filter(c => {
-    if (!c.type) return true;
-    const t = c.type.toLowerCase();
-    return !['number', 'numeric', 'int', 'integer', 'int2', 'int4', 'int8', 'float', 'float4', 'float8', 'decimal', 'double precision', 'date', 'timestamp', 'boolean'].some(val => t.includes(val));
-  });
-
+export const ChartRenderer: React.FC<ChartRendererProps> = ({
+  chartTitle,
+  chartType,
+  xAxis,
+  yAxis,
+  groupBy,
+  dataLimit,
+  dataset,
+  numericColumns,
+  categoricalColumns,
+  sortOrder = 'none',
+  showLegend = true,
+}) => {
   const chartData = useMemo(() => {
     if (!dataset || !xAxis || !yAxis) return [];
     const aggregated = new Map<string, number>();
@@ -303,55 +197,8 @@ export default function ChartBuilder() {
     return { categories, groups, matrix };
   }, [chartType, dataset, xAxis, yAxis, groupBy, sortOrder, dataLimit]);
 
-  const handleSave = async () => {
-    if (!selectedDataSet || !xAxis || !yAxis) {
-      toast({ title: 'Incomplete', description: 'Please select dataset and axes', variant: 'destructive' });
-      return;
-    }
-    try {
-      await createChartMut.mutateAsync({
-        title: chartTitle, type: chartType as any,
-        datasetId: selectedDataSet, xAxis, yAxis, groupBy: groupBy || undefined,
-      });
-      toast({ title: 'Chart Saved', description: `"${chartTitle}" has been saved` });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to save chart', variant: 'destructive' });
-    }
-  };
-
-  const handleExport = () => {
-    if (!chartRef.current) return;
-    const svg = chartRef.current.querySelector('svg');
-    if (!svg) { toast({ title: 'Export failed', description: 'No chart to export', variant: 'destructive' }); return; }
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.width * 2; canvas.height = img.height * 2;
-      ctx!.scale(2, 2);
-      ctx!.fillStyle = 'hsl(222, 47%, 6%)';
-      ctx!.fillRect(0, 0, canvas.width, canvas.height);
-      ctx!.drawImage(img, 0, 0);
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = `${chartTitle.replace(/\s+/g, '_')}.png`;
-      a.click();
-      toast({ title: 'Exported!', description: `${chartTitle} exported as PNG` });
-    };
-    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-  };
-
-  const loadChart = (chart: any) => {
-    setChartType(chart.type as ChartType);
-    setSelectedDataSet(chart.datasetId);
-    setXAxis(chart.xAxis);
-    setYAxis(chart.yAxis);
-    setChartTitle(chart.title);
-    setGroupBy(chart.groupBy || '');
-  };
-
   const renderChart = () => {
+
     if (chartType === 'heatmap') {
       if (!heatmapData.data.length) return <EmptyChart msg="Select X-Axis, Y-Axis, and Group By for heatmap" />;
       return <HeatmapCell {...heatmapData} />;
@@ -2071,192 +1918,8 @@ export default function ChartBuilder() {
         }
       }
     }
+  
   };
 
-  const tooltipStyle = { backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--popover-foreground))' };
-
-  return (
-    <div className="space-y-6">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-            <BarChart3 className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">Data Explorer <HelpTooltip text="Buat visualisasi chart interaktif. Pilih tipe chart, dataset, sumbu X dan Y, lalu simpan atau ekspor. Mendukung 17 tipe chart termasuk waterfall, combo, dan sankey." /></h1>
-            <p className="text-muted-foreground">Interactive visual builder & data exploration tool</p>
-          </div>
-        </div>
-      </motion.div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Config Panel */}
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-1 space-y-6">
-          <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">Chart Type <HelpTooltip text="17 tipe: Bar, Line, Pie, Stat, Gauge, Sunburst, Sankey, Combo, dsb." /></h3>
-            <div>
-              <ChartTypeSelector value={chartType} onChange={setChartType} />
-            </div>
-          </div>
-
-          <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">Data Source <HelpTooltip text="Pilih dataset, X-Axis (kategori), Y-Axis (nilai numerik), dan Group By (opsional, untuk heatmap)." /></h3>
-            <div className="space-y-3">
-              <div>
-                <Label className="text-muted-foreground text-xs">Dataset</Label>
-                <Select value={selectedDataSet} onValueChange={v => { setSelectedDataSet(v); setXAxis(''); setYAxis(''); setGroupBy(''); }}>
-                  <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select dataset" /></SelectTrigger>
-                  <SelectContent>{dataSets.map(ds => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-muted-foreground text-xs">X-Axis (Category)</Label>
-                <Select value={xAxis} onValueChange={setXAxis}>
-                  <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select column" /></SelectTrigger>
-                  <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-muted-foreground text-xs">Y-Axis (Value)</Label>
-                <Select value={yAxis} onValueChange={setYAxis}>
-                  <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select column" /></SelectTrigger>
-                  <SelectContent>{numericColumns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              {['heatmap', 'sunburst', 'sankey', 'combo', 'clustered_bar', 'stacked_bar', '100_stacked_bar', 'butterfly', 'marimekko', 'parallel', 'bullet', 'pareto'].includes(chartType) && (
-                <div>
-                  <Label className="text-muted-foreground text-xs">Group By (Secondary / Node)</Label>
-                  <Select value={groupBy} onValueChange={setGroupBy}>
-                    <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select column" /></SelectTrigger>
-                    <SelectContent>{columns.filter(c => c.name !== xAxis).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Date Filter Panel */}
-          {dateColumns.length > 0 && selectedDataSet && (
-            <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">Date Filter</h3>
-              <div>
-                <Label className="text-muted-foreground text-xs">Date Column</Label>
-                <Select value={dateCol} onValueChange={setDateCol}>
-                  <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Select date column" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Dates</SelectItem>
-                    {dateColumns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {dateCol !== 'all' && dateCol !== '' && (
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Label className="text-muted-foreground text-xs">Start Date</Label>
-                    <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-muted/50 border-border [color-scheme:dark]" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-muted-foreground text-xs">End Date</Label>
-                    <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-muted/50 border-border [color-scheme:dark]" />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Data Config Panel */}
-          <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">Data Manipulation</h3>
-            <div>
-              <Label className="text-muted-foreground text-xs">Sort by Value</Label>
-              <Select value={sortOrder} onValueChange={(v: any) => setSortOrder(v)}>
-                <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="Default" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="desc">Top Items (Desc)</SelectItem>
-                  <SelectItem value="asc">Bottom Items (Asc)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-muted-foreground text-xs">Item Limit</Label>
-              <Select value={dataLimit} onValueChange={setDataLimit}>
-                <SelectTrigger className="bg-muted/50 border-border"><SelectValue placeholder="50 Items" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">Top/Bottom 10</SelectItem>
-                  <SelectItem value="20">Top/Bottom 20</SelectItem>
-                  <SelectItem value="50">Top/Bottom 50</SelectItem>
-                  <SelectItem value="100">Top/Bottom 100</SelectItem>
-                  <SelectItem value="500">Top/Bottom 500</SelectItem>
-                  <SelectItem value="0">All Items</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="bg-card rounded-xl p-5 border border-border shadow-card space-y-4">
-            <h3 className="font-semibold text-foreground flex items-center gap-2">Settings</h3>
-            <div>
-              <Label className="text-muted-foreground text-xs">Chart Title</Label>
-              <Input value={chartTitle} onChange={e => setChartTitle(e.target.value)} className="bg-muted/50 border-border" />
-            </div>
-            <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">
-              <Save className="w-4 h-4 mr-2" /> Save Chart
-            </Button>
-          </div>
-        </motion.div>
-
-        {/* Preview Panel */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-3">
-          <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-foreground">{chartTitle}</h3>
-                <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground capitalize">{chartType}</span>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="w-4 h-4 mr-1" /> Export PNG
-              </Button>
-            </div>
-            <div ref={chartRef} className="h-[500px] p-6">
-              {renderChart()}
-            </div>
-          </div>
-
-          {savedCharts.length > 0 && (
-            <div className="mt-6 bg-card rounded-xl p-5 border border-border shadow-card">
-              <h3 className="font-semibold text-foreground mb-4">Saved Charts ({savedCharts.length})</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {savedCharts.map(chart => (
-                  <div key={chart.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
-                    <button onClick={() => loadChart(chart)} className="flex items-center gap-3 text-left flex-1 min-w-0">
-                      {(() => { const Icon = ALL_CHART_TYPES.find(ct => ct.id === chart.type)?.icon || BarChart3; return <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0"><Icon className="w-4 h-4 text-primary" /></div>; })()}
-                      <div className="min-w-0">
-                        <p className="font-medium text-foreground text-sm truncate">{chart.title}</p>
-                        <p className="text-xs text-muted-foreground">{chart.type} • {chart.xAxis} vs {chart.yAxis}</p>
-                      </div>
-                    </button>
-                    <Button variant="ghost" size="sm" onClick={() => deleteChartMut.mutate(chart.id)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyChart({ msg }: { msg?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-      <BarChart3 className="w-16 h-16 mb-4 opacity-30" />
-      <p className="text-lg font-medium">No data to display</p>
-      <p className="text-sm">{msg || 'Select a dataset and configure axes to preview'}</p>
-    </div>
-  );
-}
+  return renderChart();
+};
