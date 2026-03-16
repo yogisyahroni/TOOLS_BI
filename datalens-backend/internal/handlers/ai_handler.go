@@ -284,6 +284,7 @@ func (h *AIHandler) GenerateReport(c *fiber.Ctx) error {
 	var req struct {
 		DatasetID string `json:"datasetId"`
 		Prompt    string `json:"prompt"`
+		Language  string `json:"language"` // "id" | "en" | "ms" | "zh" | "ja" — default "id"
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
@@ -297,7 +298,7 @@ func (h *AIHandler) GenerateReport(c *fiber.Ctx) error {
 	tableName, schemaStr, sampleData, _ := h.extractDatasetContext(req.DatasetID)
 
 	// Use expert prompt from Data Storytelling + Data Scientist skills
-	prompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt)
+	prompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt, req.Language)
 	content, err := h.callOpenAI(cfg, prompt)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed"})

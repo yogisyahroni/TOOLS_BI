@@ -10,6 +10,14 @@ import { HelpTooltip } from '@/components/HelpTooltip';
 import { useReports, useDeleteReport, useGenerateReport, useDatasets } from '@/hooks/useApi';
 import type { Report } from '@/lib/api';
 
+const LANGUAGES = [
+  { value: 'id', label: '🇮🇩 Bahasa Indonesia' },
+  { value: 'en', label: '🇬🇧 English' },
+  { value: 'ms', label: '🇲🇾 Bahasa Melayu' },
+  { value: 'zh', label: '🇨🇳 中文' },
+  { value: 'ja', label: '🇯🇵 日本語' },
+];
+
 export default function Reports() {
   const { data: reports = [], isLoading, refetch } = useReports();
   const { data: datasets = [] } = useDatasets();
@@ -17,6 +25,7 @@ export default function Reports() {
   const generateMut = useGenerateReport();
   const { toast } = useToast();
   const [selectedDsId, setSelectedDsId] = useState('');
+  const [language, setLanguage] = useState('id'); // default: Bahasa Indonesia
 
   const handleDelete = (id: string, title: string) => {
     deleteMut.mutate(id, {
@@ -36,12 +45,13 @@ export default function Reports() {
   };
 
   const handleGenerate = async () => {
-    if (!selectedDsId) { toast({ title: 'Select a dataset first', variant: 'destructive' }); return; }
+    if (!selectedDsId) { toast({ title: 'Pilih dataset terlebih dahulu', variant: 'destructive' }); return; }
     try {
-      await generateMut.mutateAsync({ datasetId: selectedDsId });
-      toast({ title: 'Report generated!', description: 'AI report created and saved.' });
+      await generateMut.mutateAsync({ datasetId: selectedDsId, language });
+      const langLabel = LANGUAGES.find(l => l.value === language)?.label ?? language;
+      toast({ title: '✅ Laporan berhasil dibuat!', description: `Laporan AI dalam ${langLabel} telah disimpan.` });
     } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || 'Failed to generate report.';
+      const msg = err.response?.data?.error || err.message || 'Gagal membuat laporan.';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
@@ -77,10 +87,20 @@ export default function Reports() {
         <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" /> Generate AI Report
         </h3>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           <Select value={selectedDsId} onValueChange={setSelectedDsId}>
-            <SelectTrigger className="w-full sm:w-64"><SelectValue placeholder="Select dataset" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-64"><SelectValue placeholder="Pilih dataset" /></SelectTrigger>
             <SelectContent>{datasets.map((ds) => <SelectItem key={ds.id} value={ds.id}>{ds.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={language} onValueChange={setLanguage}>
+            <SelectTrigger className="w-full sm:w-52">
+              <SelectValue placeholder="Pilih bahasa" />
+            </SelectTrigger>
+            <SelectContent>
+              {LANGUAGES.map((l) => (
+                <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
           <Button onClick={handleGenerate} disabled={!selectedDsId || generateMut.isPending} className="w-full sm:w-auto touch-target">
             {generateMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}

@@ -78,12 +78,38 @@ For SQL queries:
 - Handle NULLs explicitly (COALESCE, IS NOT NULL filters where appropriate)
 `
 
+// languageInstruction returns a clear language mandate string for the AI.
+// Best practice: inject as the LAST instruction before content — highest weight in attention.
+func languageInstruction(lang string) string {
+	switch lang {
+	case "id":
+		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Bahasa Indonesia. Use formal Indonesian business language (Bahasa Indonesia Baku). All section headings, analysis, recommendations, and SQL comments must be in Bahasa Indonesia."
+	case "en":
+		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in English."
+	case "ms":
+		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Bahasa Melayu (Malaysian)."
+	case "zh":
+		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Simplified Chinese (简体中文)."
+	case "ja":
+		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Japanese (日本語)."
+	default:
+		// Default to Bahasa Indonesia (primary user base)
+		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Bahasa Indonesia. Use formal Indonesian business language (Bahasa Indonesia Baku)."
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BuildReportPrompt constructs the full prompt for AI Report generation.
-// It injects: schema context, sample data, user's custom prompt, and
+// It injects: schema context, sample data, user's custom prompt, language, and
 // the expert data storytelling framework.
+// lang: "id" (Bahasa Indonesia), "en" (English), "ms" (Melayu), "zh" (中文), "ja" (日本語)
 // ─────────────────────────────────────────────────────────────────────────────
-func BuildReportPrompt(schema, tableName string, sampleData string, userPrompt string) string {
+func BuildReportPrompt(schema, tableName string, sampleData string, userPrompt string, lang ...string) string {
+	language := "id" // default: Bahasa Indonesia
+	if len(lang) > 0 && lang[0] != "" {
+		language = lang[0]
+	}
+
 	base := "Generate a comprehensive business intelligence report analyzing this dataset."
 	if userPrompt != "" {
 		base = userPrompt
@@ -148,8 +174,9 @@ Specific, time-bound actions.
 IMPORTANT: Base ALL analysis strictly on the schema and sample data provided above.
 Do NOT invent metrics, trends, or statistics not derivable from the actual data.
 If data is insufficient for a claim, explicitly say "insufficient data to determine."
-`
+` + languageInstruction(language)
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BuildAskDataPrompt constructs the full prompt for NL→SQL (Ask Data).

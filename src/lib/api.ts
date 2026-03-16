@@ -193,8 +193,8 @@ export const reportApi = {
     list: () => api.get<{ data: Report[] }>('/reports'),
     create: (payload: Partial<Report>) => api.post<Report>('/reports', payload),
     get: (id: string) => api.get<Report>(`/reports/${id}`),
-    generate: (datasetId: string, prompt?: string) =>
-        api.post<Report>('/reports/generate', { datasetId, prompt }),
+    generate: (datasetId: string, prompt?: string, language?: string) =>
+        api.post<Report>('/reports/generate', { datasetId, prompt, language }),
     export: (id: string, format: 'pdf' | 'md' | 'story') => {
         const url = `${API_BASE}/reports/${id}/export?format=${format}`;
         if (format === 'pdf') {

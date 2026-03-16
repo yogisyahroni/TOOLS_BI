@@ -178,8 +178,8 @@ export function useAIConfig() {
 export function useGenerateReport() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ datasetId, prompt }: { datasetId: string; prompt?: string }) =>
-            reportApi.generate(datasetId, prompt).then((r) => r.data),
+        mutationFn: ({ datasetId, prompt, language }: { datasetId: string; prompt?: string; language?: string }) =>
+            reportApi.generate(datasetId, prompt, language).then((r) => r.data),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['reports'] }),
     });
 }
