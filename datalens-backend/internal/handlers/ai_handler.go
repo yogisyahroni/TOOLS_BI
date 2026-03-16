@@ -380,8 +380,11 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 	// CRITICAL: DataTableName may be "public.belajar_data" (schema.table) or just "belajar_data".
 	// We must quote schema and table separately: "public"."belajar_data"
 	// Using %q on the full string would produce "public.belajar_data" (dot inside quotes) → PostgreSQL error.
-	fullTableName := ds.DataTableName
-	if strings.Contains(fullTableName, ".") {
+	fullTableName := strings.TrimSpace(ds.DataTableName)
+	if strings.HasPrefix(strings.ToUpper(fullTableName), "(SELECT") {
+		// It is a virtual view (e.g., "(SELECT * FROM tbl) AS virt"), keep it exactly as is
+		// to avoid breaking the subquery wrapper.
+	} else if strings.Contains(fullTableName, ".") {
 		parts := strings.SplitN(fullTableName, ".", 2)
 		fullTableName = fmt.Sprintf(`"%s"."%s"`, parts[0], parts[1])
 	} else {
