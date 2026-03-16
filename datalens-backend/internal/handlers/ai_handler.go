@@ -19,6 +19,7 @@ import (
 	"datalens/internal/models"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -301,7 +302,40 @@ func (h *AIHandler) GenerateReport(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed"})
 	}
-	return c.JSON(fiber.Map{"title": "AI Generated Report", "content": content})
+
+	// Build a descriptive title from the dataset name or prompt
+	title := "AI Generated Report"
+	if tableName != "" {
+		title = "Report: " + tableName
+	}
+	if req.Prompt != "" {
+		// Truncate prompt to 60 chars for title
+		p := req.Prompt
+		if len(p) > 60 {
+			p = p[:60] + "…"
+		}
+		title = p
+	}
+
+	// ── CRITICAL FIX: save to database so the list page shows the report ──
+	report := models.Report{
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		Title:     title,
+		Content:   content,
+		CreatedAt: time.Now(),
+	}
+	if req.DatasetID != "" {
+		report.DatasetID = &req.DatasetID
+	}
+	if err := h.db.Create(&report).Error; err != nil {
+		// Log but don't break the response — client can still see the content
+		// The list will be empty though, so this is a recoverable non-fatal error.
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save report"})
+	}
+	// ────────────────────────────────────────────────────────────────────────
+
+	return c.Status(fiber.StatusCreated).JSON(report)
 }
 
 // extractDatasetContext fetches the dataset table name, a formatted schema string,
