@@ -372,13 +372,26 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 		schemaStr = string(ds.Columns) // fallback raw JSON
 	}
 
-	// Fetch real sample rows (max 3) for type inference & grounding
+	// Fetch real sample rows (max 5) for type inference & grounding.
+	// CRITICAL: DataTableName may be "public.belajar_data" (schema.table) or just "belajar_data".
+	// We must quote schema and table separately: "public"."belajar_data"
+	// Using %q on the full string would produce "public.belajar_data" (dot inside quotes) → PostgreSQL error.
+	fullTableName := ds.DataTableName
+	if strings.Contains(fullTableName, ".") {
+		parts := strings.SplitN(fullTableName, ".", 2)
+		fullTableName = fmt.Sprintf(`"%s"."%s"`, parts[0], parts[1])
+	} else {
+		fullTableName = fmt.Sprintf(`"%s"`, fullTableName)
+	}
+
 	var samples []map[string]interface{}
-	if err := h.db.Raw(fmt.Sprintf("SELECT * FROM %q LIMIT 3", ds.DataTableName)).Find(&samples).Error; err == nil {
+	sampleQuery := fmt.Sprintf("SELECT * FROM %s LIMIT 5", fullTableName)
+	if err := h.db.Raw(sampleQuery).Find(&samples).Error; err == nil && len(samples) > 0 {
 		if b, err := json.MarshalIndent(samples, "", "  "); err == nil {
 			sampleData = string(b)
 		}
 	}
+
 	if sampleData == "" {
 		sampleData = "(sample data unavailable — analysis based on schema only)"
 	}
