@@ -185,7 +185,9 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 			return nil, fmt.Errorf("source node requires config.table when data is not explicitly provided")
 		}
 		var rows []map[string]interface{}
-		if err := db.Raw(fmt.Sprintf(`SELECT * FROM "%s"`, table)).Find(&rows).Error; err != nil {
+		// QuoteIdentifier handle schema-qualified names like "public"."table"
+		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, QuoteIdentifier(table))
+		if err := db.Raw(sqlQuery).Find(&rows).Error; err != nil {
 			return nil, fmt.Errorf("source: query failed: %w", err)
 		}
 		return rows, nil
@@ -745,6 +747,22 @@ func copyRow(row map[string]interface{}) map[string]interface{} {
 		newRow[k] = v
 	}
 	return newRow
+}
+
+// QuoteIdentifier handles quoting for SQL identifiers, potentially schema-qualified.
+// e.g. "public.table" -> "public"."table"
+func QuoteIdentifier(s string) string {
+	if s == "" {
+		return ""
+	}
+	parts := strings.Split(s, ".")
+	for i, p := range parts {
+		// Only quote if not already quoted
+		if !strings.HasPrefix(p, "\"") {
+			parts[i] = fmt.Sprintf("\"%s\"", p)
+		}
+	}
+	return strings.Join(parts, ".")
 }
 
 func parseTimeLoose(val string) (time.Time, error) {
