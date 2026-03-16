@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import 'echarts-wordcloud';
-import { ALL_CHART_TYPES } from '../pages/Sidebar';
+import { ALL_CHART_TYPES } from '../constants/chartTypes';
 import {
   BarChart, Bar, LineChart as ReLineChart, Line,
   PieChart as RePieChart, Pie, Cell,

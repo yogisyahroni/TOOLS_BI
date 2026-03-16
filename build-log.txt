@@ -1,0 +1,18 @@
+
+> vite_react_shadcn_ts@0.0.0 build
+> vite build
+
+[36mvite v5.4.19 [32mbuilding for production...[36m[39m
+transforming...
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[32mΓ£ô[39m 185 modules transformed.
+x Build failed in 3.45s
+error during build:
+Could not resolve "../pages/Sidebar" from "src/components/ChartRenderer.tsx"
+file: E:/antigraviti google/SUDAH DEPLOY/TOOLS_BI/src/components/ChartRenderer.tsx
+    at getRollupError (file:///E:/antigraviti%20google/SUDAH%20DEPLOY/TOOLS_BI/node_modules/rollup/dist/es/shared/parseAst.js:395:41)
+    at error (file:///E:/antigraviti%20google/SUDAH%20DEPLOY/TOOLS_BI/node_modules/rollup/dist/es/shared/parseAst.js:391:42)
+    at ModuleLoader.handleInvalidResolvedId (file:///E:/antigraviti%20google/SUDAH%20DEPLOY/TOOLS_BI/node_modules/rollup/dist/es/shared/node-entry.js:20006:24)
+    at file:///E:/antigraviti%20google/SUDAH%20DEPLOY/TOOLS_BI/node_modules/rollup/dist/es/shared/node-entry.js:19966:26
