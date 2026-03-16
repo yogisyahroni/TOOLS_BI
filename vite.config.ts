@@ -30,10 +30,6 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@deck.gl/react": path.resolve(__dirname, "./node_modules/@deck.gl/react"),
-      "@deck.gl/core": path.resolve(__dirname, "./node_modules/@deck.gl/core"),
-      "@deck.gl/layers": path.resolve(__dirname, "./node_modules/@deck.gl/layers"),
-      "@deck.gl/widgets": path.resolve(__dirname, "./node_modules/@deck.gl/widgets"),
     },
   },
 
