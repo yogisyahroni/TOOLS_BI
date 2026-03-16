@@ -194,7 +194,27 @@ export const reportApi = {
     create: (payload: Partial<Report>) => api.post<Report>('/reports', payload),
     get: (id: string) => api.get<Report>(`/reports/${id}`),
     generate: (datasetId: string, prompt?: string) =>
-        api.post<{ title: string; content: string }>('/reports/generate', { datasetId, prompt }),
+        api.post<Report>('/reports/generate', { datasetId, prompt }),
+    export: (id: string, format: 'pdf' | 'md' | 'story') => {
+        const url = `${API_BASE}/reports/${id}/export?format=${format}`;
+        if (format === 'pdf') {
+            return fetch(url, {
+                headers: { 'Authorization': `Bearer ${getAccessToken()}` },
+            }).then(res => res.blob());
+        }
+        return api.get(url).then(res => res.data);
+    },
+    convertToStory: (id: string) => api.post<DataStory>(`/reports/${id}/story`),
+    streamGenerate: (datasetId: string, prompt?: string) => {
+        return fetch(`${API_BASE}/reports/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAccessToken()}`,
+            },
+            body: JSON.stringify({ datasetId, prompt }),
+        });
+    },
     delete: (id: string) => api.delete(`/reports/${id}`),
 };
 
@@ -407,9 +427,13 @@ export interface Dashboard {
 
 export interface DataStory {
     id: string;
+    userId: string;
+    datasetId?: string;
     title: string;
     content: string;
-    createdAt: string;
+    insights: string[];
+    charts: any[];
+    createdAt: string | Date;
 }
 
 export interface KPI {

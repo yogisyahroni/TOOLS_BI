@@ -34,14 +34,15 @@ export interface ETLStep {
 
 export interface Report {
   id: string;
+  userId: string;
+  datasetId?: string;
   title: string;
   content: string;
   story: string;
   decisions: string[];
   recommendations: string[];
-  dataSetId: string;
-  createdAt: Date;
-  chartConfigs?: ChartConfig[];
+  chartConfigs: ChartConfig[];
+  createdAt: string | Date;
 }
 
 export interface ChartConfig {
@@ -144,12 +145,13 @@ export interface DataAlert {
 // Data Story
 export interface DataStory {
   id: string;
+  userId: string;
+  datasetId?: string;
   title: string;
-  dataSetId: string;
-  narrative: string;
+  content: string;
   insights: string[];
-  charts: { type: string; title: string; xAxis: string; yAxis: string }[];
-  createdAt: Date;
+  charts: any[];
+  createdAt: string | Date;
 }
 
 // Data Relationship

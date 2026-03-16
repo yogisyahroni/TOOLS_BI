@@ -1,11 +1,13 @@
-import { useDatasets, useDatasetData, useAIConfig, useCreateReport, useReportTemplates } from '@/hooks/useApi';
+import { useDatasets, useDatasetData, useAIConfig, useCreateReport, useReportTemplates, useReports } from '@/hooks/useApi';
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, FileText, Lightbulb, TrendingUp, Target,
   Send, Loader2, AlertTriangle, Shield, Download, Layout,
-  CheckCircle2, Database, Cpu, Zap, Circle,
+  CheckCircle2, Database, Cpu, Zap, Circle, BookOpen
 } from 'lucide-react';
 import { usePrivacySettings } from '@/hooks/usePrivacySettings';
 import { Button } from '@/components/ui/button';
@@ -17,7 +19,9 @@ import { AIChatPanel } from '@/components/AIChatPanel';
 import { builtinTemplates } from '@/lib/builtinTemplates';
 import type { Report, ReportTemplate } from '@/types/data';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { api } from '@/lib/api';
+import { api, reportApi, API_BASE, getAccessToken } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
+import { ReportHistory } from '@/components/ReportHistory';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -45,10 +49,12 @@ const STAGES: ProgressStep[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 function StreamingText({ text, isDone }: { text: string; isDone: boolean }) {
   return (
-    <div className="whitespace-pre-wrap text-foreground/90 font-mono text-sm leading-relaxed">
-      {text}
+    <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-headings:mb-4 prose-headings:mt-8 first:prose-headings:mt-0">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {text}
+      </ReactMarkdown>
       {!isDone && (
-        <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse align-middle" />
+        <span className="inline-block w-2 h-5 bg-primary ml-1 animate-pulse align-middle" />
       )}
     </div>
   );
@@ -101,8 +107,10 @@ export default function AIReports() {
   const { data: templates = [] } = useReportTemplates();
   const { privacySettings } = usePrivacySettings();
   const { data: aiConfig } = useAIConfig();
+  const { user } = useAuth();
   const createReportMutation = useCreateReport();
   const { data: dataSets = [] } = useDatasets();
+  const { data: reports = [], isLoading: isLoadingReports } = useReports();
   const { toast } = useToast();
   const [selectedDataset, setSelectedDataset] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -204,26 +212,19 @@ Columns: ${dataset.columns.filter(c => !privacySettings.excludeColumns.includes(
 Stats sample: ${JSON.stringify(Object.fromEntries(Object.entries(stats).slice(0, 5)), null, 1)}
 Sample data (first 5 rows): ${JSON.stringify(sampleData.slice(0, 5), null, 1)}
 
-Format your response as a comprehensive markdown report with:
-# [Title]
-## Executive Summary
-## Key Findings
-## Data Analysis
-## Recommendations
-## Conclusion`;
+Format tanggapan Anda sebagai laporan markdown komprehensif dalam Bahasa Indonesia dengan:
+# [Judul Laporan]
+## Ringkasan Eksekutif
+## Temuan Utama
+## Analisis Data
+## Rekomendasi
+## Kesimpulan`;
 
     const abort = new AbortController();
     abortRef.current = abort;
 
     try {
-      const baseUrl = (api.defaults.baseURL || '').replace(/\/$/, '');
-      const response = await fetch(`${baseUrl}/reports/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-        credentials: 'include',
-        body: JSON.stringify({ datasetId: selectedDataset, prompt: fullPrompt }),
-        signal: abort.signal,
-      });
+      const response = await reportApi.streamGenerate(selectedDataset, fullPrompt);
 
       if (!response.ok || !response.body) {
         throw new Error(`Server error: ${response.status}`);
@@ -243,44 +244,37 @@ Format your response as a comprehensive markdown report with:
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            // event type captured on next iteration
-          } else if (line.startsWith('data: ')) {
-            const eventLine = lines[lines.indexOf(line) - 1] ?? '';
-            const eventType = eventLine.replace('event: ', '');
-            const data = line.replace('data: ', '');
+          if (!line.trim()) continue;
 
-            if (eventType === 'progress') {
+          if (line.startsWith('data: ')) {
+            const data = line.replace('data: ', '');
+            
+            // Handle structured events
+            if (data.startsWith('{')) {
               try {
-                const p = JSON.parse(data);
-                setStreamStage(p.stage as Stage);
-              } catch { /* ignore */ }
-            } else if (eventType === 'token') {
-              try {
-                const token = JSON.parse(data);
-                fullContent += token;
+                const event = JSON.parse(data);
+                if (event.type === 'token') {
+                  fullContent += event.content;
+                  setStreamingText(fullContent);
+                  setStreamStage('generating');
+                } else if (event.type === 'progress') {
+                  setStreamStage(event.stage as Stage);
+                } else if (event.type === 'report') {
+                  setGeneratedReport(event.report);
+                  setStreamStage('done');
+                  toast({ title: '✅ Report saved!', description: 'AI report persistent storage success.' });
+                } else if (event.type === 'error') {
+                   toast({ title: 'AI Error', description: event.message, variant: 'destructive' });
+                   setStreamStage('error');
+                }
+              } catch {
+                fullContent += data;
                 setStreamingText(fullContent);
-                setStreamStage('generating');
-              } catch { /* ignore */ }
-            } else if (eventType === 'done') {
-              setStreamStage('done');
-              // Persist report
-              const report: Report = {
-                id: generateId(),
-                title: fullContent.split('\n')[0]?.replace(/^#\s*/, '').trim() || `${dataset.name} Analysis Report`,
-                content: fullContent,
-                story: '',
-                decisions: [],
-                recommendations: [],
-                dataSetId: selectedDataset,
-                createdAt: new Date(),
-              };
-              setGeneratedReport(report);
-              createReportMutation.mutate(report);
-              toast({ title: '✅ Report generated!', description: 'AI report has been created and saved.' });
-            } else if (eventType === 'error') {
-              try { toast({ title: 'AI Error', description: JSON.parse(data), variant: 'destructive' }); } catch { /* */ }
-              setStreamStage('error');
+              }
+            } else {
+              fullContent += data;
+              setStreamingText(fullContent);
+              setStreamStage('generating');
             }
           }
         }
@@ -304,12 +298,14 @@ Format your response as a comprehensive markdown report with:
         setStreamStage('done');
         const report: Report = {
           id: generateId(),
+          userId: user?.id || '',
           title: `${dataset.name} Analysis Report`,
           content: response.content,
           story: '',
           decisions: [],
           recommendations: [],
-          dataSetId: selectedDataset,
+          chartConfigs: [],
+          datasetId: selectedDataset,
           createdAt: new Date(),
         };
         setGeneratedReport(report);
@@ -361,10 +357,24 @@ Format your response as a comprehensive markdown report with:
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Input Section */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+        {/* Left Sidebar: History */}
+        <div className="xl:col-span-1 space-y-6">
+          <ReportHistory 
+            reports={reports} 
+            isLoading={isLoadingReports} 
+            onSelect={(r) => {
+              setGeneratedReport(r);
+              setStreamingText(r.content);
+              setStreamStage('done');
+            }}
+            selectedId={generatedReport?.id}
+          />
+        </div>
+
+        {/* Middle: Input & Output */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-          className="lg:col-span-2 space-y-6">
+          className="xl:col-span-2 space-y-6">
           <div className="bg-card rounded-xl p-6 border border-border shadow-card">
             <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <Zap className="w-4 h-4 text-primary" /> Generate Report
@@ -455,8 +465,8 @@ Format your response as a comprehensive markdown report with:
           </div>
         </motion.div>
 
-        {/* AI Chat */}
-        <div>
+        {/* Right Sidebar: AI Chat */}
+        <div className="xl:col-span-1">
           <AIChatPanel
             systemPrompt={`You are a business analytics assistant for DataLens. Help users formulate analysis questions and understand their data. ${dataset ? `Current dataset: "${dataset.name}" with columns: ${dataset.columns.map(c => `${c.name} (${c.type})`).join(', ')}. ${dataset.rowCount} rows.` : 'No dataset selected yet.'}`}
             title="AI Analysis Chat"
@@ -516,23 +526,36 @@ Format your response as a comprehensive markdown report with:
 
             {/* Export button (shown when done) */}
             {streamStage === 'done' && streamingText && (
-              <div className="px-6 py-3 border-t border-border flex items-center justify-between">
+              <div className="px-6 py-3 border-t border-border flex items-center justify-between bg-muted/10">
                 <div className="flex items-center gap-2 text-success text-sm">
                   <CheckCircle2 className="w-4 h-4" />
                   Report generation complete ({streamingText.length.toLocaleString()} chars)
                 </div>
-                <Button variant="outline" size="sm" onClick={() => {
-                  const blob = new Blob([streamingText], { type: 'text/markdown' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `AI-Report-${dataset?.name || 'export'}-${new Date().toISOString().slice(0, 10)}.md`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  toast({ title: 'Report exported as Markdown' });
-                }}>
-                  <Download className="w-4 h-4 mr-1" /> Export Markdown
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="hover:bg-primary/5 border-primary/20 text-primary" onClick={async () => {
+                    if (!generatedReport?.id) return;
+                    try {
+                      await reportApi.convertToStory(generatedReport.id);
+                      toast({ title: '✨ Story Created!', description: 'Report converted to interactive Data Story.' });
+                    } catch (err) {
+                      toast({ title: 'Story Conversion Failed', variant: 'destructive' });
+                    }
+                  }}>
+                    <BookOpen className="w-4 h-4 mr-1" /> Convert to Story
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const blob = new Blob([streamingText], { type: 'text/markdown' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `AI-Report-${dataset?.name || 'export'}-${new Date().toISOString().slice(0, 10)}.md`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast({ title: 'Report exported as Markdown' });
+                  }}>
+                    <Download className="w-4 h-4 mr-1" /> Export Markdown
+                  </Button>
+                </div>
               </div>
             )}
           </motion.div>
@@ -568,8 +591,14 @@ Format your response as a comprehensive markdown report with:
               <Download className="w-4 h-4 mr-1" /> Export
             </Button>
           </div>
+          <div className="prose prose-invert max-w-none mt-6">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {generatedReport.content}
+            </ReactMarkdown>
+          </div>
+
           {generatedReport.decisions.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
               <div className="p-6 rounded-xl bg-success/5 border border-success/20">
                 <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
                   <Target className="w-5 h-5 text-success" /> Key Decisions

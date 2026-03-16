@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { BookOpen, Sparkles, Loader2, Trash2, Eye, Plus, Share2, Download } from 'lucide-react';
@@ -228,7 +231,11 @@ export default function DataStories() {
                       <div className="flex-1 p-2" ref={targetRef}>
                         <div className="p-4 md:p-8 bg-background rounded-lg">
                           <h1 className="text-3xl font-bold mb-6 text-foreground print:text-black">{viewStory?.title}</h1>
-                          <div className="whitespace-pre-wrap text-foreground/90 leading-relaxed prose prose-sm md:prose-base dark:prose-invert max-w-none print:prose-neutral" dangerouslySetInnerHTML={{ __html: viewStory?.content || '' }} />
+                          <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none print:prose-neutral">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                              {viewStory?.content || ''}
+                            </ReactMarkdown>
+                          </div>
                         </div>
                       </div>
                     </DialogContent>
@@ -245,7 +252,11 @@ export default function DataStories() {
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-1 truncate">{story.title}</h3>
               <div className="flex-1 relative overflow-hidden text-sm text-muted-foreground/80 mb-2">
-                <div className="line-clamp-3 prose prose-sm dark:prose-invert prose-p:my-1 opacity-80" dangerouslySetInnerHTML={{ __html: story.content || '' }} />
+                <div className="line-clamp-3 prose prose-sm dark:prose-invert prose-p:my-1 opacity-80">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                    {story.content || ''}
+                  </ReactMarkdown>
+                </div>
                 <div className="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
               </div>
               <div className="flex items-center gap-2 mt-auto pt-3 border-t border-border text-xs text-muted-foreground shadow-sm">
