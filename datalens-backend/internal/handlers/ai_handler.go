@@ -399,6 +399,7 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 	var req struct {
 		DatasetID string `json:"datasetId"`
 		Prompt    string `json:"prompt"`
+		Language  string `json:"language"` // "id" | "en" | "ms" | "zh" | "ja" — default "id"
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
@@ -417,8 +418,8 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 	// Extract real schema + sample data → anti-hallucination grounding
 	tableName, schemaStr, sampleData, _ := h.extractDatasetContext(req.DatasetID)
 
-	// Build expert prompt: Data Engineer + Data Scientist + Data Storytelling skills
-	expertPrompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt)
+	// Build expert prompt: Data Engineer + Data Scientist + Data Storytelling skills + language
+	expertPrompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt, req.Language)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -554,9 +555,29 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 		baseURL = providerBaseURL(cfg.Provider)
 	}
 
+	// Split prompt into system (= persona + language mandate) and user (= task + data) messages.
+	// Try CRLF separator first (Windows line endings), then LF fallback.
+	var systemMsg, userMsg string
+	for _, sep := range []string{"\r\n---\r\n", "\n---\n"} {
+		if idx := strings.Index(prompt, sep); idx != -1 {
+			systemMsg = strings.TrimSpace(prompt[:idx])
+			userMsg = strings.TrimSpace(prompt[idx+len(sep):])
+			break
+		}
+	}
+	if systemMsg == "" {
+		systemMsg = SystemPromptDataAnalyst
+		userMsg = prompt
+	}
+
+	messages := []map[string]string{
+		{"role": "system", "content": systemMsg},
+		{"role": "user", "content": userMsg},
+	}
+
 	reqBody := map[string]interface{}{
 		"model":      cfg.Model,
-		"messages":   []map[string]string{{"role": "user", "content": prompt}},
+		"messages":   messages,
 		"max_tokens": cfg.MaxTokens,
 	}
 	data, _ := json.Marshal(reqBody)
@@ -605,9 +626,23 @@ func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onToken func
 		baseURL = providerBaseURL(cfg.Provider)
 	}
 
+	// Split prompt into system (persona + language mandate) and user (task + data) messages.
+	// SystemPromptDataAnalyst + language instruction goes into "system" role for maximum LLM weight.
+	var sysMsg, usrMsg string
+	if idx := strings.Index(prompt, "\n---\n"); idx != -1 {
+		sysMsg = strings.TrimSpace(prompt[:idx])
+		usrMsg = strings.TrimSpace(prompt[idx+5:])
+	} else {
+		sysMsg = SystemPromptDataAnalyst
+		usrMsg = prompt
+	}
+
 	reqBody := map[string]interface{}{
-		"model":      cfg.Model,
-		"messages":   []map[string]string{{"role": "user", "content": prompt}},
+		"model": cfg.Model,
+		"messages": []map[string]string{
+			{"role": "system", "content": sysMsg},
+			{"role": "user", "content": usrMsg},
+		},
 		"max_tokens": cfg.MaxTokens,
 		"stream":     true,
 	}

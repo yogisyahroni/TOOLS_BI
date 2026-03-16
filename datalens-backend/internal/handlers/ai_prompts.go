@@ -78,24 +78,27 @@ For SQL queries:
 - Handle NULLs explicitly (COALESCE, IS NOT NULL filters where appropriate)
 `
 
-// languageInstruction returns a clear language mandate string for the AI.
-// Best practice: inject as the LAST instruction before content — highest weight in attention.
+// languageInstruction returns a clear, REPEATED language mandate for the AI.
+// It is injected at the END of the prompt (highest attention weight) and
+// repeated twice to maximize compliance. Best practice: be explicit, not polite.
 func languageInstruction(lang string) string {
+	var mandate string
 	switch lang {
 	case "id":
-		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Bahasa Indonesia. Use formal Indonesian business language (Bahasa Indonesia Baku). All section headings, analysis, recommendations, and SQL comments must be in Bahasa Indonesia."
+		mandate = "WAJIB: Tulis SELURUH laporan dalam Bahasa Indonesia Baku (formal). Semua judul bagian, analisis, rekomendasi, komentar SQL, dan ringkasan HARUS dalam Bahasa Indonesia. Dilarang keras menggunakan bahasa Inggris."
 	case "en":
-		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in English."
+		mandate = "MANDATORY: Write the ENTIRE report in English. All section headings, analysis, recommendations, SQL comments, and summaries MUST be in English."
 	case "ms":
-		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Bahasa Melayu (Malaysian)."
+		mandate = "WAJIB: Tulis SELURUH laporan dalam Bahasa Melayu (Malaysia). Semua bahagian, analisis, cadangan, dan ringkasan MESTI dalam Bahasa Melayu."
 	case "zh":
-		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Simplified Chinese (简体中文)."
+		mandate = "强制要求：请用简体中文撰写完整报告。所有标题、分析、建议、SQL注释和摘要必须使用中文。"
 	case "ja":
-		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Japanese (日本語)."
+		mandate = "必須：レポート全体を日本語で記述してください。すべての見出し、分析、推奨事項、SQLコメント、要約は日本語でなければなりません。"
 	default:
-		// Default to Bahasa Indonesia (primary user base)
-		return "\n\n🌐 **LANGUAGE REQUIREMENT**: Write the ENTIRE report in Bahasa Indonesia. Use formal Indonesian business language (Bahasa Indonesia Baku)."
+		mandate = "WAJIB: Tulis SELURUH laporan dalam Bahasa Indonesia Baku (formal). Semua judul bagian, analisis, rekomendasi, komentar SQL, dan ringkasan HARUS dalam Bahasa Indonesia. Dilarang keras menggunakan bahasa Inggris."
 	}
+	// Repeat twice: once at start of block, once at end — maximizes LLM attention
+	return fmt.Sprintf("\n\n---\n## 🌐 INSTRUKSI BAHASA / LANGUAGE INSTRUCTION\n\n%s\n\n(Repeat: %s)\n---", mandate, mandate)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
