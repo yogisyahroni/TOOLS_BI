@@ -176,9 +176,13 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 
 	// ── source ────────────────────────────────────────────────────────────────
 	case "source":
+		if data, ok := cfg["data"].([]map[string]interface{}); ok {
+			return data, nil
+		}
+
 		table := cfgStr(cfg, "table")
 		if table == "" {
-			return nil, fmt.Errorf("source node requires config.table")
+			return nil, fmt.Errorf("source node requires config.table when data is not explicitly provided")
 		}
 		var rows []map[string]interface{}
 		if err := db.Raw(fmt.Sprintf(`SELECT * FROM "%s"`, table)).Find(&rows).Error; err != nil {

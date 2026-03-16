@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"datalens/internal/connectors"
 	"datalens/internal/engine"
 	"datalens/internal/middleware"
 	"datalens/internal/models"
@@ -293,14 +294,46 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		return pipelineExecResult{status: "error", errMsg: "Source dataset not found"}
 	}
 
-	// Create a source node
 	sourceNodeID := "auto_source_node"
-	sourceNode := engine.NodeSpec{
-		ID:     sourceNodeID,
-		Type:   "source",
-		Label:  "Source Dataset",
-		Config: map[string]interface{}{"table": sourceDataset.DataTableName},
-		Inputs: []string{},
+	var sourceNode engine.NodeSpec
+
+	if strings.HasPrefix(sourceDataset.StorageKey, "EXTERNAL_CONN::") {
+		// External database source
+		connID := strings.TrimPrefix(sourceDataset.StorageKey, "EXTERNAL_CONN::")
+		var externalConn models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, sourceDataset.UserID).First(&externalConn).Error; err != nil {
+			return pipelineExecResult{status: "error", errMsg: "External connection not found"}
+		}
+
+		opts := connectors.FromDBConnection(&externalConn, externalConn.PasswordEncrypted)
+		dbConn, err := connectors.Open(opts)
+		if err != nil {
+			return pipelineExecResult{status: "error", errMsg: "Failed to connect to external DB: " + err.Error()}
+		}
+		defer dbConn.Close()
+
+		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, sourceDataset.DataTableName)
+		res, err := dbConn.Query(ctx, sqlQuery, 50000) // limit ETL external buffer to 50k for safety
+		if err != nil {
+			return pipelineExecResult{status: "error", errMsg: "Failed to query external database: " + err.Error()}
+		}
+
+		sourceNode = engine.NodeSpec{
+			ID:     sourceNodeID,
+			Type:   "source",
+			Label:  "Source Dataset",
+			Config: map[string]interface{}{"data": res.Rows},
+			Inputs: []string{},
+		}
+	} else {
+		// Local internal database source
+		sourceNode = engine.NodeSpec{
+			ID:     sourceNodeID,
+			Type:   "source",
+			Label:  "Source Dataset",
+			Config: map[string]interface{}{"table": sourceDataset.DataTableName},
+			Inputs: []string{},
+		}
 	}
 
 	// Sequence the nodes based on their array index
