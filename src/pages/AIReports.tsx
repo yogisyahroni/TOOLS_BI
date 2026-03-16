@@ -246,38 +246,57 @@ Format tanggapan Anda sebagai laporan markdown komprehensif dalam Bahasa Indones
         for (const line of lines) {
           if (!line.trim()) continue;
 
+          // Kita hanya memproses baris data:
           if (line.startsWith('data: ')) {
             const data = line.replace('data: ', '');
             
-            // Handle structured events
-            if (data.startsWith('{')) {
-              try {
-                const event = JSON.parse(data);
-                if (event.type === 'token') {
-                  fullContent += event.content;
-                  setStreamingText(fullContent);
-                  setStreamStage('generating');
-                } else if (event.type === 'progress') {
-                  setStreamStage(event.stage as Stage);
-                } else if (event.type === 'report') {
-                  setGeneratedReport(event.report);
+            try {
+              const parsed = JSON.parse(data);
+              if (typeof parsed === 'object' && parsed !== null) {
+                if (parsed.stage) {
+                  setStreamStage(parsed.stage as Stage);
+                } else if (parsed.message && parsed.message.includes('complete')) {
                   setStreamStage('done');
-                  toast({ title: '✅ Report saved!', description: 'AI report persistent storage success.' });
-                } else if (event.type === 'error') {
-                   toast({ title: 'AI Error', description: event.message, variant: 'destructive' });
-                   setStreamStage('error');
                 }
-              } catch {
-                fullContent += data;
+              } else if (typeof parsed === 'string') {
+                // Token event (parsed adalah string tanpa tanda kutip bocor)
+                fullContent += parsed;
+                setStreamingText(fullContent);
+                setStreamStage('generating');
+              } else {
+                fullContent += String(parsed);
                 setStreamingText(fullContent);
               }
-            } else {
-              fullContent += data;
-              setStreamingText(fullContent);
-              setStreamStage('generating');
+            } catch {
+              // Jika data tidak bisa di-parse JSON, tambahkan raw (kecuali [DONE])
+              if (data !== '[DONE]') {
+                fullContent += data;
+                setStreamingText(fullContent);
+                setStreamStage('generating');
+              }
             }
           }
         }
+      }
+
+      // Stream selesai, simpan laporan ke database
+      if (fullContent.trim() && !abortRef.current?.signal.aborted) {
+        setStreamStage('done');
+        const report: Report = {
+          id: generateId(),
+          userId: user?.id || '',
+          title: `${dataset.name} Analysis Report`,
+          content: fullContent,
+          story: '',
+          decisions: [],
+          recommendations: [],
+          chartConfigs: [],
+          datasetId: selectedDataset,
+          createdAt: new Date(),
+        };
+        setGeneratedReport(report);
+        createReportMutation.mutate(report);
+        toast({ title: 'Report saved!', description: 'AI stream completed successfully.' });
       }
     } catch (err: any) {
       if (err.name === 'AbortError') return;
