@@ -522,7 +522,7 @@ export interface SavedChart {
 export interface SavedChartCreate {
     title: string;
     datasetId: string;
-    type: string;
+    type: string | 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'gauge' | 'sunburst' | 'sankey' | 'combo' | 'pivot_table';
     xAxis?: string;
     yAxis?: string;
     groupBy?: string;

@@ -198,6 +198,85 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   }, [chartType, dataset, xAxis, yAxis, groupBy, sortOrder, dataLimit]);
 
   const renderChart = () => {
+    if (!dataset?.data) return <EmptyChart />;
+
+    if (chartType === 'pivot_table') {
+      if (!dataset.data || dataset.data.length === 0) return <EmptyChart msg="No data for Pivot Table." />;
+      
+      const rowField = xAxis;
+      const colField = groupBy;
+      const [aggFunc, valueField] = (yAxis || '').split(':');
+      
+      if (!rowField || !valueField) return <EmptyChart msg="Pivot Table requires Row and Value fields." />;
+
+      // Grouping logic
+      const pivotData: Record<string, Record<string, number[]>> = {};
+      const colSet = new Set<string>();
+
+      dataset.data.forEach((row: any) => {
+        const rVal = String(row[rowField] || 'Unknown');
+        const cVal = colField ? String(row[colField] || 'Unknown') : 'Total';
+        const vVal = Number(row[valueField]) || 0;
+
+        if (!pivotData[rVal]) pivotData[rVal] = {};
+        if (!pivotData[rVal][cVal]) pivotData[rVal][cVal] = [];
+        
+        pivotData[rVal][cVal].push(vVal);
+        if (colField) colSet.add(cVal);
+      });
+
+      const cols = colField ? Array.from(colSet).sort() : ['Total'];
+      const rows = Object.keys(pivotData).sort();
+
+      const getAgg = (vals: number[]) => {
+        if (!vals || vals.length === 0) return null;
+        const sum = vals.reduce((a, b) => a + b, 0);
+        switch (aggFunc) {
+          case 'sum': return sum;
+          case 'avg': return sum / vals.length;
+          case 'min': return Math.min(...vals);
+          case 'max': return Math.max(...vals);
+          case 'count': return vals.length;
+          default: return sum;
+        }
+      };
+
+      const formatVal = (val: number | null) => {
+        if (val === null) return '-';
+        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(val);
+      };
+
+      return (
+        <div className="w-full h-full overflow-auto text-sm">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 bg-muted z-10">
+              <tr>
+                <th className="p-2 border border-border text-left font-semibold">{rowField}</th>
+                {cols.map(c => (
+                  <th key={c} className="p-2 border border-border text-right font-semibold">{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r} className="hover:bg-muted/50">
+                  <td className="p-2 border border-border font-medium">{r}</td>
+                  {cols.map(c => {
+                    const vals = pivotData[r]?.[c] || [];
+                    const agg = getAgg(vals);
+                    return (
+                      <td key={c} className="p-2 border border-border text-right text-muted-foreground">
+                        {formatVal(agg)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
 
     if (chartType === 'heatmap') {
       if (!heatmapData.data.length) return <EmptyChart msg="Select X-Axis, Y-Axis, and Group By for heatmap" />;

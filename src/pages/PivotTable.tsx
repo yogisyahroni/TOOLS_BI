@@ -1,14 +1,15 @@
 import React from 'react';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Table2, Download } from 'lucide-react';
+import { Table2, Download, Save } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useDatasets, useDatasetData } from '@/hooks/useApi';
+import { useDatasets, useDatasetData, useCreateChart } from '@/hooks/useApi';
 import { useDataWorker } from '@/hooks/useDataWorker';
 
 type AggFunc = 'sum' | 'avg' | 'count' | 'min' | 'max';
@@ -21,6 +22,8 @@ export default function PivotTable() {
   const [colField, setColField] = useState('');
   const [valueField, setValueField] = useState('');
   const [aggFunc, setAggFunc] = useState<AggFunc>('sum');
+  const [chartTitle, setChartTitle] = useState('');
+  const { mutate: createChart, isPending: isSaving } = useCreateChart();
 
   const { data: __datasetDataRes, isLoading: __isDataLoading } = useDatasetData(dsId || '', { limit: 10000 });
   const dataset = React.useMemo(() => {
@@ -57,11 +60,37 @@ export default function PivotTable() {
     );
     const totals = ['Grand Total', ...pivotData.colKeys.map(c => pivotData.grandTotals[c]?.toFixed(2)), pivotData.grandTotals._total?.toFixed(2)].join(',');
     const csv = [header, ...rows, totals].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'pivot-table.csv'; a.click();
-    URL.revokeObjectURL(url);
+    const csvData = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(csvData);
+    link.setAttribute('download', `pivot_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     toast({ title: 'Exported', description: 'Pivot table exported as CSV.' });
+  };
+
+  const handleSaveToCharts = async () => {
+    if (!dsId || !rowField || !valueField) {
+      toast({ title: 'Error', description: 'Please define Row and Value fields.', variant: 'destructive' });
+      return;
+    }
+    const finalTitle = chartTitle.trim() || 'Pivot Table Chart';
+    
+    try {
+      await createChart({
+        title: finalTitle,
+        type: 'pivot_table',
+        datasetId: dsId,
+        xAxis: rowField,
+        groupBy: colField || undefined,
+        yAxis: `${aggFunc}:${valueField}`
+      });
+      toast({ title: 'Success', description: 'Pivot Table saved to Charts.', variant: 'default' });
+      setChartTitle('');
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
   };
 
   const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -123,9 +152,44 @@ export default function PivotTable() {
 
       {pivotData ? (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-xl p-6 border border-border shadow-card">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
             <h3 className="font-semibold text-foreground">{aggFunc.toUpperCase()} of {valueField} by {rowField}{colField ? ` × ${colField}` : ''}</h3>
-            <Button variant="outline" size="sm" onClick={exportCSV}><Download className="w-4 h-4 mr-2" />Export CSV</Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input 
+                placeholder="Chart title to save..." 
+                value={chartTitle} 
+                onChange={e => setChartTitle(e.target.value)}
+                className="w-48 h-9"
+              />
+              <Button 
+                variant="default" 
+                size="sm" 
+                disabled={!chartTitle || isSaving}
+                onClick={() => {
+                  createChart(
+                    {
+                      title: chartTitle,
+                      datasetId: dsId,
+                      type: 'pivot_table',
+                      xAxis: rowField,
+                      groupBy: colField || undefined,
+                      yAxis: `${aggFunc}:${valueField}`
+                    },
+                    {
+                      onSuccess: () => {
+                        toast({ title: 'Success', description: 'Pivot table saved to charts' });
+                        setChartTitle('');
+                      },
+                      onError: (e) => toast({ title: 'Error', description: e.message, variant: 'destructive' })
+                    }
+                  );
+                }}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportCSV}><Download className="w-4 h-4 mr-2" />Export CSV</Button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <Table>
