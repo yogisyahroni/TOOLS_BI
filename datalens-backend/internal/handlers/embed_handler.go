@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
+	"strings"
 	"time"
 
+	"datalens/internal/connectors"
 	"datalens/internal/middleware"
 	"datalens/internal/models"
 
@@ -150,6 +154,36 @@ func (h *EmbedHandler) FetchEmbedData(c *fiber.Ctx) error {
 	var dataset models.Dataset
 	if err := h.db.Where("id = ? AND user_id = ?", datasetID, token.UserID).First(&dataset).Error; err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "dataset not found or access denied"})
+	}
+
+	// Handle External Connection Dataset
+	if strings.HasPrefix(dataset.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(dataset.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, token.UserID).First(&conn).Error; err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "External connection not found"})
+		}
+
+		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		dbConn, err := connectors.Open(opts)
+		if err != nil {
+			return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": fmt.Sprintf("Connection failed: %v", err)})
+		}
+		defer dbConn.Close()
+
+		sqlQuery := fmt.Sprintf(`SELECT * FROM %s LIMIT 5000`, dataset.DataTableName)
+
+		res, err := dbConn.Query(ctx, sqlQuery, 5000)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query external dataset"})
+		}
+
+		return c.JSON(fiber.Map{
+			"data": res.Rows,
+		})
 	}
 
 	var rows []map[string]interface{}
