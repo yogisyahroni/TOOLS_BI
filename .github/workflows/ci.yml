@@ -67,7 +67,17 @@ jobs:
         run: |
           npm list vite || echo "Vite not found by npm list"
           npx vite --version
-          NODE_OPTIONS="--max-old-space-size=4096" npm run build > vite_build_log.txt 2>&1 || (tail -n 100 vite_build_log.txt && exit 1)
+          NODE_OPTIONS="--max-old-space-size=4096" npm run build > vite_build_log.txt 2>&1 || exit 1
+
+      - name: Post Failure Comment
+        if: failure()
+        run: |
+          echo "\`\`\`text" > comment_body.txt
+          tail -n 80 vite_build_log.txt >> comment_body.txt
+          echo "\`\`\`" >> comment_body.txt
+          gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body=@comment_body.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Build Logs
         if: always()
