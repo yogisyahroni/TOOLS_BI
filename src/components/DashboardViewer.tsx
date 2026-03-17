@@ -35,7 +35,8 @@ const COLORS = [
 ];
 
 function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string }) {
-    const { data: rawData, isLoading } = useEmbedDatasetData(token, widget.dataSetId || '');
+    const dsId = widget.dataSetId || (widget as any).datasetId || '';
+    const { data: rawData, isLoading } = useEmbedDatasetData(token, dsId);
 
     if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
