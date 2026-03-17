@@ -67,15 +67,8 @@ jobs:
 
       - name: Vite production build
         run: |
-          npm list vite || echo "Vite not found by npm list"
-          npx vite --version
-          NODE_OPTIONS="--max-old-space-size=4096" npm run build > vite_build_log.txt 2>&1 || exit 1
+          NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
-      - name: Post log to Webhook
-        if: failure()
-        run: |
-          tail -n 300 vite_build_log.txt > tail_log.txt
-          curl -X POST --data-binary @tail_log.txt https://webhook.site/a0c035df-e81b-4cfe-a7dd-5ddf82e938558
 
       - name: Upload Build Logs
         if: always()
