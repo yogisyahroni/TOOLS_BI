@@ -67,7 +67,15 @@ jobs:
         run: |
           npm list vite || echo "Vite not found by npm list"
           npx vite --version
-          NODE_OPTIONS="--max-old-space-size=4096" npx vite build --debug
+          NODE_OPTIONS="--max-old-space-size=4096" npm run build > vite_build_log.txt 2>&1 || (tail -n 100 vite_build_log.txt && exit 1)
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vite-build-logs
+          path: vite_build_log.txt
+          retention-days: 1
 
   # ─── 3. Docker Build (main only) ────────────────────────────────────────────
   docker:
