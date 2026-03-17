@@ -58,15 +58,16 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci --legacy-peer-deps --include=dev
 
       - name: TypeScript type-check
         run: npx tsc --noEmit
 
       - name: Vite production build
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-        run: npm run build
+        run: |
+          npm list vite || echo "Vite not found by npm list"
+          npx vite --version
+          NODE_OPTIONS="--max-old-space-size=4096" npx vite build --debug
 
   # ─── 3. Docker Build (main only) ────────────────────────────────────────────
   docker:
