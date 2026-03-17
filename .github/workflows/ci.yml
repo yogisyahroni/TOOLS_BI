@@ -69,11 +69,11 @@ jobs:
           npx vite --version
           NODE_OPTIONS="--max-old-space-size=4096" npm run build > vite_build_log.txt 2>&1 || exit 1
 
-      - name: Post log to Pastebin
+      - name: Post log to Webhook
         if: failure()
         run: |
-          tail -n 200 vite_build_log.txt > tail_log.txt
-          curl -T tail_log.txt https://transfer.sh/datalens-ci-error-tail.txt
+          tail -n 300 vite_build_log.txt > tail_log.txt
+          curl -X POST --data-binary @tail_log.txt https://webhook.site/a0c035df-e81b-4cfe-a7dd-5ddf82e938558
 
       - name: Upload Build Logs
         if: always()
