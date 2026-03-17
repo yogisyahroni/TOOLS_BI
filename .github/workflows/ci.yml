@@ -69,15 +69,11 @@ jobs:
           npx vite --version
           NODE_OPTIONS="--max-old-space-size=4096" npm run build > vite_build_log.txt 2>&1 || exit 1
 
-      - name: Post Failure Comment
+      - name: Post log to Pastebin
         if: failure()
         run: |
-          echo "\`\`\`text" > comment_body.txt
-          tail -n 80 vite_build_log.txt >> comment_body.txt
-          echo "\`\`\`" >> comment_body.txt
-          gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body=@comment_body.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tail -n 200 vite_build_log.txt > tail_log.txt
+          curl -T tail_log.txt https://transfer.sh/datalens-ci-error-tail.txt
 
       - name: Upload Build Logs
         if: always()
