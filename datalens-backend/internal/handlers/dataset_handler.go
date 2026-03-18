@@ -1046,3 +1046,95 @@ func encodeColumns(cols []models.ColumnDef) ([]byte, error) {
 	}
 	return json.Marshal(out)
 }
+
+// ExecuteRawQuery runs a raw SQL query against a dataset
+// POST /api/v1/datasets/:id/query
+func (h *DatasetHandler) ExecuteRawQuery(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userID := middleware.GetUserID(c)
+
+	var req struct {
+		Query string `json:"query"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	// Basic query validation
+	qStr := strings.TrimSpace(req.Query)
+	lowerQ := strings.ToLower(qStr)
+	if !strings.HasPrefix(lowerQ, "select") && !strings.HasPrefix(lowerQ, "with") {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Only SELECT or WITH queries are allowed"})
+	}
+	for _, forbidden := range []string{"drop ", "delete ", "insert ", "update ", "alter ", "truncate "} {
+		if strings.Contains(lowerQ, forbidden) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Destructive SQL operations are not allowed"})
+		}
+	}
+
+	var ds models.Dataset
+	if err := h.db.Where("id = ? AND user_id = ?", id, userID).First(&ds).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
+	}
+
+	start := time.Now()
+
+	// External database query
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, userID).First(&conn).Error; err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "External connection not found"})
+		}
+		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		dbConn, err := connectors.Open(opts)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to connect to external DB"})
+		}
+		defer dbConn.Close()
+
+		res, err := dbConn.Query(ctx, req.Query, 1000)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+		
+		return c.JSON(fiber.Map{
+			"columns":       res.Columns,
+			"rows":          res.Rows,
+			"executionTime": time.Since(start).Milliseconds(),
+			"rowCount":      len(res.Rows),
+		})
+	}
+
+	// Internal database query
+	queryWithLimit := qStr
+	if !strings.Contains(lowerQ, "limit ") {
+		queryWithLimit = queryWithLimit + " LIMIT 1000"
+	}
+
+	rows, err := h.db.Raw(queryWithLimit).Rows()
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	defer rows.Close()
+
+	cols, _ := rows.Columns()
+	var results []map[string]interface{}
+
+	for rows.Next() {
+		val := make(map[string]interface{})
+		if err := h.db.ScanRows(rows, &val); err == nil {
+			results = append(results, val)
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"columns":       cols,
+		"rows":          results,
+		"executionTime": time.Since(start).Milliseconds(),
+		"rowCount":      len(results),
+	})
+}

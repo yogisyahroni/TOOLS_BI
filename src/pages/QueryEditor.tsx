@@ -28,91 +28,7 @@ interface SavedQuery {
   createdAt: Date;
 }
 
-// Simple SQL-like query parser
-function executeQuery(query: string, data: Record<string, any>[]): QueryResult {
-  const startTime = performance.now();
-  const q = query.trim().toLowerCase();
 
-  if (!q.startsWith('select')) throw new Error('Only SELECT queries are supported');
-
-  let result = [...data];
-  let selectedColumns: string[] = [];
-
-  // Parse SELECT columns
-  const selectMatch = q.match(/select\s+(.+?)\s+from/i);
-  if (!selectMatch) throw new Error('Invalid query syntax. Use: SELECT columns FROM dataset');
-
-  const colsPart = selectMatch[1].trim();
-  if (colsPart === '*') {
-    selectedColumns = data.length > 0 ? Object.keys(data[0]) : [];
-  } else {
-    selectedColumns = colsPart.split(',').map(c => c.trim());
-  }
-
-  // Parse WHERE
-  const whereMatch = q.match(/where\s+(.+?)(?:\s+order|\s+limit|\s+group|$)/i);
-  if (whereMatch) {
-    const condition = whereMatch[1].trim();
-    // Support: column = 'value', column > number, column < number, column LIKE '%pattern%'
-    const likeMatch = condition.match(/(\w+)\s+like\s+'([^']+)'/i);
-    const compMatch = condition.match(/(\w+)\s*(=|!=|>|<|>=|<=)\s*'?([^']*)'?/i);
-
-    if (likeMatch) {
-      const [, col, pattern] = likeMatch;
-      const regex = new RegExp(pattern.replace(/%/g, '.*'), 'i');
-      result = result.filter(row => regex.test(String(row[col] || '')));
-    } else if (compMatch) {
-      const [, col, op, val] = compMatch;
-      result = result.filter(row => {
-        const rowVal = row[col];
-        const numVal = Number(val);
-        const isNum = !isNaN(numVal) && !isNaN(Number(rowVal));
-        switch (op) {
-          case '=': return isNum ? Number(rowVal) === numVal : String(rowVal) === val;
-          case '!=': return isNum ? Number(rowVal) !== numVal : String(rowVal) !== val;
-          case '>': return Number(rowVal) > numVal;
-          case '<': return Number(rowVal) < numVal;
-          case '>=': return Number(rowVal) >= numVal;
-          case '<=': return Number(rowVal) <= numVal;
-          default: return true;
-        }
-      });
-    }
-  }
-
-  // Parse ORDER BY
-  const orderMatch = q.match(/order\s+by\s+(\w+)(?:\s+(asc|desc))?/i);
-  if (orderMatch) {
-    const [, col, dir] = orderMatch;
-    result.sort((a, b) => {
-      const av = a[col], bv = b[col];
-      const cmp = typeof av === 'number' ? av - Number(bv) : String(av).localeCompare(String(bv));
-      return dir?.toLowerCase() === 'desc' ? -cmp : cmp;
-    });
-  }
-
-  // Parse LIMIT
-  const limitMatch = q.match(/limit\s+(\d+)/i);
-  if (limitMatch) {
-    result = result.slice(0, Number(limitMatch[1]));
-  }
-
-  // Project columns
-  if (colsPart !== '*') {
-    result = result.map(row => {
-      const projected: Record<string, any> = {};
-      selectedColumns.forEach(col => { projected[col] = row[col]; });
-      return projected;
-    });
-  }
-
-  return {
-    columns: selectedColumns,
-    rows: result,
-    executionTime: performance.now() - startTime,
-    rowCount: result.length,
-  };
-}
 
 export default function QueryEditor() {
   const { data: dataSets = [] } = useDatasets();
@@ -131,18 +47,18 @@ export default function QueryEditor() {
     return { ...meta, data: __datasetDataRes?.data || [] };
   }, [dataSets, selectedDataSet, __datasetDataRes]);
 
-  const handleRun = () => {
+  const handleRun = async () => {
     if (!dataset) {
       toast({ title: 'No dataset selected', variant: 'destructive' });
       return;
     }
     setError('');
     try {
-      const result = executeQuery(query, dataset.data);
-      setQueryResult(result);
-      toast({ title: 'Query executed', description: `${result.rowCount} rows in ${result.executionTime.toFixed(1)}ms` });
+      const res = await api.post(`/datasets/${selectedDataSet}/query`, { query });
+      setQueryResult(res.data);
+      toast({ title: 'Query executed', description: `${res.data.rowCount} rows in ${res.data.executionTime}ms` });
     } catch (err: any) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
       setQueryResult(null);
     }
   };

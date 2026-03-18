@@ -321,6 +321,7 @@ func main() {
 	datasets.Post("/upload", uploadRateLimit, datasetH.UploadDataset)
 	datasets.Get("/:id", datasetH.GetDataset)
 	datasets.Get("/:id/data", datasetH.QueryDatasetData)
+	datasets.Post("/:id/query", datasetH.ExecuteRawQuery)
 	datasets.Get("/:id/stats", datasetH.GetDatasetStats)
 	datasets.Delete("/:id", datasetH.DeleteDataset)
 	datasets.Put("/:id/refresh-config", datasetH.UpdateRefreshConfig)
