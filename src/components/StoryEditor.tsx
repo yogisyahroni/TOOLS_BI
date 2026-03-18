@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useEditor, EditorContent, BubbleMenu, NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
+import { useEditor, EditorContent, BubbleMenu, NodeViewWrapper, ReactNodeViewRenderer, NodeViewProps } from '@tiptap/react';
 import { Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -240,6 +240,34 @@ const ChartComponent = ({ node, updateAttributes, selected }: any) => {
     );
 };
 
+const ResizableChartComponent = ({ node, updateAttributes, selected }: NodeViewProps) => {
+    return (
+        <NodeViewWrapper 
+            className="react-component-wrapper absolute"
+            style={{ 
+                left: node.attrs.x, 
+                top: node.attrs.y,
+                width: node.attrs.width, 
+                height: node.attrs.height,
+                zIndex: selected ? 40 : node.attrs.zIndex
+            }}
+        >
+            <div 
+                data-chart-id={node.attrs.chartId}
+                className={`w-full h-full group relative p-6 border rounded-xl shadow-sm flex flex-col items-center justify-center border-l-4 border-l-primary select-none cursor-move transition-shadow ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-card/95 backdrop-blur-sm shadow-lg' : 'bg-card/90 backdrop-blur-sm'}`}
+            >
+                <div className="flex-1 w-full flex flex-col items-center justify-center pointer-events-none">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                    </div>
+                    <span className="text-lg font-semibold text-foreground mb-1 text-center">{node.attrs.title || 'Chart'}</span>
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2 text-center">{node.attrs.type || 'Unknown'} Chart</span>
+                </div>
+            </div>
+        </NodeViewWrapper>
+    );
+};
+
 const ChartNode = Node.create({
     name: 'savedChart',
     group: 'block',
@@ -309,7 +337,7 @@ const ChartNode = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(ChartComponent);
+        return ReactNodeViewRenderer(ResizableChartComponent);
     }
 });
 
@@ -374,13 +402,17 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                         }
                     };
 
-                    // Insert new absolute chart at the drop position or at the end of doc if position is invalid
+                    // Gunakan setTextSelection untuk titik drop, baru insertContent agar resolusi node block diizinkan TipTap
                     const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+                    let chain = editor.chain().focus();
                     if (coordinates) {
-                        editor.chain().focus().insertContentAt(coordinates.pos, chartNodeData).run();
-                    } else {
-                        editor.chain().focus().insertContentAt(editor.state.doc.content.size, chartNodeData).run();
+                        try {
+                            chain = chain.setTextSelection(coordinates.pos);
+                        } catch (e) {
+                            // ignore if pos is invalid for text selection
+                        }
                     }
+                    chain.insertContent(chartNodeData).run();
                 } else if (parsed.source === 'text-element') {
                     e.preventDefault();
                     const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
@@ -390,11 +422,15 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                         textHtml = '<h2>Heading</h2><p>Write your text here...</p>';
                     }
 
+                    let textChain = editor.chain().focus();
                     if (coordinates) {
-                        editor.chain().focus().insertContentAt(coordinates.pos, textHtml).run();
-                    } else {
-                        editor.chain().focus().insertContent(textHtml).run();
+                        try {
+                            textChain = textChain.setTextSelection(coordinates.pos);
+                        } catch (e) {
+                            // ignore
+                        }
                     }
+                    textChain.insertContent(textHtml).run();
                 }
             }
         } catch (err) {
