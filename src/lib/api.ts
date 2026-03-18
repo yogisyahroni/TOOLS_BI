@@ -266,6 +266,16 @@ export const cronApi = {
 export const aiApi = {
     askData: (question: string, datasetId: string) =>
         api.post<AskDataResult>('/ask-data', { question, datasetId }),
+    askDataStream: (question: string, datasetId: string) => {
+        return fetch(`${API_BASE}/ask-data/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAccessToken()}`,
+            },
+            body: JSON.stringify({ question, datasetId }),
+        });
+    },
     generateReport: (datasetId: string, prompt?: string) =>
         api.post<{ title: string; content: string }>('/reports/generate', { datasetId, prompt }),
 };

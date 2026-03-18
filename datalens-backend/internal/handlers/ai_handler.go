@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -520,8 +521,12 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 		sendSSEEvent(w, "progress", `{"stage":"generating","message":"Analyst AI is analyzing your data and writing report..."}`)
 		w.Flush()
 
-		err := h.streamOpenAI(cfg, expertPrompt, func(token string) {
-			sendSSEEvent(w, "token", jsonEscape(token))
+		err := h.streamOpenAI(cfg, expertPrompt, func(eventType, token string) {
+			if eventType == "message" {
+				sendSSEEvent(w, "token", jsonEscape(token))
+			} else if eventType == "thought" {
+				sendSSEEvent(w, "thought", token)
+			}
 			w.Flush()
 		})
 		if err != nil {
@@ -590,9 +595,13 @@ SQL:`, schemaContext, req.Question)
 		sendSSEEvent(w, "progress", `{"stage":"generating","message":"Generating SQL query..."}`)
 		w.Flush()
 
-		err := h.streamOpenAI(cfg, prompt, func(token string) {
-			sqlBuf.WriteString(token)
-			sendSSEEvent(w, "token", jsonEscape(token))
+		err := h.streamOpenAI(cfg, prompt, func(eventType, token string) {
+			if eventType == "message" {
+				sqlBuf.WriteString(token)
+				sendSSEEvent(w, "token", jsonEscape(token))
+			} else if eventType == "thought" {
+				sendSSEEvent(w, "thought", token)
+			}
 			w.Flush()
 		})
 		if err != nil {
@@ -639,14 +648,47 @@ SQL:`, schemaContext, req.Question)
 // ─────────────────────────────────────────────────────────────────────────────
 // callOpenAI — non-streaming OpenAI-compatible request
 // ─────────────────────────────────────────────────────────────────────────────
+func sequentialThinkingToolDef() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "function",
+		"function": map[string]interface{}{
+			"name":        "sequentialthinking",
+			"description": "A detailed tool for dynamic and reflective problem-solving through thoughts. This tool helps analyze problems through a flexible thinking process that can adapt and evolve. Each thought can build on, question, or revise previous insights as understanding deepens.",
+			"parameters": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"thought": map[string]interface{}{
+						"type":        "string",
+						"description": "Your current thinking step.",
+					},
+					"nextThoughtNeeded": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Whether another thought step is needed.",
+					},
+					"thoughtNumber": map[string]interface{}{
+						"type":        "integer",
+						"description": "Current thought number.",
+					},
+					"totalThoughts": map[string]interface{}{
+						"type":        "integer",
+						"description": "Estimated total thoughts needed.",
+					},
+				},
+				"required": []string{"thought", "nextThoughtNeeded", "thoughtNumber", "totalThoughts"},
+			},
+		},
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// callOpenAI — non-streaming OpenAI-compatible request
+// ─────────────────────────────────────────────────────────────────────────────
 func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error) {
 	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
 	}
 
-	// Split prompt into system (= persona + language mandate) and user (= task + data) messages.
-	// Try CRLF separator first (Windows line endings), then LF fallback.
 	var systemMsg, userMsg string
 	for _, sep := range []string{"\r\n---\r\n", "\n---\n"} {
 		if idx := strings.Index(prompt, sep); idx != -1 {
@@ -660,64 +702,112 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 		userMsg = prompt
 	}
 
-	messages := []map[string]string{
+	messages := []map[string]interface{}{
 		{"role": "system", "content": systemMsg},
 		{"role": "user", "content": userMsg},
 	}
 
-	reqBody := map[string]interface{}{
-		"model":      cfg.Model,
-		"messages":   messages,
-		"max_tokens": cfg.MaxTokens,
-	}
-	data, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
-	if err != nil {
-		return "", err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	client := &http.Client{Timeout: 60 * time.Second}
 
-	// Reliability: Use timeout
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return "", fmt.Errorf("AI request timeout: %w", err)
-	}
-	defer resp.Body.Close()
+	for {
+		reqBody := map[string]interface{}{
+			"model":       cfg.Model,
+			"messages":    messages,
+			"max_tokens":  cfg.MaxTokens,
+			"tools":       []map[string]interface{}{sequentialThinkingToolDef()},
+			"tool_choice": "auto",
+		}
+		data, _ := json.Marshal(reqBody)
+		httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+		if err != nil {
+			return "", err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
-	}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			return "", fmt.Errorf("AI request timeout: %w", err)
+		}
 
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return "", fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
+		}
+
+		var result struct {
+			Choices []struct {
+				Message struct {
+					Role      string      `json:"role"`
+					Content   interface{} `json:"content"`
+					ToolCalls []struct {
+						Id       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"message"`
+			} `json:"choices"`
+		}
+
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if err != nil {
+			return "", fmt.Errorf("failed to decode AI response: %w", err)
+		}
+
+		if len(result.Choices) == 0 {
+			return "", fmt.Errorf("AI returned no choices")
+		}
+
+		msg := result.Choices[0].Message
+
+		if len(msg.ToolCalls) == 0 {
+			if contentStr, ok := msg.Content.(string); ok {
+				return contentStr, nil
+			}
+			return "", fmt.Errorf("AI returned no content")
+		}
+
+		astMsg := map[string]interface{}{
+			"role":       "assistant",
+			"tool_calls": msg.ToolCalls,
+		}
+		if msg.Content != nil {
+			astMsg["content"] = msg.Content
+		}
+		messages = append(messages, astMsg)
+
+		for _, tc := range msg.ToolCalls {
+			toolResult := "{}"
+			if tc.Function.Name == "sequentialthinking" {
+				toolResult = `{"status": "thought_recorded"}`
+			} else {
+				toolResult = `{"error": "unknown tool"}`
+			}
+
+			messages = append(messages, map[string]interface{}{
+				"role":         "tool",
+				"tool_call_id": tc.Id,
+				"name":         tc.Function.Name,
+				"content":      toolResult,
+			})
+		}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("failed to decode AI response: %w", err)
-	}
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("AI returned no choices")
-	}
-	return result.Choices[0].Message.Content, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // streamOpenAI — streaming OpenAI-compatible request, calls onToken per delta
 // ─────────────────────────────────────────────────────────────────────────────
-func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onToken func(string)) error {
+func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onEvent func(eventType string, data string)) error {
 	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
 	}
 
-	// Split prompt into system (persona + language mandate) and user (task + data) messages.
-	// SystemPromptDataAnalyst + language instruction goes into "system" role for maximum LLM weight.
 	var sysMsg, usrMsg string
 	if idx := strings.Index(prompt, "\n---\n"); idx != -1 {
 		sysMsg = strings.TrimSpace(prompt[:idx])
@@ -727,61 +817,165 @@ func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onToken func
 		usrMsg = prompt
 	}
 
-	reqBody := map[string]interface{}{
-		"model": cfg.Model,
-		"messages": []map[string]string{
-			{"role": "system", "content": sysMsg},
-			{"role": "user", "content": usrMsg},
-		},
-		"max_tokens": cfg.MaxTokens,
-		"stream":     true,
-	}
-	data, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	httpReq.Header.Set("Accept", "text/event-stream")
-
-	resp, err := (&http.Client{}).Do(httpReq)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
+	messages := []map[string]interface{}{
+		{"role": "system", "content": sysMsg},
+		{"role": "user", "content": usrMsg},
 	}
 
-	// Parse OpenAI streaming SSE: "data: {...}" lines, terminated by "data: [DONE]"
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
+	client := &http.Client{Timeout: 120 * time.Second}
+
+	for {
+		reqBody := map[string]interface{}{
+			"model":       cfg.Model,
+			"messages":    messages,
+			"max_tokens":  cfg.MaxTokens,
+			"stream":      true,
+			"tools":       []map[string]interface{}{sequentialThinkingToolDef()},
+			"tool_choice": "auto",
 		}
-		payload := strings.TrimPrefix(line, "data: ")
-		if payload == "[DONE]" {
-			break
+		data, _ := json.Marshal(reqBody)
+		httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+		if err != nil {
+			return err
 		}
-		var chunk struct {
-			Choices []struct {
-				Delta struct {
-					Content string `json:"content"`
-				} `json:"delta"`
-			} `json:"choices"`
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+		httpReq.Header.Set("Accept", "text/event-stream")
+
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			return err
 		}
-		if json.Unmarshal([]byte(payload), &chunk) != nil {
-			continue
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
 		}
-		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-			onToken(chunk.Choices[0].Delta.Content)
+
+		scanner := bufio.NewScanner(resp.Body)
+		var currentContent strings.Builder
+
+		type toolCallAccum struct {
+			Id   string
+			Name string
+			Args strings.Builder
+		}
+		currentToolCalls := make(map[int]*toolCallAccum)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			payload := strings.TrimPrefix(line, "data: ")
+			if payload == "[DONE]" {
+				break
+			}
+			var chunk struct {
+				Choices []struct {
+					Delta struct {
+						Content   *string `json:"content"`
+						ToolCalls []struct {
+							Index    int     `json:"index"`
+							Id       *string `json:"id"`
+							Type     *string `json:"type"`
+							Function *struct {
+								Name      *string `json:"name"`
+								Arguments *string `json:"arguments"`
+							} `json:"function"`
+						} `json:"tool_calls"`
+					} `json:"delta"`
+				} `json:"choices"`
+			}
+			if json.Unmarshal([]byte(payload), &chunk) != nil {
+				continue
+			}
+			if len(chunk.Choices) > 0 {
+				delta := chunk.Choices[0].Delta
+				if delta.Content != nil && *delta.Content != "" {
+					currentContent.WriteString(*delta.Content)
+					onEvent("message", *delta.Content)
+				}
+
+				for _, tc := range delta.ToolCalls {
+					if currentToolCalls[tc.Index] == nil {
+						currentToolCalls[tc.Index] = &toolCallAccum{}
+					}
+					if tc.Id != nil {
+						currentToolCalls[tc.Index].Id = *tc.Id
+					}
+					if tc.Function != nil {
+						if tc.Function.Name != nil {
+							currentToolCalls[tc.Index].Name = *tc.Function.Name
+						}
+						if tc.Function.Arguments != nil {
+							currentToolCalls[tc.Index].Args.WriteString(*tc.Function.Arguments)
+						}
+					}
+				}
+			}
+		}
+		resp.Body.Close()
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+
+		if len(currentToolCalls) == 0 {
+			return nil
+		}
+
+		astMsg := map[string]interface{}{
+			"role": "assistant",
+		}
+		if currentContent.Len() > 0 {
+			astMsg["content"] = currentContent.String()
+		}
+
+		var tcs []map[string]interface{}
+		var indices []int
+		for k := range currentToolCalls {
+			indices = append(indices, k)
+		}
+		sort.Ints(indices)
+
+		for _, idx := range indices {
+			tc := currentToolCalls[idx]
+			tcs = append(tcs, map[string]interface{}{
+				"id":   tc.Id,
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":      tc.Name,
+					"arguments": tc.Args.String(),
+				},
+			})
+		}
+		astMsg["tool_calls"] = tcs
+		messages = append(messages, astMsg)
+
+		for _, idx := range indices {
+			tc := currentToolCalls[idx]
+			toolResult := "{}"
+			if tc.Name == "sequentialthinking" {
+				var args map[string]interface{}
+				if err := json.Unmarshal([]byte(tc.Args.String()), &args); err == nil {
+					thoughtJSON, _ := json.Marshal(args)
+					onEvent("thought", string(thoughtJSON))
+				}
+				toolResult = `{"status": "thought_recorded"}`
+			} else {
+				toolResult = `{"error": "unknown tool"}`
+			}
+
+			messages = append(messages, map[string]interface{}{
+				"role":         "tool",
+				"tool_call_id": tc.Id,
+				"name":         tc.Name,
+				"content":      toolResult,
+			})
 		}
 	}
-	return scanner.Err()
 }
 
 // providerBaseURL maps known provider names to their OpenAI-compatible API base URL.

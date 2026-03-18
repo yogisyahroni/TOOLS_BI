@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MessageSquare, Send, BarChart3, Loader2, Database, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,9 +11,9 @@ import {
   ResponsiveContainer, Legend,
 } from 'recharts';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useDatasets, useAskData } from '@/hooks/useApi';
+import { useDatasets } from '@/hooks/useApi';
 import { useToast } from '@/hooks/use-toast';
-import type { AskDataResult } from '@/lib/api';
+import { aiApi, type AskDataResult } from '@/lib/api';
 
 const COLORS = [
   'hsl(174 72% 46%)', 'hsl(199 89% 48%)', 'hsl(142 76% 36%)',
@@ -51,7 +51,18 @@ export default function AskData() {
   const [question, setQuestion] = useState('');
   const [results, setResults] = useState<QAResult[]>([]);
 
-  const askMutation = useAskData();
+  // Streaming states
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamStage, setStreamStage] = useState<'thinking' | 'writing' | 'running' | 'done'>('done');
+  const [streamingText, setStreamingText] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
+  const streamBoxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (streamBoxRef.current) {
+      streamBoxRef.current.scrollTop = streamBoxRef.current.scrollHeight;
+    }
+  }, [streamingText]);
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
@@ -60,24 +71,88 @@ export default function AskData() {
     const currentQuestion = question;
     setQuestion('');
 
+    setIsStreaming(true);
+    setStreamingText('');
+    setStreamStage('thinking');
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     try {
-      const res: AskDataResult = await askMutation.mutateAsync({ question: currentQuestion, datasetId: selectedDatasetId });
-      const { xKey, yKey, chartType } = autoDetectChart(res.data);
-      setResults((prev) => [{
-        question: res.question,
-        sql: res.sql,
-        rowCount: res.rowCount,
-        chartData: res.data,
-        xKey,
-        yKey,
-        chartType,
-      }, ...prev]);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'AI query failed';
-      toast({ title: 'Query failed', description: msg, variant: 'destructive' });
-      setQuestion(currentQuestion); // restore
+      const response = await aiApi.askDataStream(currentQuestion, selectedDatasetId);
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          if (line.startsWith('data: ')) {
+            const dataStr = line.replace('data: ', '').trim();
+            if (dataStr === '[DONE]') {
+              break;
+            }
+
+            try {
+              const parsed = JSON.parse(dataStr);
+
+              if (parsed.processText) {
+                setStreamingText((prev) => prev + parsed.processText);
+                if (streamStage === 'thinking') {
+                  setStreamStage('writing');
+                }
+              }
+
+              if (parsed.generatedSql) {
+                setStreamStage('running');
+              }
+
+              if (parsed.sql && parsed.data) {
+                const { xKey, yKey, chartType } = autoDetectChart(parsed.data);
+                setResults((prev) => [{
+                  question: currentQuestion,
+                  sql: parsed.sql,
+                  rowCount: parsed.rowCount || parsed.data.length,
+                  chartData: parsed.data,
+                  xKey,
+                  yKey,
+                  chartType,
+                }, ...prev]);
+                setStreamStage('done');
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE line:', dataStr);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Stream aborted');
+      } else {
+        const msg = err.message ?? 'AI query failed';
+        toast({ title: 'Query failed', description: msg, variant: 'destructive' });
+        setQuestion(currentQuestion); // restore
+      }
+      setStreamStage('done');
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
     }
-  }, [question, selectedDatasetId, askMutation, toast]);
+  }, [question, selectedDatasetId, toast, streamStage]);
 
   const renderChart = (r: QAResult) => {
     if (r.chartType === 'table' || !r.xKey || !r.yKey || r.chartData.length === 0) {
@@ -175,11 +250,58 @@ export default function AskData() {
               </motion.div>
             )}
 
-            {results.length === 0 && !selectedDatasetId && (
+            {results.length === 0 && !selectedDatasetId && !isStreaming && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center h-full min-h-[400px] text-center bg-card/30 rounded-xl border border-border border-dashed opacity-50">
                 <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-foreground mb-2">Select a Dataset</h3>
                 <p className="text-muted-foreground">Please select a dataset from the sidebar to begin.</p>
+              </motion.div>
+            )}
+
+            {isStreaming && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                className="bg-card rounded-xl p-6 border border-primary/20 shadow-card">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0 animate-pulse">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {streamStage === 'thinking' && 'Memahami Pertanyaan...'}
+                      {streamStage === 'writing' && 'Membuat SQL Query...'}
+                      {streamStage === 'running' && 'Menjalankan Query di Database...'}
+                      {streamStage === 'done' && 'Menyelesaikan...'}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">AI Assistant sedang bekerja</p>
+                  </div>
+                </div>
+
+                <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
+                  <div
+                    ref={streamBoxRef}
+                    className="font-mono text-xs text-muted-foreground whitespace-pre-wrap max-h-[150px] overflow-y-auto custom-scrollbar"
+                  >
+                    {streamingText}
+                  </div>
+                  {(streamStage === 'thinking' || streamStage === 'writing') && (
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                      <div className="flex gap-1">
+                        <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0 }} className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }} className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.4 }} className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      </div>
+                      <span className="text-xs text-primary font-medium animate-pulse">
+                        {streamStage === 'thinking' ? 'Analyzing schema...' : 'Generating SQL...'}
+                      </span>
+                    </div>
+                  )}
+                  {streamStage === 'running' && (
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                      <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                      <span className="text-xs text-primary font-medium">Executing query...</span>
+                    </div>
+                  )}
+                </div>
               </motion.div>
             )}
 
@@ -259,16 +381,16 @@ export default function AskData() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk(); }
                     }}
-                    disabled={!selectedDataset || askMutation.isPending}
+                    disabled={!selectedDataset || isStreaming}
                     className="min-h-[80px] resize-none pr-12 text-sm bg-background border-border"
                   />
                   <Button 
                     size="icon" 
                     className="absolute right-2 bottom-2 h-8 w-8 gradient-primary"
                     onClick={handleAsk} 
-                    disabled={!selectedDataset || !question.trim() || askMutation.isPending}
+                    disabled={!selectedDataset || !question.trim() || isStreaming}
                   >
-                    {askMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin text-primary-foreground" /> : <Send className="w-4 h-4 text-primary-foreground" />}
+                    {isStreaming ? <Loader2 className="w-4 h-4 animate-spin text-primary-foreground" /> : <Send className="w-4 h-4 text-primary-foreground" />}
                   </Button>
                 </div>
                 <p className="text-[10px] text-center text-muted-foreground mt-2">Press Enter to send, Shift+Enter for new line</p>
