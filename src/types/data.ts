@@ -143,12 +143,19 @@ export interface DataAlert {
 }
 
 // Data Story
+export interface StorySlide {
+  id: string;
+  title: string;
+  widgets: Widget[];
+  layout?: any[]; // Menyimpan konfigurasi layout grid untuk react-grid-layout
+}
+
 export interface DataStory {
   id: string;
   userId: string;
   datasetId?: string;
   title: string;
-  content: string;
+  content: string; // Bisa berisi String Markdown lama (legacy) atau Stringified JSON dari StorySlide[]
   insights: string[];
   charts: any[];
   createdAt: string | Date;
