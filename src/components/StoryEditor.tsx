@@ -5,8 +5,10 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Bold, Italic, List, ListOrdered, Quote, Heading2, ImageIcon, Link as LinkIcon } from 'lucide-react';
+import { Bold, Italic, List, ListOrdered, Quote, Heading2, ImageIcon, Link as LinkIcon, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
+import { useCharts, useDatasetData } from '@/hooks/useApi';
+import { ChartRenderer } from './ChartRenderer';
 
 interface StoryEditorProps {
     content: string;
@@ -99,6 +101,17 @@ const MenuBar = ({ editor }: { editor: any }) => {
 };
 
 const ResizableChartComponent = ({ node, updateAttributes, selected }: NodeViewProps) => {
+    const { chartId } = node.attrs;
+    const { data: savedCharts = [] } = useCharts();
+    const chart = savedCharts.find((c: any) => String(c.id) === String(chartId));
+    const datasetId = chart?.datasetId || '';
+    
+    // Fetch dataset data for this specific chart
+    const { data: datasetDataRes, isLoading } = useDatasetData(datasetId, { limit: 10000 });
+    const ds = React.useMemo(() => {
+        return { data: datasetDataRes?.data || [] };
+    }, [datasetDataRes]);
+
     // Resize state
     const [isResizing, setIsResizing] = useState(false);
     const startX = useRef(0);
@@ -220,12 +233,37 @@ const ResizableChartComponent = ({ node, updateAttributes, selected }: NodeViewP
                 data-chart-z={node.attrs.zIndex}
                 className={`w-full h-full group relative p-6 border rounded-xl shadow-sm flex flex-col items-center justify-center border-l-4 border-l-primary select-none cursor-move transition-shadow ${selected || isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-card/95 backdrop-blur-sm shadow-lg' : 'bg-card/90 backdrop-blur-sm'}`}
             >
-                <div className="flex-1 w-full flex flex-col items-center justify-center pointer-events-none">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-                    </div>
-                    <span className="text-lg font-semibold text-foreground mb-1 text-center">{node.attrs.title || 'Chart'}</span>
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2 text-center">{node.attrs.type || 'Unknown'} Chart</span>
+                <div className="flex-1 w-full h-full flex flex-col pointer-events-none overflow-hidden p-2">
+                    {isLoading ? (
+                        <div className="flex-1 flex flex-col items-center justify-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mb-2" />
+                            <span className="text-sm text-muted-foreground">Loading chart data...</span>
+                        </div>
+                    ) : chart && ds.data.length > 0 ? (
+                        <div className="flex-1 w-full h-full relative pointer-events-none">
+                            <ChartRenderer
+                                chartTitle={chart.title}
+                                chartType={chart.type || 'bar'}
+                                xAxis={chart.xAxis}
+                                yAxis={chart.yAxis}
+                                groupBy={chart.groupBy}
+                                dataLimit="100"
+                                dataset={ds}
+                                numericColumns={[]}
+                                categoricalColumns={[]}
+                                sortOrder="none"
+                                showLegend={true}
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center">
+                            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                            </div>
+                            <span className="text-lg font-semibold text-foreground mb-1 text-center">{node.attrs.title || 'Chart'}</span>
+                            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2 text-center">{node.attrs.type || 'Unknown'} Chart</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Resize Handle */}
