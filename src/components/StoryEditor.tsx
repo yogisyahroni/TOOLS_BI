@@ -98,7 +98,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
     );
 };
 
-const ChartComponent = ({ node, updateAttributes, selected }: any) => {
+const ResizableChartComponent = ({ node, updateAttributes, selected }: NodeViewProps) => {
     // Resize state
     const [isResizing, setIsResizing] = useState(false);
     const startX = useRef(0);
@@ -234,34 +234,6 @@ const ChartComponent = ({ node, updateAttributes, selected }: any) => {
                     onMouseDown={handleResizeStart}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M21 15v6h-6"/><path d="M21 21l-7-7"/><path d="M21 9V3h-6"/></svg>
-                </div>
-            </div>
-        </NodeViewWrapper>
-    );
-};
-
-const ResizableChartComponent = ({ node, updateAttributes, selected }: NodeViewProps) => {
-    return (
-        <NodeViewWrapper 
-            className="react-component-wrapper absolute"
-            style={{ 
-                left: node.attrs.x, 
-                top: node.attrs.y,
-                width: node.attrs.width, 
-                height: node.attrs.height,
-                zIndex: selected ? 40 : node.attrs.zIndex
-            }}
-        >
-            <div 
-                data-chart-id={node.attrs.chartId}
-                className={`w-full h-full group relative p-6 border rounded-xl shadow-sm flex flex-col items-center justify-center border-l-4 border-l-primary select-none cursor-move transition-shadow ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-card/95 backdrop-blur-sm shadow-lg' : 'bg-card/90 backdrop-blur-sm'}`}
-            >
-                <div className="flex-1 w-full flex flex-col items-center justify-center pointer-events-none">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-                    </div>
-                    <span className="text-lg font-semibold text-foreground mb-1 text-center">{node.attrs.title || 'Chart'}</span>
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2 text-center">{node.attrs.type || 'Unknown'} Chart</span>
                 </div>
             </div>
         </NodeViewWrapper>
@@ -441,7 +413,18 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
     return (
         <div className="flex flex-col flex-1 w-full bg-background relative h-full">
             {editor && (
-                <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} className="z-50">
+                <BubbleMenu 
+                    editor={editor} 
+                    tippyOptions={{ duration: 100 }} 
+                    className="z-50"
+                    shouldShow={({ editor, state }) => {
+                        // Jangan tampilkan jika block yang dipilih adalah savedChart
+                        if (editor.isActive('savedChart')) {
+                            return false;
+                        }
+                        return !state.selection.empty;
+                    }}
+                >
                     <MenuBar editor={editor} />
                 </BubbleMenu>
             )}
