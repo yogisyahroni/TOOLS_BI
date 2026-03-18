@@ -374,9 +374,13 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                         }
                     };
 
-                    // Insert new absolute chart at the end, or anywhere (position doesn't matter for absolute)
-                    editor.chain().focus().insertContent(chartNodeData).run();
-                    editor.chain().focus().insertContent('<p></p>').run();
+                    // Insert new absolute chart at the drop position or at the end of doc if position is invalid
+                    const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+                    if (coordinates) {
+                        editor.chain().focus().insertContentAt(coordinates.pos, chartNodeData).run();
+                    } else {
+                        editor.chain().focus().insertContentAt(editor.state.doc.content.size, chartNodeData).run();
+                    }
                 } else if (parsed.source === 'text-element') {
                     e.preventDefault();
                     const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
