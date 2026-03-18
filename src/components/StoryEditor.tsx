@@ -1,4 +1,5 @@
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
+import { Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
@@ -96,6 +97,59 @@ const MenuBar = ({ editor }: { editor: any }) => {
     );
 };
 
+const ChartNode = Node.create({
+    name: 'savedChart',
+    group: 'block',
+    atom: true,
+
+    addAttributes() {
+        return {
+            chartId: { default: null },
+            title: { default: 'Chart' },
+            type: { default: 'Unknown' }
+        };
+    },
+
+    parseHTML() {
+        return [
+            {
+                tag: 'div[data-chart-id]',
+                getAttrs: (node) => {
+                    if (typeof node === 'string') return {};
+                    return {
+                        chartId: node.getAttribute('data-chart-id'),
+                        title: node.getAttribute('data-chart-title'),
+                        type: node.getAttribute('data-chart-type'),
+                    };
+                },
+            },
+        ];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return [
+            'div',
+            mergeAttributes(HTMLAttributes, {
+                'data-chart-id': HTMLAttributes.chartId,
+                'data-chart-title': HTMLAttributes.title,
+                'data-chart-type': HTMLAttributes.type,
+                class: 'p-6 my-4 border rounded-xl bg-card shadow-sm flex flex-col items-center justify-center min-h-[250px] border-l-4 border-l-primary cursor-default select-none',
+                contenteditable: 'false'
+            }),
+            [
+                'div',
+                { class: 'w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3' },
+                ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'text-primary' }, 
+                    ['path', { d: 'M3 3v18h18' }],
+                    ['path', { d: 'm19 9-5 5-4-4-3 3' }]
+                ]
+            ],
+            ['span', { class: 'text-lg font-semibold text-foreground mb-1' }, HTMLAttributes.title || 'Chart'],
+            ['span', { class: 'text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2' }, (HTMLAttributes.type || 'Unknown') + ' Chart']
+        ];
+    },
+});
+
 export function StoryEditor({ content, onChange }: StoryEditorProps) {
     const editor = useEditor({
         extensions: [
@@ -107,6 +161,7 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
             Placeholder.configure({
                 placeholder: 'Write your story narrative here. You can paste image URLs, format text, and add insights...',
             }),
+            ChartNode,
         ],
         content,
         onUpdate: ({ editor }) => {
@@ -138,21 +193,22 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                     
                     const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
                     
-                    // Create a distinctive chart placeholder
-                    const chartHtml = `
-                        <div data-chart-id="${parsed.chartId}" contenteditable="false" class="p-6 my-4 border rounded-xl bg-card shadow-sm flex flex-col items-center justify-center min-h-[250px] border-l-4 border-l-primary cursor-default user-select-none">
-                            <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-primary"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-                            </div>
-                            <span class="text-lg font-semibold text-foreground mb-1">${parsed.title}</span>
-                            <span class="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2">${parsed.type} Chart</span>
-                        </div><p></p>
-                    `;
+                    const chartNodeData = {
+                        type: 'savedChart',
+                        attrs: {
+                            chartId: parsed.chartId,
+                            title: parsed.title,
+                            type: parsed.type
+                        }
+                    };
 
                     if (coordinates) {
-                        editor.chain().focus().insertContentAt(coordinates.pos, chartHtml).run();
+                        editor.chain().focus().insertContentAt(coordinates.pos, chartNodeData).run();
+                        // Add a new paragraph after
+                        editor.chain().focus().insertContentAt(coordinates.pos + 1, '<p></p>').run();
                     } else {
-                        editor.chain().focus().insertContent(chartHtml).run();
+                        editor.chain().focus().insertContent(chartNodeData).run();
+                        editor.chain().focus().insertContent('<p></p>').run();
                     }
                 } else if (parsed.source === 'text-element') {
                     e.preventDefault();
