@@ -57,8 +57,17 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
 
     if (widget.type === 'text') {
         return (
-            <div className="flex items-center justify-center h-full p-4 overflow-auto">
-                <p className="text-muted-foreground text-center text-sm">{widget.title}</p>
+            <div className="w-full h-full p-4 overflow-auto">
+                {widget.htmlContent ? (
+                  <div 
+                    className="prose prose-sm dark:prose-invert max-w-none break-words"
+                    dangerouslySetInnerHTML={{ __html: widget.htmlContent }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground text-center text-sm">{widget.title}</p>
+                  </div>
+                )}
             </div>
         );
     }

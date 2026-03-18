@@ -27,6 +27,7 @@ import type { WidgetType, Widget, DashboardConfig } from '@/types/data';
 import type { DashboardParameter } from '@/lib/api';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { ChartRenderer } from '../components/ChartRenderer';
+import { TextEditorModal } from '@/components/TextEditorModal';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -150,6 +151,7 @@ export default function DashboardBuilder() {
   }, []);
 
   const [activeDashboardId, setActiveDashboardId] = useState('');
+  const [editingTextWidgetId, setEditingTextWidgetId] = useState<string | null>(null);
 
   // ── GraphQL cache-warmer (Phase 38) ─────────────────────────────────────────
   // Fires a single `/graphql` query that returns the full bundle (dashboard meta
@@ -534,8 +536,38 @@ export default function DashboardBuilder() {
 
     if (widget.type === 'text') {
       return (
-        <div className="flex items-center justify-center h-full p-4 overflow-auto">
-          <p className="text-muted-foreground text-center text-sm">{widget.title}</p>
+        <div 
+          className="flex flex-col h-full w-full p-4 overflow-auto group relative cursor-pointer hover:bg-muted/10 transition-colors"
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            setEditingTextWidgetId(widget.id);
+          }}
+        >
+          {widget.htmlContent ? (
+            <div 
+              className="prose prose-sm xl:prose-base dark:prose-invert max-w-none w-full"
+              dangerouslySetInnerHTML={{ __html: widget.htmlContent }} 
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <p className="text-muted-foreground text-center text-sm">{widget.title}</p>
+              <p className="text-muted-foreground/50 text-center text-xs mt-2">Double click to edit text</p>
+            </div>
+          )}
+          
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7 bg-background/80 backdrop-blur-sm border-border pointer-events-auto"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingTextWidgetId(widget.id);
+              }}
+            >
+              <Edit2 className="h-3.5 w-3.5 text-foreground" />
+            </Button>
+          </div>
         </div>
       );
     }
@@ -547,10 +579,7 @@ export default function DashboardBuilder() {
     const categoricalColumns = ds.columns?.filter((c: any) => !numericColumns.includes(c)) || [];
 
     return (
-      <div className="w-full h-full relative" onClick={() => {
-          // Wrapped with click handler
-          handleChartClick(widget, { activePayload: [] });
-      }}>
+      <div className="w-full h-full relative">
         <ChartRenderer
           chartTitle={widget.title}
           chartType={widget.type}
@@ -1328,6 +1357,26 @@ export default function DashboardBuilder() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Text Editor Modal */}
+      {editingTextWidgetId && (
+        <TextEditorModal
+          isOpen={true}
+          onClose={() => setEditingTextWidgetId(null)}
+          initialHtml={dashboards.find(d => d.id === activeDashboardId)?.widgets.find(w => w.id === editingTextWidgetId)?.htmlContent || ''}
+          onSave={(html) => {
+            const dashboard = dashboards.find(d => d.id === activeDashboardId);
+            if (!dashboard) return;
+            const newWidgets = dashboard.widgets.map(w => w.id === editingTextWidgetId ? { ...w, htmlContent: html } : w);
+            updateDashboardMut.mutate({ id: dashboard.id, payload: { ...dashboard, widgets: newWidgets } }, {
+               onSuccess: () => {
+                 toast({ title: 'Text Updated', description: 'Text widget content has been saved successfully.' });
+               }
+            });
+            setEditingTextWidgetId(null);
+          }}
+        />
+      )}
     </div >
   );
 }

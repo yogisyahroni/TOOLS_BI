@@ -91,7 +91,10 @@ export interface Widget {
   xAxis: string;
   yAxis: string;
   groupBy?: string; // Menambahkan groupBy opsional (banyak digunakan di Heatmap dsb)
+  limit?: number; // Menambahkan batasan data opsional
+  sortOrder?: 'asc' | 'desc' | 'none'; // Menambahkan opsi sorting opsional
   width: 'half' | 'full' | 'third'; // Legacy fallback
+  htmlContent?: string; // Menyimpan raw HTML untuk RTF Tiptap
 
   // React Grid Layout properties
   x?: number;
