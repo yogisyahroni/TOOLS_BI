@@ -234,7 +234,12 @@ func (h *AIHandler) ChatStream(c *fiber.Ctx) error {
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		err := h.streamOpenAIChatMessages(cfg, req.Messages, func(eventType string, data string) {
-			sendSSEEvent(w, eventType, data)
+			payloadObj := map[string]interface{}{
+				"event": eventType,
+				"data":  data,
+			}
+			payloadBytes, _ := json.Marshal(payloadObj)
+			sendSSEEvent(w, eventType, string(payloadBytes))
 			w.Flush()
 		})
 
