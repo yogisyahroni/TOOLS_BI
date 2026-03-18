@@ -210,9 +210,9 @@ export function AIChatPanel({
         {isOpen && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
+            animate={{ height: '100%', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="flex flex-col overflow-hidden"
+            className="flex flex-col flex-1 overflow-hidden"
           >
             {!configured ? (
               <div className="p-6 text-center">
@@ -225,7 +225,7 @@ export function AIChatPanel({
             ) : (
               <>
                 {/* Messages */}
-                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[60vh] md:max-h-[500px] min-h-[250px]">
+                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[250px] max-h-full">
                   {messages.length === 0 && (
                     <div className="text-center py-6">
                       <Bot className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />

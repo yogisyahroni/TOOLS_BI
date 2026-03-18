@@ -361,8 +361,8 @@ The JSON MUST conform exactly to this structure:
         </motion.div>
 
         {/* Right Panel - AI Chat Panel */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-6">
+        <div className="lg:col-span-1 h-[calc(100vh-12rem)] min-h-[500px] flex flex-col">
+          <div className="sticky top-6 flex-1 h-full">
             <AIChatPanel
               systemPrompt={getAIPrompt()}
               title="Enterprise Data Assistant"
@@ -370,7 +370,7 @@ The JSON MUST conform exactly to this structure:
               onAIResponse={handleAIResponse}
               onCreateViews={handleCreateViews}
               isCreatingViews={isCreatingViews}
-              className="h-fit"
+              className="h-full"
             />
           </div>
         </div>
