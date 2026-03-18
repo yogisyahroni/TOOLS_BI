@@ -99,33 +99,39 @@ const MenuBar = ({ editor }: { editor: any }) => {
 };
 
 const ChartComponent = ({ node, updateAttributes, selected }: any) => {
+    // Resize state
     const [isResizing, setIsResizing] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
     const startX = useRef(0);
     const startY = useRef(0);
     const startWidth = useRef(0);
     const startHeight = useRef(0);
 
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Drag (Move) state
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStartX = useRef(0);
+    const dragStartY = useRef(0);
+    const startNodeX = useRef(0);
+    const startNodeY = useRef(0);
+
+    // Resize Handlers
+    const handleResizeStart = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         setIsResizing(true);
         startX.current = e.clientX;
         startY.current = e.clientY;
-        if (containerRef.current) {
-            startWidth.current = containerRef.current.offsetWidth;
-            startHeight.current = containerRef.current.offsetHeight;
-        }
-    }, []);
+        startWidth.current = parseInt(node.attrs.width, 10) || 250;
+        startHeight.current = parseInt(node.attrs.height, 10) || 150;
+    }, [node.attrs.width, node.attrs.height]);
 
-    const handleMouseMove = useCallback((e: MouseEvent) => {
+    const handleResizeMove = useCallback((e: MouseEvent) => {
         if (!isResizing) return;
         
         const deltaX = e.clientX - startX.current;
         const deltaY = e.clientY - startY.current;
         
-        const newWidth = Math.max(250, startWidth.current + deltaX);
-        const newHeight = Math.max(150, startHeight.current + deltaY);
+        const newWidth = Math.max(150, startWidth.current + deltaX);
+        const newHeight = Math.max(100, startHeight.current + deltaY);
         
         updateAttributes({
             width: `${newWidth}px`,
@@ -133,35 +139,86 @@ const ChartComponent = ({ node, updateAttributes, selected }: any) => {
         });
     }, [isResizing, updateAttributes]);
 
-    const handleMouseUp = useCallback(() => {
+    const handleResizeEnd = useCallback(() => {
         setIsResizing(false);
     }, []);
 
+    // Drag handlers
+    const handleDragStart = useCallback((e: React.MouseEvent) => {
+        // Prevent drag when clicking on resize handle
+        if ((e.target as HTMLElement).closest('.resize-handle')) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+        dragStartX.current = e.clientX;
+        dragStartY.current = e.clientY;
+        startNodeX.current = parseInt(node.attrs.x, 10) || 0;
+        startNodeY.current = parseInt(node.attrs.y, 10) || 0;
+        
+        // Push z-index up temporarily logic can be implemented here if needed.
+    }, [node.attrs.x, node.attrs.y]);
+
+    const handleDragMove = useCallback((e: MouseEvent) => {
+        if (!isDragging) return;
+        
+        const deltaX = e.clientX - dragStartX.current;
+        const deltaY = e.clientY - dragStartY.current;
+        
+        // Prevent dragging above top of canvas
+        const newX = Math.max(0, startNodeX.current + deltaX);
+        const newY = Math.max(0, startNodeY.current + deltaY);
+        
+        updateAttributes({
+            x: `${newX}px`,
+            y: `${newY}px`
+        });
+    }, [isDragging, updateAttributes]);
+
+    const handleDragEnd = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    // Attach/Detach listeners
     useEffect(() => {
         if (isResizing) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-        } else {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            window.addEventListener('mousemove', handleResizeMove);
+            window.addEventListener('mouseup', handleResizeEnd);
+        } else if (isDragging) {
+            window.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd);
         }
+        
         return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('mousemove', handleResizeMove);
+            window.removeEventListener('mouseup', handleResizeEnd);
+            window.removeEventListener('mousemove', handleDragMove);
+            window.removeEventListener('mouseup', handleDragEnd);
         };
-    }, [isResizing, handleMouseMove, handleMouseUp]);
+    }, [isResizing, isDragging, handleResizeMove, handleResizeEnd, handleDragMove, handleDragEnd]);
 
     return (
-        <NodeViewWrapper className="react-component-wrapper cursor-default my-4 flex justify-center">
+        <NodeViewWrapper 
+            className="react-component-wrapper absolute"
+            style={{ 
+                left: node.attrs.x, 
+                top: node.attrs.y,
+                width: node.attrs.width, 
+                height: node.attrs.height,
+                zIndex: isDragging ? 50 : (selected ? 40 : node.attrs.zIndex)
+            }}
+        >
             <div 
-                ref={containerRef}
-                style={{ width: node.attrs.width, height: node.attrs.height }}
+                onMouseDown={handleDragStart}
                 data-chart-id={node.attrs.chartId}
                 data-chart-title={node.attrs.title}
                 data-chart-type={node.attrs.type}
                 data-chart-width={node.attrs.width}
                 data-chart-height={node.attrs.height}
-                className={`group relative p-6 border rounded-xl shadow-sm flex flex-col items-center justify-center border-l-4 border-l-primary select-none transition-shadow ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-card/90' : 'bg-card'}`}
+                data-chart-x={node.attrs.x}
+                data-chart-y={node.attrs.y}
+                data-chart-z={node.attrs.zIndex}
+                className={`w-full h-full group relative p-6 border rounded-xl shadow-sm flex flex-col items-center justify-center border-l-4 border-l-primary select-none cursor-move transition-shadow ${selected || isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-card/95 backdrop-blur-sm shadow-lg' : 'bg-card/90 backdrop-blur-sm'}`}
             >
                 <div className="flex-1 w-full flex flex-col items-center justify-center pointer-events-none">
                     <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
@@ -173,8 +230,8 @@ const ChartComponent = ({ node, updateAttributes, selected }: any) => {
 
                 {/* Resize Handle */}
                 <div 
-                    className="absolute bottom-0 right-0 w-8 h-8 cursor-se-resize flex items-end justify-end p-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onMouseDown={handleMouseDown}
+                    className="resize-handle absolute bottom-0 right-0 w-8 h-8 cursor-se-resize flex items-end justify-end p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onMouseDown={handleResizeStart}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M21 15v6h-6"/><path d="M21 21l-7-7"/><path d="M21 9V3h-6"/></svg>
                 </div>
@@ -193,8 +250,11 @@ const ChartNode = Node.create({
             chartId: { default: null },
             title: { default: 'Chart' },
             type: { default: 'Unknown' },
-            width: { default: '100%' },
-            height: { default: '250px' }
+            width: { default: '450px' },
+            height: { default: '300px' },
+            x: { default: '20px' },
+            y: { default: '20px' },
+            zIndex: { default: 10 }
         };
     },
 
@@ -208,8 +268,11 @@ const ChartNode = Node.create({
                         chartId: node.getAttribute('data-chart-id'),
                         title: node.getAttribute('data-chart-title'),
                         type: node.getAttribute('data-chart-type'),
-                        width: node.getAttribute('data-chart-width') || '100%',
-                        height: node.getAttribute('data-chart-height') || '250px',
+                        width: node.getAttribute('data-chart-width') || '450px',
+                        height: node.getAttribute('data-chart-height') || '300px',
+                        x: node.getAttribute('data-chart-x') || '20px',
+                        y: node.getAttribute('data-chart-y') || '20px',
+                        zIndex: parseInt(node.getAttribute('data-chart-z') || '10', 10),
                     };
                 },
             },
@@ -225,8 +288,11 @@ const ChartNode = Node.create({
                 'data-chart-type': HTMLAttributes.type,
                 'data-chart-width': HTMLAttributes.width,
                 'data-chart-height': HTMLAttributes.height,
-                style: `width: ${HTMLAttributes.width}; height: ${HTMLAttributes.height}; max-width: 100%; border: 1px solid var(--border); border-radius: 0.75rem; background-color: var(--card); flex-direction: column; align-items: center; justify-content: center; display: flex; text-align: center; border-left: 4px solid var(--primary); margin: 1rem auto; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);`,
-                class: 'saved-chart-placeholder select-none',
+                'data-chart-x': HTMLAttributes.x,
+                'data-chart-y': HTMLAttributes.y,
+                'data-chart-z': HTMLAttributes.zIndex,
+                style: `position: absolute; left: ${HTMLAttributes.x}; top: ${HTMLAttributes.y}; z-index: ${HTMLAttributes.zIndex}; width: ${HTMLAttributes.width}; height: ${HTMLAttributes.height}; max-width: 100%; border: 1px solid var(--border); border-radius: 0.75rem; background-color: rgba(var(--card), 0.95); backdrop-filter: blur(4px); flex-direction: column; align-items: center; justify-content: center; display: flex; text-align: center; border-left: 4px solid var(--primary); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);`,
+                class: 'saved-chart-placeholder select-none cursor-move',
                 contenteditable: 'false'
             }),
             [
@@ -266,7 +332,7 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
         },
         editorProps: {
             attributes: {
-                class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px]'
+                class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[500px] h-full relative'
             }
         }
     });
@@ -288,7 +354,11 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                 if (parsed.source === 'saved-chart') {
                     e.preventDefault();
                     
-                    const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+                    const editorEl = editor.view.dom as HTMLElement;
+                    const editorBounds = editorEl.getBoundingClientRect();
+                    // Kalkulasi posisi x dan y relatif terhadap container editor
+                    const dropX = e.clientX - editorBounds.left;
+                    const dropY = e.clientY - editorBounds.top;
                     
                     const chartNodeData = {
                         type: 'savedChart',
@@ -296,19 +366,17 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                             chartId: parsed.chartId,
                             title: parsed.title,
                             type: parsed.type,
-                            width: '100%',
-                            height: '250px'
+                            width: '450px',
+                            height: '300px',
+                            x: `${Math.max(0, dropX)}px`,
+                            y: `${Math.max(0, dropY)}px`,
+                            zIndex: 10
                         }
                     };
 
-                    if (coordinates) {
-                        editor.chain().focus().insertContentAt(coordinates.pos, chartNodeData).run();
-                        // Add a new paragraph after
-                        editor.chain().focus().insertContentAt(coordinates.pos + 1, '<p></p>').run();
-                    } else {
-                        editor.chain().focus().insertContent(chartNodeData).run();
-                        editor.chain().focus().insertContent('<p></p>').run();
-                    }
+                    // Insert new absolute chart at the end, or anywhere (position doesn't matter for absolute)
+                    editor.chain().focus().insertContent(chartNodeData).run();
+                    editor.chain().focus().insertContent('<p></p>').run();
                 } else if (parsed.source === 'text-element') {
                     e.preventDefault();
                     const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
