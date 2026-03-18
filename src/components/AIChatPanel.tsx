@@ -4,7 +4,7 @@ import { MessageSquare, Send, Loader2, Bot, User, AlertCircle, Sparkles, X, Sett
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useAIConfig } from '@/hooks/useApi';
-import { callAI } from '@/lib/aiService';
+import { callAI, callAIStream } from '@/lib/aiService';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -21,6 +21,7 @@ interface Message {
   timestamp: Date;
   isJsonArray?: boolean;
   jsonData?: DatasetRecommendation[];
+  thought?: string;
 }
 
 interface AIChatPanelProps {
@@ -68,7 +69,16 @@ export function AIChatPanel({
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const msgId = (Date.now() + 1).toString();
+    const assistantMsg: Message = {
+      id: msgId,
+      role: 'assistant',
+      content: '', // will be progressively filled
+      thought: '', // will be progressively filled
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMsg, assistantMsg]);
     setInput('');
     setIsLoading(true);
 
@@ -78,62 +88,90 @@ export function AIChatPanel({
       { role: 'user' as const, content: userMsg.content },
     ];
 
-    const response = await callAI(chatMessages);
-
-    let isJsonArray = false;
-    let jsonData: DatasetRecommendation[] | undefined;
-    let content = response.error || response.content || 'No response.';
-
-    // Try to parse the response as JSON (specifically looking for the DatasetRecommendation array)
     try {
-      if (response.content) {
-        // Attempt to extract JSON if it's wrapped in triple backticks or plain
-        let jsonStr = response.content;
+      const response = await callAIStream(
+        chatMessages,
+        (chunk) => {
+          setMessages(prev => prev.map(m => {
+            if (m.id === msgId) {
+              return { ...m, content: m.content + chunk };
+            }
+            return m;
+          }));
+        },
+        (thoughtChunk) => {
+          setMessages(prev => prev.map(m => {
+            if (m.id === msgId) {
+              let thoughtContent = '';
+              try {
+                const parsed = JSON.parse(thoughtChunk);
+                // The actual thought from sequential thinking is in parsed.thought
+                thoughtContent = parsed.thought || thoughtChunk;
+              } catch(e) {
+                thoughtContent = thoughtChunk;
+              }
+              const currentThought = m.thought ? m.thought + '\n\n' : '';
+              return { ...m, thought: currentThought + thoughtContent };
+            }
+            return m;
+          }));
+        }
+      );
 
-        // More lenient regex for markdown blocks: allowing optional spaces/newlines
-        const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-        if (codeBlockMatch) {
-          jsonStr = codeBlockMatch[1].trim();
-        } else {
-          // Fallback: search for potential JSON array structure if no markdown block
-          const firstBracket = jsonStr.indexOf('[');
-          const lastBracket = jsonStr.lastIndexOf(']');
-          if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-            jsonStr = jsonStr.substring(firstBracket, lastBracket + 1);
+      let isJsonArray = false;
+      let jsonData: DatasetRecommendation[] | undefined;
+      let content = response.error ? response.error : response.content;
+
+      try {
+        if (response.content) {
+          let jsonStr = response.content;
+          const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+          if (codeBlockMatch) {
+            jsonStr = codeBlockMatch[1].trim();
+          } else {
+            const firstBracket = jsonStr.indexOf('[');
+            const lastBracket = jsonStr.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+              jsonStr = jsonStr.substring(firstBracket, lastBracket + 1);
+            }
+          }
+
+          const parsed = JSON.parse(jsonStr);
+          if (Array.isArray(parsed) && parsed.length > 0 && 'sql' in parsed[0] && 'name' in parsed[0]) {
+            isJsonArray = true;
+            jsonData = parsed;
+            setSelectedViews(prev => ({ ...prev, [msgId]: [] }));
           }
         }
-
-        const parsed = JSON.parse(jsonStr);
-        if (Array.isArray(parsed) && parsed.length > 0 && 'sql' in parsed[0] && 'name' in parsed[0]) {
-          isJsonArray = true;
-          jsonData = parsed;
-          // We no longer override 'content' here to preserve the AI's explanation
-
-          // Initialize selection state for this message
-          const msgId = (Date.now() + 1).toString();
-          setSelectedViews(prev => ({ ...prev, [msgId]: [] }));
-        }
+      } catch (e) {
+        console.warn('AI Parsing failed:', e);
       }
-    } catch (e) {
-      // Not JSON, treat as normal text
-      console.warn('AI Parsing failed:', e);
-    }
 
-    const msgId = (Date.now() + 1).toString();
-    const assistantMsg: Message = {
-      id: msgId,
-      role: 'assistant',
-      content: content,
-      timestamp: new Date(),
-      isJsonArray,
-      jsonData,
-    };
+      setMessages(prev => prev.map(m => {
+        if (m.id === msgId) {
+          return {
+            ...m,
+            content: content || m.content,
+            isJsonArray,
+            jsonData
+          };
+        }
+        return m;
+      }));
 
-    setMessages(prev => [...prev, assistantMsg]);
-    setIsLoading(false);
+      setIsLoading(false);
 
-    if (!response.error && response.content && onAIResponse) {
-      onAIResponse(response.content, jsonData);
+      if (!response.error && response.content && onAIResponse) {
+        onAIResponse(response.content, jsonData);
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setMessages(prev => prev.map(m => {
+        if (m.id === msgId) {
+          return { ...m, content: m.content + '\n\n[Error: ' + err.message + ']' };
+        }
+        return m;
+      }));
     }
   };
 
@@ -206,8 +244,28 @@ export function AIChatPanel({
                         'max-w-[90%] rounded-lg px-3 py-2 text-sm',
                         msg.role === 'user'
                           ? 'bg-primary/20 text-foreground'
-                          : 'bg-muted/30 text-foreground border border-border shadow-sm'
+                          : 'bg-muted/30 text-foreground border border-border shadow-sm font-sans'
                       )}>
+                        {msg.thought && (
+                           <div className="mb-2 w-full">
+                             <details className="group border border-border/50 bg-muted/20 rounded-md">
+                               <summary className="flex cursor-pointer items-center justify-between p-2 text-xs font-medium text-muted-foreground hover:bg-muted/30 transition-colors">
+                                 <div className="flex items-center gap-1.5">
+                                   <Sparkles className="w-3 h-3 text-primary/70" />
+                                   <span>Thinking Process</span>
+                                 </div>
+                                 <span className="text-[10px] opacity-60 group-open:hidden transition-opacity">
+                                   Click to expand
+                                 </span>
+                               </summary>
+                               <div className="p-3 pt-1 border-t border-border/50">
+                                  <pre className="whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground/80 max-h-[300px] overflow-y-auto">
+                                    {msg.thought}
+                                  </pre>
+                               </div>
+                             </details>
+                           </div>
+                        )}
                         <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed">{msg.content}</pre>
 
                         {/* Rendering JSON Array recommendations if present */}
