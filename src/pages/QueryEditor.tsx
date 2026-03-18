@@ -280,41 +280,10 @@ The JSON MUST conform exactly to this structure:
             )}
           </div>
 
-          {/* AI Chat Layout (Drawer on Mobile, Sidebar on Desktop) */}
-          <div className="lg:block hidden">
-            <AIChatPanel
-              systemPrompt={getAIPrompt()}
-              title="Enterprise Data Assistant"
-              placeholder="e.g., Analyze this data and suggest useful views..."
-              onAIResponse={handleAIResponse}
-              onCreateViews={handleCreateViews}
-              isCreatingViews={isCreatingViews}
-            />
-          </div>
-
-          <div className="lg:hidden fixed bottom-6 right-6 z-50">
-            <details className="group relative">
-              <summary className="w-14 h-14 rounded-full gradient-primary flex items-center justify-center shadow-lg shadow-primary/30 cursor-pointer list-none hover:scale-105 active:scale-95 transition-all">
-                <Sparkles className="w-6 h-6 text-primary-foreground group-open:hidden" />
-                <X className="w-6 h-6 text-primary-foreground hidden group-open:block" />
-              </summary>
-              <div className="absolute bottom-16 right-0 w-[calc(100vw-3rem)] max-w-[360px] animate-in slide-in-from-bottom-4 duration-300">
-                <AIChatPanel
-                  systemPrompt={getAIPrompt()}
-                  title="AI Assistant"
-                  placeholder="Ask AI about this data..."
-                  onAIResponse={handleAIResponse}
-                  onCreateViews={handleCreateViews}
-                  isCreatingViews={isCreatingViews}
-                  className="shadow-2xl border-primary/20 h-[500px]"
-                />
-              </div>
-            </details>
-          </div>
         </motion.div>
 
-        {/* Right Panel - Editor & Results */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-3 space-y-4">
+        {/* Middle Panel - Editor & Results */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-2 space-y-4">
           {/* Editor */}
           <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
             <div className="p-4 border-b border-border flex items-center justify-between">
@@ -390,6 +359,21 @@ The JSON MUST conform exactly to this structure:
             </div>
           )}
         </motion.div>
+
+        {/* Right Panel - AI Chat Panel */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-6">
+            <AIChatPanel
+              systemPrompt={getAIPrompt()}
+              title="Enterprise Data Assistant"
+              placeholder="e.g., Analyze this data and suggest useful views..."
+              onAIResponse={handleAIResponse}
+              onCreateViews={handleCreateViews}
+              isCreatingViews={isCreatingViews}
+              className="h-fit"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
