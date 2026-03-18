@@ -362,6 +362,7 @@ func main() {
 	// AI routes
 	ai := api.Group("/ai")
 	ai.Post("/chat", aiH.Chat)
+	ai.Post("/chat-stream", aiH.ChatStream)
 
 	// KPI routes
 	kpis := api.Group("/kpis")

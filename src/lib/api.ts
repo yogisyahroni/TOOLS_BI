@@ -276,6 +276,16 @@ export const aiApi = {
             body: JSON.stringify({ question, datasetId }),
         });
     },
+    chatStream: (messages: { role: string; content: string }[]) => {
+        return fetch(`${API_BASE}/ai/chat-stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAccessToken()}`,
+            },
+            body: JSON.stringify({ messages }),
+        });
+    },
     generateReport: (datasetId: string, prompt?: string) =>
         api.post<{ title: string; content: string }>('/reports/generate', { datasetId, prompt }),
 };

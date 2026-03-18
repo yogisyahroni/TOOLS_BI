@@ -209,6 +209,47 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ChatStream — Streaming chat via backend proxy
+// POST /api/v1/ai/chat-stream
+// ─────────────────────────────────────────────────────────────────────────────
+func (h *AIHandler) ChatStream(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+
+	var req struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
+	}
+
+	cfg, err := h.resolveUserConfig(userID)
+	if err != nil {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+	c.Set("Transfer-Encoding", "chunked")
+
+	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		err := h.streamOpenAIChatMessages(cfg, req.Messages, func(eventType string, data string) {
+			sendSSEEvent(w, eventType, data)
+			w.Flush()
+		})
+
+		if err != nil {
+			errJSON, _ := json.Marshal(map[string]string{"error": err.Error()})
+			sendSSEEvent(w, "error", string(errJSON))
+		}
+
+		sendSSEEvent(w, "done", "{}")
+		w.Flush()
+	})
+	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AskData — non-streaming NL→SQL (backwards compat)
 // POST /api/v1/ask-data
 // ─────────────────────────────────────────────────────────────────────────────
@@ -803,11 +844,6 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 // streamOpenAI — streaming OpenAI-compatible request, calls onToken per delta
 // ─────────────────────────────────────────────────────────────────────────────
 func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onEvent func(eventType string, data string)) error {
-	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
-	if baseURL == "" {
-		baseURL = providerBaseURL(cfg.Provider)
-	}
-
 	var sysMsg, usrMsg string
 	if idx := strings.Index(prompt, "\n---\n"); idx != -1 {
 		sysMsg = strings.TrimSpace(prompt[:idx])
@@ -820,6 +856,15 @@ func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onEvent func
 	messages := []map[string]interface{}{
 		{"role": "system", "content": sysMsg},
 		{"role": "user", "content": usrMsg},
+	}
+
+	return h.streamOpenAIChatMessages(cfg, messages, onEvent)
+}
+
+func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[string]interface{}, onEvent func(eventType string, data string)) error {
+	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
+	if baseURL == "" {
+		baseURL = providerBaseURL(cfg.Provider)
 	}
 
 	client := &http.Client{Timeout: 120 * time.Second}

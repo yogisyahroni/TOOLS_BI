@@ -1,4 +1,4 @@
-import { api } from '@/lib/api';
+import { api, aiApi } from '@/lib/api';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -14,6 +14,63 @@ export async function callAI(messages: ChatMessage[]): Promise<AIResponse> {
   try {
     const res = await api.post<{ content: string }>('/ai/chat', { messages });
     return { content: res.data.content || '' };
+  } catch (err: any) {
+    const errorMsg = err.response?.data?.error || err.message || 'Unknown error occurred communicating with AI';
+    return { content: '', error: `Connection error: ${errorMsg}` };
+  }
+}
+
+export async function callAIStream(
+  messages: ChatMessage[],
+  onMessage: (chunk: string) => void,
+  onThought?: (thoughtJSON: string) => void
+): Promise<AIResponse> {
+  try {
+    const res = await aiApi.chatStream(messages);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP error ${res.status}`);
+    }
+
+    if (!res.body) throw new Error('ReadableStream not supported by browser');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let fullContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (!line.trim() || !line.startsWith('data: ')) {
+          if (line.includes('[DONE]')) break;
+          continue;
+        }
+
+        const dataStr = line.substring(6).trim();
+        if (dataStr === '[DONE]') break;
+
+        try {
+          const parsed = JSON.parse(dataStr);
+          if (parsed.event === 'message' && parsed.data) {
+            fullContent += parsed.data;
+            onMessage(parsed.data);
+          } else if (parsed.event === 'thought' && parsed.data && onThought) {
+            onThought(parsed.data);
+          } else if (parsed.event === 'error') {
+            const errObj = JSON.parse(parsed.data);
+            return { content: fullContent, error: errObj.error || 'Stream error' };
+          }
+        } catch (e) {
+          console.error("Error parsing SSE JSON:", e, dataStr);
+        }
+      }
+    }
+
+    return { content: fullContent };
   } catch (err: any) {
     const errorMsg = err.response?.data?.error || err.message || 'Unknown error occurred communicating with AI';
     return { content: '', error: `Connection error: ${errorMsg}` };
