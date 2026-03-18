@@ -1,4 +1,5 @@
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useEditor, EditorContent, BubbleMenu, NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import { Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -97,6 +98,91 @@ const MenuBar = ({ editor }: { editor: any }) => {
     );
 };
 
+const ChartComponent = ({ node, updateAttributes, selected }: any) => {
+    const [isResizing, setIsResizing] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const startX = useRef(0);
+    const startY = useRef(0);
+    const startWidth = useRef(0);
+    const startHeight = useRef(0);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsResizing(true);
+        startX.current = e.clientX;
+        startY.current = e.clientY;
+        if (containerRef.current) {
+            startWidth.current = containerRef.current.offsetWidth;
+            startHeight.current = containerRef.current.offsetHeight;
+        }
+    }, []);
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isResizing) return;
+        
+        const deltaX = e.clientX - startX.current;
+        const deltaY = e.clientY - startY.current;
+        
+        const newWidth = Math.max(250, startWidth.current + deltaX);
+        const newHeight = Math.max(150, startHeight.current + deltaY);
+        
+        updateAttributes({
+            width: `${newWidth}px`,
+            height: `${newHeight}px`
+        });
+    }, [isResizing, updateAttributes]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsResizing(false);
+    }, []);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        } else {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizing, handleMouseMove, handleMouseUp]);
+
+    return (
+        <NodeViewWrapper className="react-component-wrapper cursor-default my-4 flex justify-center">
+            <div 
+                ref={containerRef}
+                style={{ width: node.attrs.width, height: node.attrs.height }}
+                data-chart-id={node.attrs.chartId}
+                data-chart-title={node.attrs.title}
+                data-chart-type={node.attrs.type}
+                data-chart-width={node.attrs.width}
+                data-chart-height={node.attrs.height}
+                className={`group relative p-6 border rounded-xl shadow-sm flex flex-col items-center justify-center border-l-4 border-l-primary select-none transition-shadow ${selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background bg-card/90' : 'bg-card'}`}
+            >
+                <div className="flex-1 w-full flex flex-col items-center justify-center pointer-events-none">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                    </div>
+                    <span className="text-lg font-semibold text-foreground mb-1 text-center">{node.attrs.title || 'Chart'}</span>
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2 text-center">{node.attrs.type || 'Unknown'} Chart</span>
+                </div>
+
+                {/* Resize Handle */}
+                <div 
+                    className="absolute bottom-0 right-0 w-8 h-8 cursor-se-resize flex items-end justify-end p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onMouseDown={handleMouseDown}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground"><path d="M21 15v6h-6"/><path d="M21 21l-7-7"/><path d="M21 9V3h-6"/></svg>
+                </div>
+            </div>
+        </NodeViewWrapper>
+    );
+};
+
 const ChartNode = Node.create({
     name: 'savedChart',
     group: 'block',
@@ -106,7 +192,9 @@ const ChartNode = Node.create({
         return {
             chartId: { default: null },
             title: { default: 'Chart' },
-            type: { default: 'Unknown' }
+            type: { default: 'Unknown' },
+            width: { default: '100%' },
+            height: { default: '250px' }
         };
     },
 
@@ -120,6 +208,8 @@ const ChartNode = Node.create({
                         chartId: node.getAttribute('data-chart-id'),
                         title: node.getAttribute('data-chart-title'),
                         type: node.getAttribute('data-chart-type'),
+                        width: node.getAttribute('data-chart-width') || '100%',
+                        height: node.getAttribute('data-chart-height') || '250px',
                     };
                 },
             },
@@ -133,21 +223,28 @@ const ChartNode = Node.create({
                 'data-chart-id': HTMLAttributes.chartId,
                 'data-chart-title': HTMLAttributes.title,
                 'data-chart-type': HTMLAttributes.type,
-                class: 'p-6 my-4 border rounded-xl bg-card shadow-sm flex flex-col items-center justify-center min-h-[250px] border-l-4 border-l-primary cursor-default select-none',
+                'data-chart-width': HTMLAttributes.width,
+                'data-chart-height': HTMLAttributes.height,
+                style: `width: ${HTMLAttributes.width}; height: ${HTMLAttributes.height}; max-width: 100%; border: 1px solid var(--border); border-radius: 0.75rem; background-color: var(--card); flex-direction: column; align-items: center; justify-content: center; display: flex; text-align: center; border-left: 4px solid var(--primary); margin: 1rem auto; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);`,
+                class: 'saved-chart-placeholder select-none',
                 contenteditable: 'false'
             }),
             [
                 'div',
-                { class: 'w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3' },
-                ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'text-primary' }, 
+                { style: 'width: 3rem; height: 3rem; border-radius: 9999px; background-color: hsl(var(--primary)/0.1); display: flex; align-items: center; justify-content: center; margin-bottom: 0.75rem;' },
+                ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: 'color: hsl(var(--primary));' }, 
                     ['path', { d: 'M3 3v18h18' }],
                     ['path', { d: 'm19 9-5 5-4-4-3 3' }]
                 ]
             ],
-            ['span', { class: 'text-lg font-semibold text-foreground mb-1' }, HTMLAttributes.title || 'Chart'],
-            ['span', { class: 'text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md mt-2' }, (HTMLAttributes.type || 'Unknown') + ' Chart']
+            ['span', { style: 'font-size: 1.125rem; font-weight: 600; color: hsl(var(--foreground)); margin-bottom: 0.25rem;' }, HTMLAttributes.title || 'Chart'],
+            ['span', { style: 'font-size: 0.75rem; color: hsl(var(--muted-foreground)); background-color: hsl(var(--muted)); padding: 0.25rem 0.5rem; border-radius: 0.375rem; margin-top: 0.5rem;' }, (HTMLAttributes.type || 'Unknown') + ' Chart']
         ];
     },
+
+    addNodeView() {
+        return ReactNodeViewRenderer(ChartComponent);
+    }
 });
 
 export function StoryEditor({ content, onChange }: StoryEditorProps) {
@@ -198,7 +295,9 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                         attrs: {
                             chartId: parsed.chartId,
                             title: parsed.title,
-                            type: parsed.type
+                            type: parsed.type,
+                            width: '100%',
+                            height: '250px'
                         }
                     };
 
