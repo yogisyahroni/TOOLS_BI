@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useEditor, EditorContent, Extension } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
@@ -47,11 +47,28 @@ const FontSize = Extension.create({
 
 const FONT_FAMILIES = [
   { name: 'Tableau Book', value: '"Tableau Book", "Segoe UI", sans-serif' },
+  { name: 'Tableau Bold', value: '"Tableau Bold", "Segoe UI", sans-serif' },
   { name: 'Arial', value: 'Arial, sans-serif' },
   { name: 'Courier New', value: '"Courier New", Courier, monospace' },
   { name: 'Times New Roman', value: '"Times New Roman", Times, serif' },
   { name: 'Trebuchet MS', value: '"Trebuchet MS", sans-serif' },
-  { name: 'Verdana', value: 'Verdana, sans-serif' }
+  { name: 'Verdana', value: 'Verdana, sans-serif' },
+  { name: 'Inter', value: 'Inter, sans-serif' },
+  { name: 'Roboto', value: 'Roboto, sans-serif' },
+  { name: 'Open Sans', value: '"Open Sans", sans-serif' },
+  { name: 'Lato', value: 'Lato, sans-serif' },
+  { name: 'Montserrat', value: 'Montserrat, sans-serif' },
+  { name: 'Poppins', value: 'Poppins, sans-serif' },
+  { name: 'Nunito', value: 'Nunito, sans-serif' },
+  { name: 'Playfair Display', value: '"Playfair Display", serif' },
+  { name: 'Merriweather', value: 'Merriweather, serif' },
+  { name: 'Georgia', value: 'Georgia, serif' },
+  { name: 'Comic Sans MS', value: '"Comic Sans MS", "Comic Sans", cursive' },
+  { name: 'Impact', value: 'Impact, sans-serif' },
+  { name: 'Pacifico', value: 'Pacifico, cursive' },
+  { name: 'Caveat', value: 'Caveat, cursive' },
+  { name: 'Fira Code', value: '"Fira Code", monospace' },
+  { name: 'JetBrains Mono', value: '"JetBrains Mono", monospace' }
 ];
 
 const FONT_SIZES = ['8', '9', '10', '11', '12', '14', '15', '16', '18', '20', '22', '24', '26', '28', '36', '48', '72'];
@@ -64,12 +81,14 @@ const MenuBar = ({ editor }: MenuBarProps) => {
   if (!editor) return null;
 
   const currentFontFamily = editor.getAttributes('textStyle').fontFamily || FONT_FAMILIES[0].value;
-  const currentFontSize = editor.getAttributes('textStyle').fontSize || '14pt';
+  const currentFontSize = editor.getAttributes('textStyle').fontSize || '15pt';
   const currentColor = editor.getAttributes('textStyle').color || '#000000';
 
   const formatButtonClass = (isActive: boolean) => 
-    `p-1 border border-transparent hover:border-gray-300 hover:bg-gray-100 rounded-sm flex items-center justify-center min-w-[24px] ${
-      isActive ? 'bg-gray-200 border-gray-400' : 'bg-transparent text-gray-700'
+    `p-1.5 rounded-md flex items-center justify-center min-w-[32px] transition-colors focus:outline-none ${
+      isActive 
+        ? 'bg-blue-100 text-blue-700' 
+        : 'bg-transparent hover:bg-gray-200 text-gray-700'
     }`;
 
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,22 +106,23 @@ const MenuBar = ({ editor }: MenuBarProps) => {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1 p-1.5 border-b border-gray-300 bg-[#F5F5F5] text-xs" style={{ userSelect: 'none' }}>
+    <div className="flex flex-wrap items-center gap-2 p-2 border-b border-gray-100 bg-gray-50/50">
+      
       {/* Font Family */}
       <select 
-        className="h-6 border border-gray-300 bg-white px-1 outline-none hover:border-blue-400 focus:border-blue-500 cursor-default"
+        className="h-8 w-[140px] text-sm border border-gray-200 bg-white px-2 outline-none hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md transition-shadow cursor-pointer"
         value={currentFontFamily}
         onChange={(e) => editor.chain().focus().setFontFamily(e.target.value).run()}
         title="Font"
       >
         {FONT_FAMILIES.map(font => (
-          <option key={font.name} value={font.value}>{font.name}</option>
+          <option key={font.name} value={font.value} style={{fontFamily: font.value}}>{font.name}</option>
         ))}
       </select>
 
       {/* Font Size */}
       <select 
-        className="h-6 w-[52px] border border-gray-300 bg-white px-1 outline-none hover:border-blue-400 focus:border-blue-500 cursor-default"
+        className="h-8 w-[64px] text-sm border border-gray-200 bg-white px-2 outline-none hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md transition-shadow cursor-pointer"
         value={currentFontSize.replace('pt', '')}
         onChange={(e) => editor.chain().focus().setFontSize(`${e.target.value}pt`).run()}
         title="Font Size"
@@ -112,84 +132,86 @@ const MenuBar = ({ editor }: MenuBarProps) => {
         ))}
       </select>
 
-      <div className="w-px h-5 bg-gray-300 mx-0.5" />
+      <div className="w-[1px] h-6 bg-gray-300 mx-1" />
 
       {/* Formatting */}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-1">
         <button 
           onClick={() => editor.chain().focus().toggleBold().run()} 
           className={formatButtonClass(editor.isActive('bold'))}
           title="Bold"
         >
-          <Bold size={14} className="font-bold text-black" strokeWidth={3} />
+          <Bold size={16} strokeWidth={2.5} />
         </button>
         <button 
           onClick={() => editor.chain().focus().toggleItalic().run()} 
           className={formatButtonClass(editor.isActive('italic'))}
           title="Italic"
         >
-          <Italic size={14} className="italic text-black" strokeWidth={2.5} />
+          <Italic size={16} strokeWidth={2.5} />
         </button>
         <button 
           onClick={() => editor.chain().focus().toggleUnderline().run()} 
           className={formatButtonClass(editor.isActive('underline'))}
           title="Underline"
         >
-          <UnderlineIcon size={14} className="text-black" strokeWidth={2.5} />
+          <UnderlineIcon size={16} strokeWidth={2.5} />
         </button>
       </div>
 
+      <div className="w-[1px] h-6 bg-gray-300 mx-1" />
+
       {/* Color Picker Native */}
-      <div className="flex items-center ml-0.5 relative group">
-        <div className="flex items-center h-6 px-0.5 border border-transparent hover:border-gray-300 hover:bg-gray-100 rounded-sm overflow-hidden cursor-pointer" title="Font Color">
+      <div className="flex items-center group relative" title="Text Color">
+        <div className="p-1 w-8 h-8 rounded-md flex items-center justify-center border border-transparent hover:bg-gray-200 transition-colors cursor-pointer relative overflow-hidden">
           <input 
             type="color" 
             value={currentColor} 
             onChange={handleColorChange}
-            className="w-5 h-5 p-0 border-0 cursor-pointer bg-transparent"
+            className="absolute -inset-2 w-16 h-16 cursor-pointer opacity-0"
           />
-          <div className="px-0.5 text-gray-500 text-[10px]">▼</div>
+          <div className="w-4 h-4 rounded-sm border border-gray-200 shadow-sm pointer-events-none" style={{ backgroundColor: currentColor }}></div>
         </div>
       </div>
 
-      <div className="w-px h-5 bg-gray-300 mx-0.5" />
+      <div className="w-[1px] h-6 bg-gray-300 mx-1" />
 
       {/* Alignment */}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-1">
         <button 
           onClick={() => editor.chain().focus().setTextAlign('left').run()} 
-          className={`p-1 border flex items-center justify-center min-w-[24px] ${editor.isActive({ textAlign: 'left' }) ? 'bg-white border-red-400 text-black shadow-sm' : 'border-transparent hover:border-gray-300 hover:bg-gray-100 text-gray-600'}`}
+          className={formatButtonClass(editor.isActive({ textAlign: 'left' }))}
           title="Align Left"
         >
-          <AlignLeft size={14} />
+          <AlignLeft size={16} strokeWidth={2} />
         </button>
         <button 
           onClick={() => editor.chain().focus().setTextAlign('center').run()} 
-          className={`p-1 border flex items-center justify-center min-w-[24px] ${editor.isActive({ textAlign: 'center' }) ? 'bg-white border-red-400 text-black shadow-sm' : 'border-transparent hover:border-gray-300 hover:bg-gray-100 text-gray-600'}`}
+          className={formatButtonClass(editor.isActive({ textAlign: 'center' }))}
           title="Align Center"
         >
-          <AlignCenter size={14} />
+          <AlignCenter size={16} strokeWidth={2} />
         </button>
         <button 
           onClick={() => editor.chain().focus().setTextAlign('right').run()} 
-          className={`p-1 border flex items-center justify-center min-w-[24px] ${editor.isActive({ textAlign: 'right' }) ? 'bg-white border-red-400 text-black shadow-sm' : 'border-transparent hover:border-gray-300 hover:bg-gray-100 text-gray-600'}`}
+          className={formatButtonClass(editor.isActive({ textAlign: 'right' }))}
           title="Align Right"
         >
-          <AlignRight size={14} />
+          <AlignRight size={16} strokeWidth={2} />
         </button>
       </div>
 
-      <div className="w-px h-5 bg-gray-300 mx-0.5" />
+      <div className="w-[1px] h-6 bg-gray-300 mx-1" />
 
-      {/* Insert Dropdown */}
+      {/* Insert Dropdown & Clear */}
       <div className="flex items-center gap-1">
         <select 
-          className="h-6 border border-gray-300 bg-white px-1 outline-none hover:border-blue-400 focus:border-blue-500 w-20 cursor-default"
+          className="h-8 text-sm border border-gray-200 bg-white px-2 outline-none hover:border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-[100px] rounded-md transition-shadow cursor-pointer"
           onChange={insertPlaceholder}
           defaultValue=""
-          title="Insert Placeholder"
+          title="Insert Field Variable"
         >
-          <option value="" disabled>Insert ▼</option>
+          <option value="" disabled>Insert</option>
           <option value="Sheet Name">Sheet Name</option>
           <option value="Workbook Name">Workbook Name</option>
           <option value="Data Update Time">Data Update Time</option>
@@ -199,10 +221,10 @@ const MenuBar = ({ editor }: MenuBarProps) => {
         
         <button 
           onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} 
-          className="p-1 border border-transparent hover:border-gray-300 hover:bg-gray-100 rounded-sm text-red-600 min-w-[24px] flex items-center justify-center"
+          className="ml-1 p-1.5 rounded-md flex items-center justify-center min-w-[32px] text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors focus:outline-none"
           title="Clear Formatting"
         >
-          <X size={14} strokeWidth={2} />
+          <X size={16} strokeWidth={2.5} />
         </button>
       </div>
     </div>
@@ -232,8 +254,8 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
     content,
     editorProps: {
       attributes: {
-        class: `prose dark:prose-invert max-w-none focus:outline-none p-2 text-[#333333]`,
-        style: `font-family: Arial, sans-serif; font-size: 14pt; min-height: ${minHeight};`
+        class: `prose max-w-none focus:outline-none p-4 text-gray-800 leading-relaxed`,
+        style: `font-family: Arial, sans-serif; font-size: 15pt; min-height: ${minHeight};`
       },
     },
     onUpdate: ({ editor }) => {
@@ -242,9 +264,9 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
   });
 
   return (
-    <div className="border border-gray-400 flex flex-col h-full bg-white text-sm" style={{ boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)' }}>
+    <div className="border border-gray-200 rounded-md flex flex-col h-full bg-white overflow-hidden shadow-sm">
       <MenuBar editor={editor} />
-      <div className="flex-1 overflow-y-auto bg-[#fffff8]">
+      <div className="flex-1 overflow-y-auto bg-white cursor-text" onClick={() => editor?.chain().focus().run()}>
         <EditorContent editor={editor} />
       </div>
     </div>

@@ -5,8 +5,15 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Bold, Italic, List, ListOrdered, Quote, Heading2, ImageIcon, Link as LinkIcon, Loader2 } from 'lucide-react';
+import TextStyle from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
+import FontFamily from '@tiptap/extension-font-family';
+import TextAlign from '@tiptap/extension-text-align';
+import Underline from '@tiptap/extension-underline';
+import { Bold, Italic, List, ListOrdered, Quote, Heading2, ImageIcon, Link as LinkIcon, Loader2, GripHorizontal, AlignLeft, AlignCenter, AlignRight, Underline as UnderlineIcon } from 'lucide-react';
 import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useCharts, useDatasetData } from '@/hooks/useApi';
 import { ChartRenderer } from './ChartRenderer';
 
@@ -169,8 +176,9 @@ const ResizableChartComponent = ({ node, updateAttributes, selected }: NodeViewP
         startNodeX.current = parseInt(node.attrs.x, 10) || 0;
         startNodeY.current = parseInt(node.attrs.y, 10) || 0;
         
-        // Push z-index up temporarily logic can be implemented here if needed.
-    }, [node.attrs.x, node.attrs.y]);
+        // Bring to front
+        updateAttributes({ zIndex: Date.now() % 100000 });
+    }, [node.attrs.x, node.attrs.y, updateAttributes]);
 
     const handleDragMove = useCallback((e: MouseEvent) => {
         if (!isDragging) return;
@@ -351,6 +359,303 @@ const ChartNode = Node.create({
     }
 });
 
+const TextModalEditor = ({ initialContent, onChange }: { initialContent: string, onChange: (c: string) => void }) => {
+    const editor = useEditor({
+        extensions: [
+            StarterKit,
+            TextStyle,
+            Color,
+            FontFamily,
+            Underline,
+            TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        ],
+        content: initialContent,
+        onUpdate: ({ editor }) => {
+            onChange(editor.getHTML());
+        },
+        editorProps: {
+            attributes: {
+                class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[200px] border border-border rounded-md p-4'
+            }
+        }
+    });
+
+    if (!editor) return null;
+
+    return (
+        <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-1 p-2 border rounded-md shadow-sm border-border bg-card">
+                <Select
+                    value={editor.getAttributes('textStyle').fontFamily || 'Inter'}
+                    onValueChange={(val) => editor.chain().focus().setFontFamily(val).run()}
+                >
+                    <SelectTrigger className="w-[140px] h-8">
+                        <SelectValue placeholder="Font" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                        <SelectItem value="Inter">Inter</SelectItem>
+                        <SelectItem value="Arial">Arial</SelectItem>
+                        <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                        <SelectItem value="Courier New">Courier New</SelectItem>
+                        <SelectItem value="Tableau Book">Tableau Book</SelectItem>
+                        <SelectItem value="Tableau Bold">Tableau Bold</SelectItem>
+                        <SelectItem value="Trebuchet MS">Trebuchet MS</SelectItem>
+                        <SelectItem value="Verdana">Verdana</SelectItem>
+                        <SelectItem value="Roboto">Roboto</SelectItem>
+                        <SelectItem value="Open Sans">Open Sans</SelectItem>
+                        <SelectItem value="Lato">Lato</SelectItem>
+                        <SelectItem value="Montserrat">Montserrat</SelectItem>
+                        <SelectItem value="Poppins">Poppins</SelectItem>
+                        <SelectItem value="Nunito">Nunito</SelectItem>
+                        <SelectItem value="Playfair Display">Playfair Display</SelectItem>
+                        <SelectItem value="Merriweather">Merriweather</SelectItem>
+                        <SelectItem value="Georgia">Georgia</SelectItem>
+                        <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
+                        <SelectItem value="Impact">Impact</SelectItem>
+                        <SelectItem value="Pacifico">Pacifico</SelectItem>
+                        <SelectItem value="Caveat">Caveat</SelectItem>
+                        <SelectItem value="Fira Code">Fira Code</SelectItem>
+                        <SelectItem value="JetBrains Mono">JetBrains Mono</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <div className="w-px h-4 mx-1 bg-border" />
+                
+                <input 
+                    type="color" 
+                    className="w-6 h-6 p-0 border-0 rounded cursor-pointer shrink-0"
+                    value={editor.getAttributes('textStyle').color || '#000000'}
+                    onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+                />
+
+                <div className="w-px h-4 mx-1 bg-border" />
+
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.chain().focus().toggleBold().run()} data-active={editor.isActive('bold') ? 'true' : 'false'}>
+                    <Bold className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.chain().focus().toggleItalic().run()} data-active={editor.isActive('italic') ? 'true' : 'false'}>
+                    <Italic className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.chain().focus().toggleUnderline().run()} data-active={editor.isActive('underline') ? 'true' : 'false'}>
+                    <UnderlineIcon className="w-4 h-4" />
+                </Button>
+
+                <div className="w-px h-4 mx-1 bg-border" />
+
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.chain().focus().setTextAlign('left').run()} data-active={editor.isActive({ textAlign: 'left' }) ? 'true' : 'false'}>
+                    <AlignLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.chain().focus().setTextAlign('center').run()} data-active={editor.isActive({ textAlign: 'center' }) ? 'true' : 'false'}>
+                    <AlignCenter className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editor.chain().focus().setTextAlign('right').run()} data-active={editor.isActive({ textAlign: 'right' }) ? 'true' : 'false'}>
+                    <AlignRight className="w-4 h-4" />
+                </Button>
+            </div>
+            <EditorContent editor={editor} />
+        </div>
+    );
+};
+
+const FloatingTextComponent = ({ node, updateAttributes, selected }: NodeViewProps) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [tempContent, setTempContent] = useState(node.attrs.contentHtml);
+
+    // Resize state
+    const [isResizing, setIsResizing] = useState(false);
+    const startX = useRef(0);
+    const startWidth = useRef(0);
+
+    // Drag (Move) state
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStartX = useRef(0);
+    const dragStartY = useRef(0);
+    const startNodeX = useRef(0);
+    const startNodeY = useRef(0);
+
+    const handleResizeStart = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsResizing(true);
+        startX.current = e.clientX;
+        const widthVal = node.attrs.width;
+        startWidth.current = parseInt(widthVal === 'auto' ? '300' : widthVal, 10) || 300;
+    }, [node.attrs.width]);
+
+    const handleResizeMove = useCallback((e: MouseEvent) => {
+        if (!isResizing) return;
+        const deltaX = e.clientX - startX.current;
+        const newWidth = Math.max(100, startWidth.current + deltaX);
+        updateAttributes({ width: `${newWidth}px` });
+    }, [isResizing, updateAttributes]);
+
+    const handleResizeEnd = useCallback(() => setIsResizing(false), []);
+
+    const handleDragStart = useCallback((e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest('.resize-handle')) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+        dragStartX.current = e.clientX;
+        dragStartY.current = e.clientY;
+        startNodeX.current = parseInt(node.attrs.x, 10) || 0;
+        startNodeY.current = parseInt(node.attrs.y, 10) || 0;
+
+        // Bring to front
+        updateAttributes({ zIndex: Date.now() % 100000 });
+    }, [node.attrs.x, node.attrs.y, updateAttributes]);
+
+    const handleDragMove = useCallback((e: MouseEvent) => {
+        if (!isDragging) return;
+        const deltaX = e.clientX - dragStartX.current;
+        const deltaY = e.clientY - dragStartY.current;
+        const newX = Math.max(0, startNodeX.current + deltaX);
+        const newY = Math.max(0, startNodeY.current + deltaY);
+        updateAttributes({ x: `${newX}px`, y: `${newY}px` });
+    }, [isDragging, updateAttributes]);
+
+    const handleDragEnd = useCallback(() => setIsDragging(false), []);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleResizeMove);
+            window.addEventListener('mouseup', handleResizeEnd);
+        } else if (isDragging) {
+            window.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleResizeMove);
+            window.removeEventListener('mouseup', handleResizeEnd);
+            window.removeEventListener('mousemove', handleDragMove);
+            window.removeEventListener('mouseup', handleDragEnd);
+        };
+    }, [isResizing, isDragging, handleResizeMove, handleResizeEnd, handleDragMove, handleDragEnd]);
+
+    const handleDoubleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setTempContent(node.attrs.contentHtml);
+        setIsEditing(true);
+    };
+
+    return (
+        <NodeViewWrapper 
+            className="react-component-wrapper absolute"
+            style={{ 
+                left: node.attrs.x, 
+                top: node.attrs.y,
+                width: node.attrs.width, 
+                height: node.attrs.height,
+                zIndex: isDragging ? 50 : (selected ? 40 : node.attrs.zIndex)
+            }}
+        >
+            <div 
+                onDoubleClick={handleDoubleClick}
+                onMouseDown={handleDragStart}
+                className={`group relative p-4 border rounded-md transition-colors cursor-move ${selected || isDragging ? 'ring-2 ring-primary bg-card/50' : 'border-transparent hover:border-border bg-transparent'}`}
+                style={{ width: '100%', minHeight: '40px' }}
+            >
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -mt-3 opacity-0 group-hover:opacity-100 p-1 bg-card border rounded-full shadow-sm cursor-grab">
+                    <GripHorizontal className="w-3 h-3 text-muted-foreground" />
+                </div>
+
+                <div 
+                    className="w-full h-full prose prose-sm dark:prose-invert max-w-none pointer-events-none"
+                    dangerouslySetInnerHTML={{ __html: node.attrs.contentHtml || '<p class="text-muted-foreground">Empty text box...</p>' }}
+                />
+
+                <div 
+                    className="resize-handle absolute bottom-0 right-0 w-6 h-6 cursor-e-resize flex items-center justify-center p-1 opacity-0 group-hover:opacity-100"
+                    onMouseDown={handleResizeStart}
+                >
+                    <div className="w-1 h-3 border-r-2 border-primary/50" />
+                </div>
+            </div>
+
+            <Dialog open={isEditing} onOpenChange={setIsEditing}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Edit Text</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <TextModalEditor 
+                            initialContent={tempContent} 
+                            onChange={setTempContent} 
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                        <Button onClick={() => {
+                            updateAttributes({ contentHtml: tempContent });
+                            setIsEditing(false);
+                        }}>Save Changes</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </NodeViewWrapper>
+    );
+};
+
+const FloatingTextNode = Node.create({
+    name: 'floatingText',
+    group: 'block',
+    atom: true,
+
+    addAttributes() {
+        return {
+            contentHtml: { default: '<p>Edit me...</p>' },
+            width: { default: '300px' },
+            height: { default: 'auto' },
+            x: { default: '20px' },
+            y: { default: '20px' },
+            zIndex: { default: 20 }
+        };
+    },
+
+    parseHTML() {
+        return [
+            {
+                tag: 'div[data-floating-text]',
+                getAttrs: (node) => {
+                    if (typeof node === 'string') return {};
+                    return {
+                        contentHtml: node.getAttribute('data-content-html') || '<p>Edit me...</p>',
+                        width: node.getAttribute('data-width') || '300px',
+                        height: node.getAttribute('data-height') || 'auto',
+                        x: node.getAttribute('data-x') || '20px',
+                        y: node.getAttribute('data-y') || '20px',
+                        zIndex: parseInt(node.getAttribute('data-z') || '20', 10),
+                    };
+                },
+            },
+        ];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return [
+            'div',
+            mergeAttributes(HTMLAttributes, {
+                'data-floating-text': 'true',
+                'data-content-html': HTMLAttributes.contentHtml,
+                'data-width': HTMLAttributes.width,
+                'data-height': HTMLAttributes.height,
+                'data-x': HTMLAttributes.x,
+                'data-y': HTMLAttributes.y,
+                'data-z': HTMLAttributes.zIndex,
+                style: `position: absolute; left: ${HTMLAttributes.x}; top: ${HTMLAttributes.y}; z-index: ${HTMLAttributes.zIndex}; width: ${HTMLAttributes.width}; height: ${HTMLAttributes.height}; display: flex; flex-direction: column;`,
+                class: 'floating-text-placeholder select-none cursor-move',
+                contenteditable: 'false'
+            }),
+            ['div', { class: 'prose prose-sm max-w-none' }]
+        ];
+    },
+
+    addNodeView() {
+        return ReactNodeViewRenderer(FloatingTextComponent);
+    }
+});
+
 export function StoryEditor({ content, onChange }: StoryEditorProps) {
     const editor = useEditor({
         extensions: [
@@ -363,6 +668,7 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                 placeholder: 'Write your story narrative here. You can paste image URLs, format text, and add insights...',
             }),
             ChartNode,
+            FloatingTextNode,
         ],
         content,
         onUpdate: ({ editor }) => {
@@ -425,22 +731,39 @@ export function StoryEditor({ content, onChange }: StoryEditorProps) {
                     chain.insertContent(chartNodeData).run();
                 } else if (parsed.source === 'text-element') {
                     e.preventDefault();
-                    const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
                     
-                    let textHtml = '<p>Write your text here...</p>';
+                    const editorEl = editor.view.dom as HTMLElement;
+                    const editorBounds = editorEl.getBoundingClientRect();
+                    const dropX = e.clientX - editorBounds.left;
+                    const dropY = e.clientY - editorBounds.top;
+                    
+                    let defaultContent = '<p>Write your text here...</p>';
                     if (parsed.type === 'heading') {
-                        textHtml = '<h2>Heading</h2><p>Write your text here...</p>';
+                        defaultContent = '<h2>Heading</h2>';
                     }
 
-                    let textChain = editor.chain().focus();
+                    const textNodeData = {
+                        type: 'floatingText',
+                        attrs: {
+                            contentHtml: defaultContent,
+                            width: '300px',
+                            height: 'auto',
+                            x: `${Math.max(0, dropX)}px`,
+                            y: `${Math.max(0, dropY)}px`,
+                            zIndex: 20
+                        }
+                    };
+
+                    const coordinates = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+                    let chain = editor.chain().focus();
                     if (coordinates) {
                         try {
-                            textChain = textChain.setTextSelection(coordinates.pos);
+                            chain = chain.setTextSelection(coordinates.pos);
                         } catch (e) {
                             // ignore
                         }
                     }
-                    textChain.insertContent(textHtml).run();
+                    chain.insertContent(textNodeData).run();
                 }
             }
         } catch (err) {
