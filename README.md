@@ -1,86 +1,92 @@
-# DataLens - Enterprise AI Analytics & BI Platform
+<div align="center">
+  <img src="https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E" alt="Vite" />
+  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go" />
+  
+  <h1>DataLens : Enterprise AI Analytics & BI Platform</h1>
+  <p>A comprehensive, high-performance Business Intelligence (BI) and Data Engineering platform empowering organizations to bridge the gap between raw data silos and strategic decision-making.</p>
+</div>
 
-[![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)](https://vitejs.dev/)
-[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Go](https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev/)
-[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+---
 
-DataLens is a high-performance, enterprise-grade **Business Intelligence (BI) and Data Engineering platform**. It bridges the gap between raw data silos and strategic decision-making by leveraging a sophisticated **NL2SQL AI Engine** and a **Modern Hybrid Data Architecture**.
+**DataLens** acts as an all-in-one Data Operating System. From bringing in raw data via Visual ETL, tracking metrics via KPI Scorecards, building responsive dashboards, all the way to querying data via our **Natural Language to SQL (NL2SQL) AI Engine**, DataLens handles the full lifecycle of modern enterprise analytics.
+
+## 🚀 Comprehensive Feature Setup
+
+We've evolved far beyond a simple dashboarding tool. DataLens is equipped with over **40+ specialized modules** dedicated to deep data work.
+
+### 🤖 AI-Powered Analytics
+- **Ask Data (NL2SQL)**: Chat with your data. A highly optimized AI inference engine converts natural language to optimized SQL queries and automatically renders the appropriate charts.
+- **AI Reports & Data Stories**: Automatically generates executive summaries and explanatory narratives from raw datasets or specific visualizations.
+- **Enterprise Data Assistant**: Context-aware AI assistant integrated directly into the SQL Query Editor and ETL pipelines to aid in complex logic formulation and debugging.
+
+### 🛠️ Data Engineering & Modeling
+- **Visual ETL & Pipeline Builder**: A node-based, drag-and-drop interface for Extracting, Transforming, and Loading (ETL) your data.
+- **Smart Schema & DB Diagram (ERD)**: Automated database profiling to visualize table relationships, foreign keys, and constraints perfectly.
+- **Data Modeling & calculated Fields**: Add custom business logic, derived metrics, and dynamic calculated columns.
+- **Data Profiling**: Deep insights instantly into your datasets (null distributions, min/max metrics, categorical breakdowns).
+- **Data Refresh**: Set up automated synchronization schedules for keeping datasets in parity with live sources.
+- **External Connections**: Out-of-the-box support to plug into external PostgreSQL, MySQL, SQL Server, Snowflake, and BigQuery instances.
+- **Data Upload**: Native parsing and uploads of massive CSV, JSON, and Excel documents.
+
+### 📊 Advanced Visualization & Dashboarding
+- **Chart & Dashboard Builder**: Responsive, grid-based drag-and-drop canvas supporting an expansive library of rich interactable elements.
+- **Geo-Visualization**: Interactive spatial mapping for regional performance. Powered by MapLibre and Deck.gl for millions of data points.
+- **Pivot Tables**: Advanced multi-dimensional tabular operations to slice and dice categorical data natively in the browser.
+- **KPI Scorecards**: Executive metric tracking, benchmarking, and real-time comparative analysis against targets.
+- **Interactive Drill-Downs & Cross-Filtering**: Effortlessly narrow down details. Clicking an element in one chart automatically filters every other chart on the dashboard.
+- **Conditional Formatting**: Excel-like cell formatting logic to highlight anomalies visually.
+
+### 🔐 Enterprise Governance & Security
+- **Row-Level Security (RLS) & Data Privacy**: Highly granular access control policies to ensure multi-tenant safety and PII protection.
+- **Embed & Share (Iframe)**: Secure, signed URLs and mechanisms to embed specific charts or full dashboards into external company portals.
+- **Scheduled Reports**: Push automated dashboards as PDFs or images via Email or Webhooks.
+- **Annotations & Alerts**: Set up threshold-based alerts (e.g., "Alert me if revenue drops below $5k") and annotate specific chart peaks for team collaboration.
+- **Bookmarks & Report Templates**: Save specific states of filters/parameters, and reuse standardized report UI layouts instantly.
 
 ---
 
 ## 🏛️ System Architecture
 
-DataLens is built on the principles of **Clean Architecture** and **Domain-Driven Design**, ensuring decoupling between data ingestion, analytical processing, and client delivery.
+DataLens utilizes a decoupled **Clean Architecture**, supporting stateless frontend interactions with highly specialized backend services.
 
 ```mermaid
 graph TD
-    User((User)) -->|Natural Language / UI| FE[React + Vite Frontend]
-    FE -->|REST API Request / SSE| BE[Go Fiber / Node Backend]
-    
-    subgraph "Analytical Engine"
-        BE -->|Context Grounding| LLM[OpenAI/Fine-tuned LLM]
-        LLM -->|SQL Generation| QueryEngine[SQL Execution Engine]
-    end
+    User((User)) -->|Browser| FE[React + Vite Frontend]
+    FE -->|Data / Auth / Realtime SSE| Supabase[(Supabase Backend)]
+    FE -->|AI Inference & NL2SQL| API[Go/Node Engine]
     
     subgraph "Data Storage & Processing"
-        QueryEngine -->|Metadata & Auth| Supabase[(Supabase)]
-        QueryEngine -->|User Data| ExternalDB[(External Databases)]
+        API -->|Context Grounding| LLM[LLM / OpenAI]
+        LLM -->|SQL| Supabase
+        Supabase -->|Sync| ExtDB[(External Database Replicas)]
     end
     
-    subgraph "Automated Workflows"
-        ExtData[(CSV / External)] -->|Upload / Sync| Pipeline[ETL Pipeline]
-        Pipeline -->|Transform| Warehouse[(Data Warehouse)]
+    subgraph "Analytics & Background Workflows"
+        ExtData[(Raw Assets: CSV / JSON)] -->|Load| ETL[ETL Pipeline Engine]
+        ETL -->|Transform| Warehouse[(Clean Data Warehouse)]
     end
 ```
 
 ---
 
-## 🚀 Key Features & Capabilities
-
-DataLens has grown into a comprehensive BI and Analytics operating system:
-
-### 🛠️ Data Infrastructure & Engineering
-- **External Connections**: Support for PostgreSQL, MySQL, SQL Server, BigQuery, and Snowflake out of the box.
-- **Visual ETL Engine & Data Pipeline**: Drag-and-drop pipeline for data ingestion, transformation, and warehouse mapping.
-- **Smart Schema & DB Diagram**: Automated database profiling, relationship visualization (ERD Generation), and data modeling tools.
-- **Data Profiling**: Deep insights into dataset quality, completeness, and distribution instantly.
-- **Data Refresh & Scheduling**: Automated synchronization for keeping datasets in perfect parity with sources.
-
-### 🧠 Advanced AI Capabilities
-- **Ask Data (NL2SQL)**: Chat with your data in natural language. The AI converts queries to SQL and runs them securely.
-- **AI Reports & Data Stories**: Automated AI-generated insights summarization from raw data to generate executive summaries.
-- **Enterprise Data Assistant**: Context-aware AI integrated directly into the Query Editor and ETL builders to aid in complex logic.
-
-### 📊 Visualization & Dashboarding
-- **Chart Builder & Dashboard Builder**: Responsive, drag-and-drop canvas with full charting library (ECharts & Recharts).
-- **Interactive Dashboards**: Features like Cross-Filtering, Drill-Downs, Parameters, and dynamic filtering.
-- **Pivot Tables & KPI Scorecards**: Advanced tabular analysis and executive performance tracking components.
-- **Geo-Visualization**: Interactive spatial mapping for regional and geographical data tracking.
-- **Conditional Formatting & Calculated Fields**: Excel-like cell formatting and custom business logic editor for derived metrics.
-
-### 🔐 Security & Governance
-- **Row-Level Security (RLS)** & Data Privacy: Granular access control for sensitive report sharing and multi-tenant isolation.
-- **Embed & Share**: Secure iFrame embedding and public/private sharing mechanisms.
-- **Report Automation**: Scheduled reports delivered via email/webhook, plus PDF Export capabilities.
-
----
-
 ## 💻 Technical Stack
 
-### Frontend Architecture
-- **Framework**: React 18, TypeScript, Vite
-- **Styling**: Tailwind CSS, Shadcn UI (Radix Primitives)
-- **State Management**: Zustand, TanStack Query (React Query)
-- **Visualization**: Recharts, Apache ECharts, Deck.gl / React Map GL
-- **Interactions**: Framer Motion, @hello-pangea/dnd (Drag and Drop), React Grid Layout
+This project is built using 2024-standard modern web primitives:
 
-### Backend & Infrastructure
-- **Core API**: Go (Golang) / Node.js
-- **Database**: PostgreSQL / Supabase
-- **Realtime**: Server-Sent Events (SSE) / WebSockets
-- **Authentication**: JWT, OAuth Integration
+### **Frontend Infrastructure**
+- **Core Framework**: React 18 + TypeScript + Vite.
+- **Styling**: Tailwind CSS, Shadcn UI (accessible Radix primitives).
+- **State & Data**: Zustand (Global UI state), TanStack Query / React Query (Server-state caching).
+- **Visuals & Charts**: Apache ECharts, Recharts, Deck.gl, React Map GL for rendering robust top-tier graphical reports.
+- **Interactions**: Framer Motion (micro-animations), @hello-pangea/dnd / React Grid Layout (Dashboard Canvas).
+
+### **Backend & Storage**
+- **Database & Auth**: Supabase (PostgreSQL with highly tuned RLS and JWT Auth).
+- **AI Processing**: Native integration flows bridging LLMs with secure SQL execution contexts to prevent SQL injections or hallucinations.
 
 ---
 
@@ -88,13 +94,16 @@ DataLens has grown into a comprehensive BI and Analytics operating system:
 
 ```text
 .
-├── src/                   # React Frontend Source
-│   ├── components/        # Reusable UI components & Layouts (Shadcn + Custom)
-│   ├── context/           # React Context for Global Authentication/Theme
-│   ├── hooks/             # Custom React Hooks
-│   ├── pages/             # 40+ Managed BI Feature Pages (ETL, Dashboard, Schema, Auth, etc.)
-│   └── lib/               # Utilities, styling helpers (cn), API clients
-├── package.json           # Frontend dependencies and scripts
+├── src/
+│   ├── components/        # Isolated, reusable UI components and generic templates
+│   ├── context/           # React Context (AuthContext for session management)
+│   ├── hooks/             # Utility hooks (window dimension tracking, debouncing)
+│   ├── lib/               # Utilities (Tailwind `cn` merger, standard helper logic)
+│   ├── pages/             # 40+ Top-Level Features (AskData, Dashboard, ChartBuilder, GeoVisualization, etc.)
+│   ├── App.tsx            # Main router configuration linking all features
+│   └── main.tsx           # Entry point
+├── tailwind.config.ts     # Global styling variables and custom animations
+├── package.json           # Dependencies and scripts
 └── README.md              # You are here!
 ```
 
@@ -105,9 +114,9 @@ DataLens has grown into a comprehensive BI and Analytics operating system:
 ### Prerequisites
 - Node.js (v18+)
 - npm or pnpm
-- A Supabase Project (for DB & metadata Auth)
+- A Supabase Project configured locally or in the cloud for DB and Authentication handling.
 
-### Setup Instructions
+### Quick Setup
 
 1. **Clone the repository:**
    ```bash
@@ -120,28 +129,28 @@ DataLens has grown into a comprehensive BI and Analytics operating system:
    npm install
    ```
 
-3. **Environment Setup:**
-   Create a `.env` file in the root directory.
+3. **Configure the Environment:**
+   Create a `.env` file in the root directory. Grab these from your Supabase Dashboard:
    ```env
-   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_URL=your_supabase_project_url
    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
-4. **Run the Development Server:**
+4. **Boot up:**
    ```bash
    npm run dev
    ```
 
-5. **Build for Production:**
+5. **Build for Production / Deployment:**
    ```bash
    npm run build
    ```
 
 ---
 
-## 📩 Contact & Portfolio
+## 📩 Contact & Purpose
 
-*This project serves as a showcase of capabilities in full-stack architecture, data engineering, and AI integration.*
+*This project exemplifies capabilities in complex full-stack architectures, high-performance data engineering, scalable UI ecosystems, and native AI integration.* 
 
-- **Goal**: Enabling 10x faster speed-to-insight for non-technical stakeholders through beautiful interfaces and powerful query engines.
-- **Availability**: Open to Data Engineer, Backend Architect, or Senior Full-stack opportunities.
+- **Ultimate Goal**: Create a self-service reality empowering non-technical stakeholders to get 10x faster speed-to-insight without writing SQL.
+- **Availability**: Open to Data Engineer, Backend/Frontend Architect, or Senior Full-stack opportunities.
