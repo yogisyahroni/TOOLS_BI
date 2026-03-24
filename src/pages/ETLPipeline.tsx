@@ -1079,14 +1079,14 @@ Always prioritize business value and data quality.`;
         </div>
 
         {/* AI Chat Panel */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-6">
+        <div className="lg:col-span-1 flex flex-col h-[calc(100vh-12rem)] min-h-[500px]">
+          <div className="sticky top-6 flex-1 h-full">
             <AIChatPanel
               systemPrompt={getAIPrompt()}
               title={selectedSource ? `AI ETL: ${dataSets.find(ds => ds.id === selectedSource)?.name}` : "AI ETL Assistant"}
               placeholder={selectedSource ? "e.g., Filter high value orders then group by region..." : "Select a source to start..."}
               onAIResponse={handleAIResponse}
-              className="h-fit"
+              className="h-full"
             />
           </div>
         </div>
