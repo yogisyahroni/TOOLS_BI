@@ -8,7 +8,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useDatasets, useDeleteDataset, useDatasetData } from '@/hooks/useApi';
@@ -18,7 +19,21 @@ export default function Datasets() {
   const { data: datasets = [], isLoading, isError, refetch } = useDatasets();
   const deleteMut = useDeleteDataset();
   const [selectedDataset, setSelectedDataset] = useState<DatasetItem | null>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'uploads' | 'pipelines' | 'ai'>('all');
   const { toast } = useToast();
+
+  const filteredDatasets = useMemo(() => {
+    return datasets.filter((ds) => {
+      if (activeTab === 'all') return true;
+      const isPipeline = ds.name.endsWith('(Result)') || ds.fileName?.endsWith('_output.sql');
+      const isAI = ds.name.endsWith('(AI Generated)');
+      
+      if (activeTab === 'pipelines') return isPipeline;
+      if (activeTab === 'ai') return isAI;
+      if (activeTab === 'uploads') return !isPipeline && !isAI;
+      return true;
+    });
+  }, [datasets, activeTab]);
 
   // Lazy-load preview data when a dataset is selected in the dialog
   const { data: previewResult } = useDatasetData(selectedDataset?.id ?? '', { page: 1, limit: 50 });
@@ -78,10 +93,21 @@ export default function Datasets() {
         </div>
       </motion.div>
 
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
+        <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)} className="w-full overflow-x-auto pb-2">
+          <TabsList className="bg-card border border-border inline-flex min-w-max">
+            <TabsTrigger value="all">All Datasets</TabsTrigger>
+            <TabsTrigger value="uploads">Uploaded Data</TabsTrigger>
+            <TabsTrigger value="pipelines">Pipeline Results</TabsTrigger>
+            <TabsTrigger value="ai">AI Generated</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </motion.div>
+
       {/* Datasets Grid */}
       {datasets.length === 0 ? (
         <motion.div
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
           className="bg-card rounded-xl p-8 lg:p-12 border border-border shadow-card text-center"
         >
           <Database className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -89,15 +115,24 @@ export default function Datasets() {
           <p className="text-muted-foreground mb-4">Upload your first dataset to get started with analysis</p>
           <Button asChild className="touch-target"><a href="/upload">Upload Data</a></Button>
         </motion.div>
+      ) : filteredDatasets.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
+          className="bg-card rounded-xl p-8 lg:p-12 border border-border shadow-card text-center"
+        >
+          <Database className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-foreground mb-2">No datasets found</h3>
+          <p className="text-muted-foreground mb-4">There are no datasets in this category.</p>
+        </motion.div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-          {datasets.map((ds, index) => (
+          {filteredDatasets.map((ds, index) => (
             <motion.div
               key={ds.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.07 }}
-              className="bg-card rounded-xl p-6 border border-border shadow-card hover:shadow-glow transition-all duration-300 group"
+              transition={{ duration: 0.5, delay: index * 0.05 }}
+              className="bg-card rounded-xl p-6 border border-border shadow-card hover:shadow-glow transition-all duration-300 group flex flex-col"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
@@ -152,9 +187,27 @@ export default function Datasets() {
                   </Button>
                 </div>
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-1 truncate">{ds.name}</h3>
-              <p className="text-sm text-muted-foreground mb-4">{ds.fileName}</p>
-              <div className="grid grid-cols-2 gap-4">
+              <h3 className="text-lg font-semibold text-foreground mb-1 truncate" title={ds.name}>{ds.name}</h3>
+              <p className="text-sm text-muted-foreground mb-4 truncate" title={ds.fileName}>{ds.fileName}</p>
+              
+              {/* Type Badge */}
+              <div className="mb-4">
+                {ds.name.endsWith('(Result)') || ds.fileName?.endsWith('_output.sql') ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                    Pipeline Result
+                  </span>
+                ) : ds.name.endsWith('(AI Generated)') ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                    AI Generated
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
+                    Uploaded Data
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-auto">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <BarChart3 className="w-4 h-4 text-primary" />
                   <span>{ds.rowCount.toLocaleString()} rows</span>
