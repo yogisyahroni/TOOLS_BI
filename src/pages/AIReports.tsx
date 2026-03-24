@@ -488,7 +488,7 @@ Format tanggapan Anda sebagai laporan markdown komprehensif dalam Bahasa Indones
         <div className="xl:col-span-1 flex flex-col h-[calc(100vh-12rem)] min-h-[500px]">
           <div className="sticky top-6 flex-1 h-full">
             <AIChatPanel
-              systemPrompt={`You are a business analytics assistant for DataLens. Help users formulate analysis questions and understand their data. ${dataset ? `Current dataset: "${dataset.name}" with columns: ${dataset.columns.map(c => `${c.name} (${c.type})`).join(', ')}. ${dataset.rowCount} rows.` : 'No dataset selected yet.'}`}
+              systemPrompt={`You are a business analytics assistant for NeuraDash. Help users formulate analysis questions and understand their data. ${dataset ? `Current dataset: "${dataset.name}" with columns: ${dataset.columns.map(c => `${c.name} (${c.type})`).join(', ')}. ${dataset.rowCount} rows.` : 'No dataset selected yet.'}`}
               title="AI Analysis Chat"
               placeholder="Tanyakan tentang data Anda..."
               className="h-full"

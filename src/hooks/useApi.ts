@@ -1,5 +1,5 @@
 /**
- * TanStack Query hooks for DataLens API.
+ * TanStack Query hooks for NeuraDash API.
  * Covers: datasets, dashboards, reports, stories, KPIs, alerts, cron jobs.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

@@ -1,7 +1,7 @@
 /**
  * src/lib/graphql/client.ts
  * ──────────────────────────────────────────────────────────────────────────────
- * Lightweight GraphQL fetch client for DataLens.
+ * Lightweight GraphQL fetch client for NeuraDash.
  *
  * Design decisions:
  *  - NO Apollo / urql — avoids bundle bloat. Raw fetch is < 1 KB.
@@ -58,7 +58,7 @@ export const GQL_ENDPOINT = getGraphQLEndpoint();
 // ---------------------------------------------------------------------------
 
 /**
- * Execute a GraphQL query or mutation against the DataLens backend.
+ * Execute a GraphQL query or mutation against the NeuraDash backend.
  *
  * @param query     GraphQL document string (query / mutation).
  * @param variables Optional variables object.

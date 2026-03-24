@@ -167,7 +167,7 @@ export function Sidebar() {
                   </svg>
                 </div>
                 <div>
-                  <h1 className="font-bold text-foreground">DataLens</h1>
+                  <h1 className="font-bold text-foreground">NeuraDash</h1>
                   <p className="text-xs text-muted-foreground">Analytics Platform</p>
                 </div>
               </motion.div>

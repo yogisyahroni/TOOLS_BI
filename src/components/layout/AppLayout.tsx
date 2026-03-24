@@ -30,7 +30,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <circle cx="20" cy="20" r="10" fill="currentColor" fillOpacity="0.8" />
               </svg>
             </div>
-            <span className="font-bold text-foreground">DataLens</span>
+            <span className="font-bold text-foreground">NeuraDash</span>
           </div>
           <button
             onClick={() => setIsOpen(!isOpen)}

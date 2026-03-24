@@ -193,7 +193,7 @@ export default function ReportTemplates() {
                     { source: 'powerbi' as TemplateSource, label: 'Power BI (.pbix)', desc: 'Import layout dari Power BI Desktop' },
                     { source: 'tableau' as TemplateSource, label: 'Tableau (.twb/.twbx)', desc: 'Import workbook Tableau' },
                     { source: 'pptx' as TemplateSource, label: 'PowerPoint (.pptx)', desc: 'Import slide presentation' },
-                    { source: 'custom' as TemplateSource, label: 'JSON Template', desc: 'Import DataLens template' },
+                    { source: 'custom' as TemplateSource, label: 'JSON Template', desc: 'Import NeuraDash template' },
                   ]).map(item => (
                     <button key={item.source}
                       onClick={() => { setImportSource(item.source); fileRef.current?.click(); }}
@@ -209,7 +209,7 @@ export default function ReportTemplates() {
                     AI-Powered Migration
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    File PBIX, TWB, atau PPTX akan dikirim ke Go Backend. Sistem mengekstrak layout, kemudian AI (LLM) akan secara otomatis menerjemahkan strukturnya ke dalam format JSON DataLens Template List. Proses ini membutuhkan sekitar 10-30 detik tergantung ukuran visualisasi.
+                    File PBIX, TWB, atau PPTX akan dikirim ke Go Backend. Sistem mengekstrak layout, kemudian AI (LLM) akan secara otomatis menerjemahkan strukturnya ke dalam format JSON NeuraDash Template List. Proses ini membutuhkan sekitar 10-30 detik tergantung ukuran visualisasi.
                   </p>
                 </div>
               </div>

@@ -653,7 +653,7 @@ export default function ETLPipelinePage() {
     const selectedSetName = dataSets.find(ds => ds.id === selectedSource)?.name || 'the current data';
     const dsInfo = dataSets.map(ds => `"${ds.name}" (${ds.columns.map(c => `${c.name}:${c.type}`).join(', ')})`).join('; ');
 
-    return `You are an Enterprise Data Preparation Assistant for DataLens. 
+    return `You are an Enterprise Data Preparation Assistant for NeuraDash. 
 Current Target: Analyze and transform "${selectedSetName}".
 Available Datasets context: ${dsInfo || 'none'}.
 

@@ -1,5 +1,5 @@
 /**
- * DataLens API Client
+ * NeuraDash API Client
  * Axios instance with:
  * - JWT Bearer token injected from memory (NOT localStorage — XSS-safe)
  * - 401 → silent refresh via httpOnly cookie → retry
@@ -57,7 +57,7 @@ export function clearTokens() {
     accessToken = null;
     refreshToken = null;
     // Also clear old zustand state to prevent conflicts for existing users
-    localStorage.removeItem('datalens-auth');
+    localStorage.removeItem('neuradash-auth');
 }
 
 // ---------------------------------------------------------------------------

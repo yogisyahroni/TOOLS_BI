@@ -63,7 +63,7 @@ export default function Register() {
                         <Database className="w-6 h-6 text-primary-foreground" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-foreground">DataLens</h1>
+                        <h1 className="text-2xl font-bold text-foreground">NeuraDash</h1>
                         <p className="text-sm text-muted-foreground">BI Platform</p>
                     </div>
                 </div>

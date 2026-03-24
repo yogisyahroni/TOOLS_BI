@@ -67,7 +67,7 @@ export default function EmbedViewer() {
         <div className="w-full h-screen overflow-hidden bg-background">
             {embedData.showToolbar && (
                 <div className="h-12 border-b border-border bg-card flex items-center px-4 shadow-sm z-10 relative">
-                    <span className="font-semibold text-sm">DataLens Embed View</span>
+                    <span className="font-semibold text-sm">NeuraDash Embed View</span>
                 </div>
             )}
             <div className="p-4 h-[calc(100vh)] overflow-auto">
