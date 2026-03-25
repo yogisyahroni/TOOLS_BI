@@ -296,9 +296,9 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 
 	sourceNodeID := "auto_source_node"
 	isChunkable := engine.IsPipelineChunkable(spec)
-	chunkLimit := 100000
+	chunkLimit := 10000 // Safer memory batch size (10k rows)
 	if !isChunkable {
-		chunkLimit = 0
+		chunkLimit = 0 // Needs special treatment to avoid OOM
 	}
 
 	var dbConn connectors.DBConnector
@@ -343,7 +343,10 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		if isExternal {
 			sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, engine.QuoteIdentifier(sourceDataset.DataTableName))
 			if chunkLimit > 0 {
-				sqlQuery = fmt.Sprintf(`%s OFFSET %d LIMIT %d`, sqlQuery, offset, chunkLimit)
+				sqlQuery = fmt.Sprintf(`%s LIMIT %d OFFSET %d`, sqlQuery, chunkLimit, offset)
+			} else {
+				// Hard 50k protection for non-chunkable external queries to prevent Render Server OOM
+				sqlQuery = fmt.Sprintf(`%s LIMIT 50000`, sqlQuery)
 			}
 			res, err := dbConn.Query(ctx, sqlQuery, 0)
 			if err != nil {
@@ -353,7 +356,9 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		} else {
 			q := h.db.Table(sourceDataset.DataTableName)
 			if chunkLimit > 0 {
-				q = q.Offset(offset).Limit(chunkLimit)
+				q = q.Limit(chunkLimit).Offset(offset)
+			} else {
+				q = q.Limit(50000)
 			}
 			if err := q.Find(&chunkRows).Error; err != nil {
 				return pipelineExecResult{status: "error", errMsg: "Failed to query internal database: " + err.Error()}
