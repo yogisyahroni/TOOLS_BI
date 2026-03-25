@@ -441,40 +441,52 @@ export default function ETLPipelinePage() {
   };
 
   const addStep = async (pipelineId: string, type: ETLStep['type']) => {
-    const pipeline = pipelines.find(p => p.id === pipelineId);
+    const currentPipelines = queryClient.getQueryData<any[]>(['pipelines']) || pipelines;
+    const pipeline = currentPipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
     const currentSteps = (pipeline.steps as ETLStep[]) || [];
     const newStep: ETLStep = { id: generateId(), type, config: {}, order: currentSteps.length };
     const newSteps = [...currentSteps, newStep];
+    
+    queryClient.setQueryData(['pipelines'], currentPipelines.map(p => p.id === pipelineId ? { ...p, steps: newSteps } : p));
     try {
       await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: newSteps as any } });
       setExpandedSteps(prev => new Set(prev).add(newStep.id));
     } catch {
       toast({ title: 'Error', description: 'Failed to add step', variant: 'destructive' });
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
     }
   };
 
   const updateStepConfig = async (pipelineId: string, stepId: string, config: Record<string, any>) => {
-    const pipeline = pipelines.find(p => p.id === pipelineId);
+    const currentPipelines = queryClient.getQueryData<any[]>(['pipelines']) || pipelines;
+    const pipeline = currentPipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
     const currentSteps = (pipeline.steps as ETLStep[]) || [];
     const newSteps = currentSteps.map(s => s.id === stepId ? { ...s, config } : s);
+    
+    queryClient.setQueryData(['pipelines'], currentPipelines.map(p => p.id === pipelineId ? { ...p, steps: newSteps } : p));
     try {
       await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: newSteps as any } });
     } catch {
       toast({ title: 'Error', description: 'Failed to update step config', variant: 'destructive' });
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
     }
   };
 
   const removeStep = async (pipelineId: string, stepId: string) => {
-    const pipeline = pipelines.find(p => p.id === pipelineId);
+    const currentPipelines = queryClient.getQueryData<any[]>(['pipelines']) || pipelines;
+    const pipeline = currentPipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
     const currentSteps = (pipeline.steps as ETLStep[]) || [];
     const newSteps = currentSteps.filter(s => s.id !== stepId);
+    
+    queryClient.setQueryData(['pipelines'], currentPipelines.map(p => p.id === pipelineId ? { ...p, steps: newSteps } : p));
     try {
       await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: newSteps as any } });
     } catch {
       toast({ title: 'Error', description: 'Failed to remove step', variant: 'destructive' });
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
     }
   };
 
