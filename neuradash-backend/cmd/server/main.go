@@ -114,6 +114,21 @@ func main() {
 		log.Info().Msg("Performance indexes ensured")
 	}
 
+	// BUGFIX: Reset orphaned 'running' pipelines and runs caused by unexpected server crashes (e.g. OOM kills)
+	if err := db.Model(&models.ETLPipeline{}).Where("status = ?", "running").Updates(map[string]interface{}{
+		"status": "error",
+		"error":  "Pipeline execution interrupted by server restart.",
+	}).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to reset orphaned ETL pipelines")
+	}
+	if err := db.Model(&models.PipelineRun{}).Where("status = ?", "running").Updates(map[string]interface{}{
+		"status": "error",
+		"error":  "Execution interrupted by server restart.",
+	}).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to reset orphaned PipelineRun records")
+	}
+	log.Info().Msg("Orphaned pipeline states checked and reset")
+
 	// --- Redis ---
 	rdb := initRedis(cfg)
 	log.Info().Msg("Redis connected")

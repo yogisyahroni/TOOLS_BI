@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -296,7 +297,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 
 	sourceNodeID := "auto_source_node"
 	isChunkable := engine.IsPipelineChunkable(spec)
-	chunkLimit := 10000 // Safer memory batch size (10k rows)
+	chunkLimit := 2000 // Very strict memory batch size to prevent OOM on 512MB RAM
 	if !isChunkable {
 		chunkLimit = 0 // Needs special treatment to avoid OOM
 	}
@@ -473,6 +474,10 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 
 		totalOutputRows += len(result.Rows)
+
+		// Force aggressive Garbage Collection over the massive map allocations
+		// before processing the next chunk. This protects low-RAM environments.
+		runtime.GC()
 
 		if chunkLimit == 0 {
 			break // if 0, it means we fetched everything in one go
