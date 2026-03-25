@@ -478,18 +478,35 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 		sampleData = "(Sample data unavailable — table is empty or query failed)"
 	}
 
-	return ds.DataTableName, schemaStr, sampleData, true
+	tableNameToReturn := ds.DataTableName
+	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(ds.DataTableName)), "(SELECT") {
+		parts := strings.Split(ds.DataTableName, " AS ")
+		if len(parts) >= 2 {
+			tableNameToReturn = strings.TrimSpace(parts[len(parts)-1])
+		}
+	}
+
+	return tableNameToReturn, schemaStr, sampleData, true
 }
 
 // executeSQL executes the generated SQL either locally or via an external connection.
 func (h *AIHandler) executeSQL(datasetID, sqlQuery string) ([]map[string]interface{}, error) {
 	var ds struct {
-		StorageKey string
-		UserID     string
+		DataTableName string
+		StorageKey    string
+		UserID        string
 	}
-	if err := h.db.Table("datasets").Select("storage_key, user_id").
+	if err := h.db.Table("datasets").Select("data_table_name, storage_key, user_id").
 		Where("id = ?", datasetID).Scan(&ds).Error; err != nil {
 		return nil, fmt.Errorf("dataset not found: %w", err)
+	}
+
+	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(ds.DataTableName)), "(SELECT") {
+		parts := strings.Split(ds.DataTableName, " AS ")
+		if len(parts) >= 2 {
+			virtualAlias := strings.TrimSpace(parts[len(parts)-1])
+			sqlQuery = strings.ReplaceAll(sqlQuery, virtualAlias, ds.DataTableName)
+		}
 	}
 
 	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
@@ -617,7 +634,15 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
-	schemaContext := fmt.Sprintf("Table: %s\nColumns: %s", tableDef.DataTableName, string(tableDef.Columns))
+	tableNameForPrompt := tableDef.DataTableName
+	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(tableDef.DataTableName)), "(SELECT") {
+		parts := strings.Split(tableDef.DataTableName, " AS ")
+		if len(parts) >= 2 {
+			tableNameForPrompt = strings.TrimSpace(parts[len(parts)-1])
+		}
+	}
+
+	schemaContext := fmt.Sprintf("Table: %s\nColumns: %s", tableNameForPrompt, string(tableDef.Columns))
 	prompt := fmt.Sprintf(`You are a PostgreSQL expert. Given the following table schema, write a SQL SELECT query to answer the user's question.
 ONLY output valid SQL, nothing else. Do not include markdown code fences.
 
