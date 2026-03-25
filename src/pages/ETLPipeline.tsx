@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import {
   GitBranch, Plus, Play, Trash2, Filter, Shuffle, Layers,
   ArrowRight, CheckCircle, AlertCircle, Clock, Settings2,
-  ChevronDown, ChevronUp, Download, Save,
+  ChevronDown, ChevronUp, Download, Save, GripVertical,
 } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -486,6 +487,29 @@ export default function ETLPipelinePage() {
       await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: newSteps as any } });
     } catch {
       toast({ title: 'Error', description: 'Failed to remove step', variant: 'destructive' });
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] });
+    }
+  };
+
+  const handleDragEnd = async (result: DropResult, pipelineId: string) => {
+    if (!result.destination) return;
+    const startIndex = result.source.index;
+    const endIndex = result.destination.index;
+    if (startIndex === endIndex) return;
+
+    const currentPipelines = queryClient.getQueryData<any[]>(['pipelines']) || pipelines;
+    const pipeline = currentPipelines.find(p => p.id === pipelineId);
+    if (!pipeline) return;
+
+    const currentSteps = [...((pipeline.steps as ETLStep[]) || [])];
+    const [removed] = currentSteps.splice(startIndex, 1);
+    currentSteps.splice(endIndex, 0, removed);
+
+    queryClient.setQueryData(['pipelines'], currentPipelines.map(p => p.id === pipelineId ? { ...p, steps: currentSteps } : p));
+    try {
+      await updatePipelineMut.mutateAsync({ id: pipelineId, payload: { steps: currentSteps as any } });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to reorder steps', variant: 'destructive' });
       queryClient.invalidateQueries({ queryKey: ['pipelines'] });
     }
   };
@@ -990,65 +1014,91 @@ Always prioritize business value and data quality.`;
 
                         {/* Steps */}
                         {pipelineSteps.length > 0 && (
-                          <div className="bg-muted/20 rounded-xl border border-border/50 overflow-hidden">
-                            {pipelineSteps.map((step, si) => {
-                              const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
-                              const isStepExpanded = expandedSteps.has(step.id);
-                              return (
-                                <div key={step.id} className="border-b border-border/50 last:border-b-0">
-                                  <div
-                                    className={cn(
-                                      "px-4 py-2.5 flex items-center justify-between cursor-pointer transition-colors",
-                                      isStepExpanded ? "bg-primary/5" : "hover:bg-primary/5"
-                                    )}
-                                    onClick={() => {
-                                      const next = new Set(expandedSteps);
-                                      isStepExpanded ? next.delete(step.id) : next.add(step.id);
-                                      setExpandedSteps(next);
-                                    }}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-[10px] font-mono font-bold text-muted-foreground/60 w-4">{si + 1}.</span>
-                                      <div className={cn(
-                                        "w-6 h-6 rounded flex items-center justify-center transition-colors",
-                                        isStepExpanded ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-                                      )}>
-                                        <StepIcon className="w-3 h-3" />
-                                      </div>
-                                      <span className="text-xs font-semibold text-foreground capitalize truncate max-w-[150px]">{step.type.replace('_', ' ')}</span>
-                                      {Object.keys(step.config).filter(k => !k.startsWith('_')).length > 0 && (
-                                        <div className="flex items-center gap-1 text-[9px] text-success font-bold bg-success/10 px-1.5 py-0.5 rounded uppercase">
-                                          <CheckCircle className="w-2.5 h-2.5" /> configured
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <button 
-                                        onClick={e => { e.stopPropagation(); removeStep(pipeline.id, step.id); }} 
-                                        className="text-muted-foreground hover:text-destructive p-1 transition-colors"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
-                                      {isStepExpanded ? <ChevronUp className="w-4 h-4 text-primary" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                                    </div>
-                                  </div>
-                                  <motion.div
-                                    initial={false}
-                                    animate={{ height: isStepExpanded ? "auto" : 0, opacity: isStepExpanded ? 1 : 0 }}
-                                    transition={{ duration: 0.2 }}
-                                  >
-                                    <div className="px-4 pb-4 pl-[52px]">
-                                      <StepConfigEditor
-                                        step={step}
-                                        columns={sourceColumns}
-                                        onUpdate={config => updateStepConfig(pipeline.id, step.id, config)}
-                                      />
-                                    </div>
-                                  </motion.div>
+                          <DragDropContext onDragEnd={(result) => handleDragEnd(result, pipeline.id)}>
+                            <Droppable droppableId={`pipeline-${pipeline.id}`}>
+                              {(provided) => (
+                                <div
+                                  {...provided.droppableProps}
+                                  ref={provided.innerRef}
+                                  className="bg-muted/20 rounded-xl border border-border/50 overflow-hidden"
+                                >
+                                  {pipelineSteps.map((step, si) => {
+                                    const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
+                                    const isStepExpanded = expandedSteps.has(step.id);
+                                    return (
+                                      <Draggable key={step.id} draggableId={step.id} index={si}>
+                                        {(provided, snapshot) => (
+                                          <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            className={cn("border-b border-border/50 last:border-b-0", snapshot.isDragging && "bg-card shadow-lg shadow-black/20 z-50 ring-1 ring-primary")}
+                                          >
+                                            <div
+                                              className={cn(
+                                                "px-4 py-2.5 flex items-center justify-between cursor-pointer transition-colors",
+                                                isStepExpanded ? "bg-primary/5" : "hover:bg-primary/5"
+                                              )}
+                                              onClick={() => {
+                                                const next = new Set(expandedSteps);
+                                                isStepExpanded ? next.delete(step.id) : next.add(step.id);
+                                                setExpandedSteps(next);
+                                              }}
+                                            >
+                                              <div className="flex items-center gap-3">
+                                                <div 
+                                                  {...provided.dragHandleProps} 
+                                                  className="cursor-grab active:cursor-grabbing p-1 -ml-2 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                                                  onClick={e => e.stopPropagation()}
+                                                >
+                                                  <GripVertical className="w-4 h-4" />
+                                                </div>
+                                                <span className="text-[10px] font-mono font-bold text-muted-foreground/60 w-4">{si + 1}.</span>
+                                                <div className={cn(
+                                                  "w-6 h-6 rounded flex items-center justify-center transition-colors shrink-0",
+                                                  isStepExpanded ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                                                )}>
+                                                  <StepIcon className="w-3 h-3" />
+                                                </div>
+                                                <span className="text-xs font-semibold text-foreground capitalize truncate max-w-[150px]">{step.type.replace('_', ' ')}</span>
+                                                {Object.keys(step.config).filter(k => !k.startsWith('_')).length > 0 && (
+                                                  <div className="flex items-center gap-1 text-[9px] text-success font-bold bg-success/10 px-1.5 py-0.5 rounded uppercase">
+                                                    <CheckCircle className="w-2.5 h-2.5" /> configured
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2">
+                                                <button 
+                                                  onClick={e => { e.stopPropagation(); removeStep(pipeline.id, step.id); }} 
+                                                  className="text-muted-foreground hover:text-destructive p-1 transition-colors z-10"
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                </button>
+                                                {isStepExpanded ? <ChevronUp className="w-4 h-4 text-primary" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                              </div>
+                                            </div>
+                                            <motion.div
+                                              initial={false}
+                                              animate={{ height: isStepExpanded ? "auto" : 0, opacity: isStepExpanded ? 1 : 0 }}
+                                              transition={{ duration: 0.2 }}
+                                            >
+                                              <div className="px-4 pb-4 pl-[52px]">
+                                                <StepConfigEditor
+                                                  step={step}
+                                                  columns={sourceColumns}
+                                                  onUpdate={config => updateStepConfig(pipeline.id, step.id, config)}
+                                                />
+                                              </div>
+                                            </motion.div>
+                                          </div>
+                                        )}
+                                      </Draggable>
+                                    );
+                                  })}
+                                  {provided.placeholder}
                                 </div>
-                              );
-                            })}
-                          </div>
+                              )}
+                            </Droppable>
+                          </DragDropContext>
                         )}
 
                         {/* Preview */}
