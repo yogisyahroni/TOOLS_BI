@@ -48,7 +48,7 @@ import {
 } from 'recharts';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useDatasets } from '@/hooks/useApi';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, getAccessToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -225,6 +225,7 @@ export default function AskData() {
           method: 'GET',
           headers: {
             'Accept': 'text/event-stream',
+            'Authorization': `Bearer ${getAccessToken()}`,
           },
           signal: abort.signal,
         }
