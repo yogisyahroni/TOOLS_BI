@@ -220,13 +220,18 @@ export default function AskData() {
     try {
       // 2026: Streaming SSE Endpoint
       const response = await fetch(
-        `${API_BASE}/nl2sql/stream?question=${encodeURIComponent(currentQuestion)}&datasetId=${selectedDatasetId}`,
+        `${API_BASE}/ask-data/stream`,
         {
-          method: 'GET',
+          method: 'POST',
           headers: {
             'Accept': 'text/event-stream',
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${getAccessToken()}`,
           },
+          body: JSON.stringify({
+            question: currentQuestion,
+            datasetId: selectedDatasetId,
+          }),
           signal: abort.signal,
         }
       );
