@@ -288,6 +288,10 @@ export const aiApi = {
     },
     generateReport: (datasetId: string, prompt?: string) =>
         api.post<{ title: string; content: string }>('/reports/generate', { datasetId, prompt }),
+
+    // AI Configuration
+    getConfig: () => api.get<AIConfig>('/ai/config'),
+    updateConfig: (config: AIConfig) => api.put('/ai/config', config),
 };
 
 // Charts
@@ -975,3 +979,11 @@ export const commentApi = {
     create: (payload: CreateCommentPayload) => api.post<Comment>('/comments', payload),
     delete: (id: string) => api.delete(`/comments/${id}`),
 };
+
+export interface AIConfig {
+    provider: 'openai' | 'anthropic' | 'azure';
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    streamingEnabled: boolean;
+}

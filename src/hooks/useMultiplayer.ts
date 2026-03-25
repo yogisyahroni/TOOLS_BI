@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
 import { useAuth } from '@/context/AuthContext';
-import { getAccessToken, getWsUrl } from '@/lib/api';
+import { getWsUrl } from '@/lib/api';
 
 export interface CursorState {
     x: number;
@@ -9,121 +10,135 @@ export interface CursorState {
     userId: string;
     userName: string;
     color: string;
+    lastSeen: number;
 }
 
-const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'];
+export interface AwarenessState {
+    user: {
+        id: string;
+        name: string;
+        color: string;
+        cursor?: { x: number; y: number };
+        selection?: any;
+    };
+}
 
-const toBase64 = (arr: Uint8Array) => btoa(String.fromCharCode(...arr));
-const fromBase64 = (str: string) => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+const COLORS = [
+    '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e',
+    '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6',
+    '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e'
+];
 
 export function useMultiplayer(dashboardId: string | null) {
     const { user } = useAuth();
-    const token = getAccessToken();
     const [cursors, setCursors] = useState<Record<string, CursorState>>({});
-    const wsRef = useRef<WebSocket | null>(null);
-
-    // Yjs document
-    const ydocRef = useRef<Y.Doc>(new Y.Doc());
+    const [awareness, setAwareness] = useState<Record<string, AwarenessState>>({});
+    const [isConnected, setIsConnected] = useState(false);
     const [ydocReady, setYdocReady] = useState(false);
 
+    const ydocRef = useRef<Y.Doc | null>(null);
+    const providerRef = useRef<WebsocketProvider | null>(null);
+    const awarenessRef = useRef<any>(null);
+
+    // Initialize Yjs document
     useEffect(() => {
-        if (!dashboardId || !token) return;
+        if (!dashboardId || !user) return;
 
-        // Build ws URL using getWsUrl to ensure env fallback consistency
-        const baseWsUrl = getWsUrl();
-        const wsUrl = `${baseWsUrl}?token=${token}`;
+        const ydoc = new Y.Doc();
+        ydocRef.current = ydoc;
 
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+        // Use y-websocket for production, or your custom WS
+        const wsUrl = getWsUrl().replace('ws://', 'wss://');
+        const provider = new WebsocketProvider(
+            wsUrl,
+            `dashboard-${dashboardId}`,
+            ydoc
+        );
+        providerRef.current = provider;
 
-        ws.onopen = () => {
-            console.log('WS Connected for Multiplayer Room:', dashboardId);
-            // Join Room
-            ws.send(JSON.stringify({
-                type: 'join_room',
-                payload: { roomId: dashboardId }
-            }));
+        // Awareness setup
+        awarenessRef.current = provider.awareness;
 
-            // Send initial state/presence
-            ws.send(JSON.stringify({
-                type: 'presence',
-                payload: { x: 0, y: 0, userName: user?.displayName || 'Anonymous', color: COLORS[Math.floor(Math.random() * COLORS.length)] }
-            }));
-        };
+        const userColor = COLORS[Math.floor(Math.random() * COLORS.length)];
 
-        ws.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'presence' || msg.type === 'cursor_move') {
-                    const payload = msg.payload as any;
-                    if (payload.userId && payload.userId !== user?.id) {
-                        setCursors(prev => ({
-                            ...prev,
-                            [payload.userId]: {
-                                x: payload.x,
-                                y: payload.y,
-                                userId: payload.userId,
-                                userName: payload.userName || prev[payload.userId]?.userName || 'User',
-                                color: payload.color || prev[payload.userId]?.color || COLORS[0]
-                            }
-                        }));
+        provider.awareness.setLocalState({
+            user: {
+                id: user.id,
+                name: user.displayName || 'Anonymous',
+                color: userColor,
+            },
+        });
+
+        // Connection status
+        provider.on('status', (event: { status: string }) => {
+            setIsConnected(event.status === 'connected');
+        });
+
+        // Sync status
+        provider.on('sync', (isSynced: boolean) => {
+            setYdocReady(isSynced);
+        });
+
+        // Awareness change handler
+        const handleAwarenessChange = () => {
+            const states = Array.from(provider.awareness.getStates().entries());
+            const newAwareness: Record<string, AwarenessState> = {};
+            const newCursors: Record<string, CursorState> = {};
+
+            states.forEach(([clientId, state]: [number, any]) => {
+                if (state.user && state.user.id !== user.id) {
+                    newAwareness[state.user.id] = state;
+
+                    if (state.user.cursor) {
+                        newCursors[state.user.id] = {
+                            x: state.user.cursor.x,
+                            y: state.user.cursor.y,
+                            userId: state.user.id,
+                            userName: state.user.name,
+                            color: state.user.color,
+                            lastSeen: Date.now(),
+                        };
                     }
-                } else if (msg.type === 'yjs_update') {
-                    const payload = msg.payload as any;
-                    if (payload.userId !== user?.id && payload.update) {
-                        const update = fromBase64(payload.update);
-                        Y.applyUpdate(ydocRef.current, update, 'ws'); // source 'ws' prevents firing our own emit
-                    }
-                } else if (msg.type === 'delete_comment' || msg.type === 'new_comment') {
-                    // Will be handled natively via react-query invalidation or similar mechanism to trigger refresh
-                    window.dispatchEvent(new CustomEvent('dashboard_comments_updated'));
                 }
-            } catch (e) {
-                console.error("Failed to parse WS msg", e);
-            }
+            });
+
+            setAwareness(newAwareness);
+            setCursors(newCursors);
         };
 
-        ws.onerror = (e) => console.error("WS Error", e);
-        ws.onclose = () => console.log("WS Closed");
-
-        // Yjs sync
-        const handleYjsUpdate = (update: Uint8Array, origin: any) => {
-            if (origin !== 'ws' && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'yjs_update',
-                    payload: { update: toBase64(update) }
-                }));
-            }
-        };
-
-        ydocRef.current.on('update', handleYjsUpdate);
-        setYdocReady(true);
+        provider.awareness.on('change', handleAwarenessChange);
 
         return () => {
-            ydocRef.current.off('update', handleYjsUpdate);
-            ws.close();
-            setCursors({});
-            setYdocReady(false);
+            provider.awareness.off('change', handleAwarenessChange);
+            provider.destroy();
+            ydoc.destroy();
+            ydocRef.current = null;
+            providerRef.current = null;
         };
-    }, [dashboardId, token, user?.id]);
+    }, [dashboardId, user]);
 
-    // Mouse tracking
+    // Cursor tracking with throttling
     useEffect(() => {
-        if (!wsRef.current || !dashboardId) return;
+        if (!providerRef.current || !dashboardId) return;
 
-        let lastSendTime = 0;
-        const throttleMs = 50;
+        let lastUpdate = 0;
+        const throttleMs = 50; // 20fps max
 
         const handleMouseMove = (e: MouseEvent) => {
             const now = Date.now();
-            if (now - lastSendTime > throttleMs) {
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({
-                        type: 'cursor_move',
-                        payload: { x: e.clientX, y: e.clientY }
-                    }));
-                }
-                lastSendTime = now;
+            if (now - lastUpdate < throttleMs) return;
+
+            lastUpdate = now;
+
+            const localState = providerRef.current?.awareness.getLocalState();
+            if (localState) {
+                providerRef.current.awareness.setLocalState({
+                    ...localState,
+                    user: {
+                        ...localState.user,
+                        cursor: { x: e.clientX, y: e.clientY },
+                    },
+                });
             }
         };
 
@@ -131,5 +146,57 @@ export function useMultiplayer(dashboardId: string | null) {
         return () => window.removeEventListener('mousemove', handleMouseMove);
     }, [dashboardId]);
 
-    return { cursors, ydoc: ydocRef.current, ydocReady };
+    // Selection tracking
+    const updateSelection = useCallback((selection: any) => {
+        if (!providerRef.current) return;
+
+        const localState = providerRef.current.awareness.getLocalState();
+        if (localState) {
+            providerRef.current.awareness.setLocalState({
+                ...localState,
+                user: {
+                    ...localState.user,
+                    selection,
+                },
+            });
+        }
+    }, []);
+
+    // Get shared data
+    const getSharedMap = useCallback((name: string): Y.Map<any> | null => {
+        return ydocRef.current?.getMap(name) || null;
+    }, []);
+
+    const getSharedArray = useCallback((name: string): Y.Array<any> | null => {
+        return ydocRef.current?.getArray(name) || null;
+    }, []);
+
+    // Undo/Redo manager
+    const undoManager = useRef<Y.UndoManager | null>(null);
+
+    const initUndoManager = useCallback((type: Y.AbstractType<any>) => {
+        undoManager.current = new Y.UndoManager(type);
+    }, []);
+
+    const undo = useCallback(() => {
+        undoManager.current?.undo();
+    }, []);
+
+    const redo = useCallback(() => {
+        undoManager.current?.redo();
+    }, []);
+
+    return {
+        cursors,
+        awareness,
+        isConnected,
+        ydocReady,
+        ydoc: ydocRef.current,
+        updateSelection,
+        getSharedMap,
+        getSharedArray,
+        initUndoManager,
+        undo,
+        redo,
+    };
 }
