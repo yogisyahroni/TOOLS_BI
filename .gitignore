@@ -1,3 +1,25 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+
+# Binaries & Compiled files
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+neuradash-backend/tmp_*
+neuradash-backend/bin/
+neuradash-backend/uploads/
+neuradash-backend/*.exe
+neuradash-backend/tmp_*
+
 # Logs
 logs
 *.log
@@ -6,11 +28,26 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+build-log*.txt
+lint*.txt
+tsc_*.txt
+test_*.txt
 
-node_modules
-dist
-dist-ssr
-*.local
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+neuradash-backend/.env
+neuradash-backend/.env.*
+
+# Test files (move to proper test directory)
+/test_*.go
+/test_*.cjs
+/test_*.mjs
+/test_*.js
+test.csv
 
 # Editor directories and files
 .vscode/*
@@ -22,6 +59,17 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
-bin/
-*.exe
+
+# TypeScript
+*.tsbuildinfo
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
+.webhook_uuid.txt
