@@ -1114,7 +1114,7 @@ Always prioritize business value and data quality.`;
                                 <thead>
                                   <tr className="bg-muted/50">
                                     {Object.keys(preview[0]).map(col => (
-                                      <th key={col} className="px-3 py-2 text-left text-muted-foreground font-mono uppercase tracking-tighter border-b border-border/50">{col}</th>
+                                      <th key={col} className="px-3 py-2 text-left text-muted-foreground font-mono uppercase tracking-tighter border-b border-border/50 whitespace-nowrap">{col}</th>
                                     ))}
                                   </tr>
                                 </thead>
@@ -1122,7 +1122,7 @@ Always prioritize business value and data quality.`;
                                   {preview.slice(0, 20).map((row, i) => (
                                     <tr key={i} className="border-t border-border/40 hover:bg-muted/20 transition-colors">
                                       {Object.values(row).map((val, j) => (
-                                        <td key={j} className="px-3 py-1.5 font-mono text-foreground/80">{String(val)}</td>
+                                        <td key={j} className="px-3 py-1.5 font-mono text-foreground/80 whitespace-nowrap">{String(val)}</td>
                                       ))}
                                     </tr>
                                   ))}
