@@ -48,6 +48,7 @@ import {
 } from 'recharts';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useDatasets } from '@/hooks/useApi';
+import { API_BASE } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -219,7 +220,7 @@ export default function AskData() {
     try {
       // 2026: Streaming SSE Endpoint
       const response = await fetch(
-        `/api/nl2sql/stream?question=${encodeURIComponent(currentQuestion)}&datasetId=${selectedDatasetId}`,
+        `${API_BASE}/nl2sql/stream?question=${encodeURIComponent(currentQuestion)}&datasetId=${selectedDatasetId}`,
         {
           method: 'GET',
           headers: {
