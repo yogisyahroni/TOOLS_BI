@@ -380,12 +380,14 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 	for colName, val := range firstRow {
 		sqlType := "TEXT"
 		switch val.(type) {
-		case int, int64:
+		case int, int64, int32, int16, int8:
 			sqlType = "BIGINT"
-		case float64:
+		case float64, float32:
 			sqlType = "NUMERIC"
 		case bool:
 			sqlType = "BOOLEAN"
+		case time.Time, *time.Time:
+			sqlType = "TIMESTAMPTZ"
 		}
 		colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
 	}
@@ -402,7 +404,23 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		if end > len(result.Rows) {
 			end = len(result.Rows)
 		}
+		
 		batch := result.Rows[i:end]
+		// Sanitize time.Time to string (RFC3339) to prevent pgx encoding panics for TEXT columns
+		// Strings are seamlessly accepted by Postgres for both TEXT and TIMESTAMPTZ columns.
+		for _, row := range batch {
+			for k, v := range row {
+				switch t := v.(type) {
+				case time.Time:
+					row[k] = t.Format(time.RFC3339)
+				case *time.Time:
+					if t != nil {
+						row[k] = t.Format(time.RFC3339)
+					}
+				}
+			}
+		}
+
 		if err := h.db.Table(p.OutputTableName).CreateInBatches(batch, len(batch)).Error; err != nil {
 			return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
 		}
