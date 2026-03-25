@@ -295,10 +295,15 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 	}
 
 	sourceNodeID := "auto_source_node"
-	var sourceNode engine.NodeSpec
+	isChunkable := engine.IsPipelineChunkable(spec)
+	chunkLimit := 100000
+	if !isChunkable {
+		chunkLimit = 0
+	}
 
-	if strings.HasPrefix(sourceDataset.StorageKey, "EXTERNAL_CONN::") {
-		// External database source
+	var dbConn connectors.DBConnector
+	isExternal := strings.HasPrefix(sourceDataset.StorageKey, "EXTERNAL_CONN::")
+	if isExternal {
 		connID := strings.TrimPrefix(sourceDataset.StorageKey, "EXTERNAL_CONN::")
 		var externalConn models.DBConnection
 		if err := h.db.Where("id = ? AND user_id = ?", connID, sourceDataset.UserID).First(&externalConn).Error; err != nil {
@@ -306,141 +311,176 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 
 		opts := connectors.FromDBConnection(&externalConn, externalConn.PasswordEncrypted)
-		dbConn, err := connectors.Open(opts)
+		var err error
+		dbConn, err = connectors.Open(opts)
 		if err != nil {
 			return pipelineExecResult{status: "error", errMsg: "Failed to connect to external DB: " + err.Error()}
 		}
 		defer dbConn.Close()
-
-		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, engine.QuoteIdentifier(sourceDataset.DataTableName))
-		res, err := dbConn.Query(ctx, sqlQuery, 0) // 0 = no limit, fetch entire dataset
-		if err != nil {
-			return pipelineExecResult{status: "error", errMsg: "Failed to query external database: " + err.Error()}
-		}
-
-		sourceNode = engine.NodeSpec{
-			ID:     sourceNodeID,
-			Type:   "source",
-			Label:  "Source Dataset",
-			Config: map[string]interface{}{"data": res.Rows},
-			Inputs: []string{},
-		}
-	} else {
-		// Local internal database source
-		sourceNode = engine.NodeSpec{
-			ID:     sourceNodeID,
-			Type:   "source",
-			Label:  "Source Dataset",
-			Config: map[string]interface{}{"table": sourceDataset.DataTableName},
-			Inputs: []string{},
-		}
 	}
 
-	// Sequence the nodes based on their array index
-	// Since frontend doesn't pass 'inputs', we chain them linearly
-	previousNodeID := sourceNodeID
-	for i := range spec.Nodes {
-		// Replace their inputs to just point to the previous node
-		spec.Nodes[i].Inputs = []string{previousNodeID}
-		previousNodeID = spec.Nodes[i].ID
-	}
-
-	// Prepend the source node
-	spec.Nodes = append([]engine.NodeSpec{sourceNode}, spec.Nodes...)
-
-	// 1. Run visual pipeline engine
-	result, err := engine.RunVisualPipeline(ctx, h.db, spec)
-	if err != nil {
-		return pipelineExecResult{status: "error", errMsg: err.Error()}
-	}
-
-	if len(result.Errors) > 0 {
-		// Collect first error for status report
-		for _, errText := range result.Errors {
-			return pipelineExecResult{status: "error", errMsg: errText}
-		}
-	}
-
-	// 2. Output table name should already be set by RunPipeline
+	// Output table name should already be set by RunPipeline
 	if p.OutputTableName == "" {
 		return pipelineExecResult{status: "error", errMsg: "Output table name missing"}
 	}
 
-	// 3. Persist results to a physical SQL table (SUB-ROUTINE BETA protocol)
-	if len(result.Rows) == 0 {
-		return pipelineExecResult{status: "error", errMsg: "Pipeline execution resulted in 0 rows. Output table cannot be created without structure."}
+	// Prepare the node order since frontend doesn't pass 'inputs', we chain them linearly
+	baseNodes := make([]engine.NodeSpec, len(spec.Nodes))
+	copy(baseNodes, spec.Nodes)
+	
+	previousNodeID := sourceNodeID
+	for i := range baseNodes {
+		baseNodes[i].Inputs = []string{previousNodeID}
+		previousNodeID = baseNodes[i].ID
 	}
 
-	// a. Drop existing table if it exists (Ensures idempotency)
-	h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
+	isTableCreated := false
+	totalOutputRows := 0
 
-	// b. Create table structure based on the first row
-	firstRow := result.Rows[0]
-	var colDefs []string
-	for colName, val := range firstRow {
-		sqlType := "TEXT"
-		switch val.(type) {
-		case int, int64, int32, int16, int8:
-			sqlType = "BIGINT"
-		case float64, float32:
-			sqlType = "NUMERIC"
-		case bool:
-			sqlType = "BOOLEAN"
-		case time.Time, *time.Time:
-			sqlType = "TIMESTAMPTZ"
-		}
-		colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
-	}
-
-	createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, p.OutputTableName, strings.Join(colDefs, ", "))
-	if err := h.db.Exec(createSQL).Error; err != nil {
-		return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to create output table: %v", err)}
-	}
-
-	// c. Batch insert data (SUB-ROUTINE BETA: Using batch size of 500)
-	batchSize := 500
-	for i := 0; i < len(result.Rows); i += batchSize {
-		end := i + batchSize
-		if end > len(result.Rows) {
-			end = len(result.Rows)
-		}
+	for offset := 0; ; offset += chunkLimit {
+		var chunkRows []map[string]interface{}
 		
-		batch := result.Rows[i:end]
-		// Sanitize time.Time to string (RFC3339) to prevent pgx encoding panics for TEXT columns
-		// Strings are seamlessly accepted by Postgres for both TEXT and TIMESTAMPTZ columns.
-		for _, row := range batch {
-			for k, v := range row {
-				switch t := v.(type) {
-				case time.Time:
-					row[k] = t.Format(time.RFC3339)
-				case *time.Time:
-					if t != nil {
-						row[k] = t.Format(time.RFC3339)
-					}
-				}
+		if isExternal {
+			sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, engine.QuoteIdentifier(sourceDataset.DataTableName))
+			if chunkLimit > 0 {
+				sqlQuery = fmt.Sprintf(`%s OFFSET %d LIMIT %d`, sqlQuery, offset, chunkLimit)
+			}
+			res, err := dbConn.Query(ctx, sqlQuery, 0)
+			if err != nil {
+				return pipelineExecResult{status: "error", errMsg: "Failed to query external database: " + err.Error()}
+			}
+			chunkRows = res.Rows
+		} else {
+			q := h.db.Table(sourceDataset.DataTableName)
+			if chunkLimit > 0 {
+				q = q.Offset(offset).Limit(chunkLimit)
+			}
+			if err := q.Find(&chunkRows).Error; err != nil {
+				return pipelineExecResult{status: "error", errMsg: "Failed to query internal database: " + err.Error()}
 			}
 		}
 
-		if err := h.db.Table(p.OutputTableName).CreateInBatches(batch, len(batch)).Error; err != nil {
-			return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
+		if len(chunkRows) == 0 {
+			break
+		}
+
+		sourceNode := engine.NodeSpec{
+			ID:     sourceNodeID,
+			Type:   "source",
+			Label:  "Source Dataset",
+			Config: map[string]interface{}{"data": chunkRows},
+			Inputs: []string{},
+		}
+		
+		pipelineForChunk := engine.PipelineSpec{
+			Nodes: append([]engine.NodeSpec{sourceNode}, baseNodes...),
+		}
+
+		// 1. Run visual pipeline engine for this chunk
+		result, err := engine.RunVisualPipeline(ctx, h.db, pipelineForChunk)
+		if err != nil {
+			return pipelineExecResult{status: "error", errMsg: err.Error()}
+		}
+
+		if len(result.Errors) > 0 {
+			// Collect first error for status report
+			for _, errText := range result.Errors {
+				return pipelineExecResult{status: "error", errMsg: errText}
+			}
+		}
+
+		if len(result.Rows) == 0 {
+			// Filter might have removed all rows in this chunk, continue to next chunk
+			if chunkLimit == 0 {
+				break
+			}
+			continue
+		}
+
+		// 2. Persist results to a physical SQL table
+		if !isTableCreated {
+			// a. Drop existing table if it exists (Ensures idempotency)
+			h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
+
+			// b. Create table structure based on the first row
+			firstRow := result.Rows[0]
+			var colDefs []string
+			for colName, val := range firstRow {
+				sqlType := "TEXT"
+				switch val.(type) {
+				case int, int64, int32, int16, int8:
+					sqlType = "BIGINT"
+				case float64, float32:
+					sqlType = "NUMERIC"
+				case bool:
+					sqlType = "BOOLEAN"
+				case time.Time, *time.Time:
+					sqlType = "TIMESTAMPTZ"
+				}
+				colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
+			}
+
+			createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, p.OutputTableName, strings.Join(colDefs, ", "))
+			if err := h.db.Exec(createSQL).Error; err != nil {
+				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to create output table: %v", err)}
+			}
+			isTableCreated = true
+
+			// Save a small sample (first 100 rows) to JSONB for instant preview
+			sampleSize := 100
+			if len(result.Rows) < sampleSize {
+				sampleSize = len(result.Rows)
+			}
+			sampleRows := result.Rows[:sampleSize]
+			outputJSON, _ := json.Marshal(sampleRows)
+			
+			if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
+				fmt.Printf("[ETL] Warning: Failed to save preview sample: %v\n", err)
+			}
+		}
+
+		// c. Batch insert data (Using batch size of 500)
+		batchSizeDB := 500
+		for i := 0; i < len(result.Rows); i += batchSizeDB {
+			end := i + batchSizeDB
+			if end > len(result.Rows) {
+				end = len(result.Rows)
+			}
+			
+			batch := result.Rows[i:end]
+			// Sanitize time.Time to string (RFC3339) to prevent pgx encoding panics for TEXT columns
+			for _, row := range batch {
+				for k, v := range row {
+					switch t := v.(type) {
+					case time.Time:
+						row[k] = t.Format(time.RFC3339)
+					case *time.Time:
+						if t != nil {
+							row[k] = t.Format(time.RFC3339)
+						}
+					}
+				}
+			}
+
+			if err := h.db.Table(p.OutputTableName).CreateInBatches(batch, len(batch)).Error; err != nil {
+				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
+			}
+		}
+
+		totalOutputRows += len(result.Rows)
+
+		if chunkLimit == 0 {
+			break // if 0, it means we fetched everything in one go
 		}
 	}
 
-	// 4. Save a small sample (first 100 rows) to JSONB for instant preview
-	sampleSize := 100
-	if len(result.Rows) < sampleSize {
-		sampleSize = len(result.Rows)
-	}
-	sampleRows := result.Rows[:sampleSize]
-	outputJSON, _ := json.Marshal(sampleRows)
-	
-	if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
-		fmt.Printf("[ETL] Warning: Failed to save preview sample: %v\n", err)
+	if !isTableCreated {
+		return pipelineExecResult{status: "error", errMsg: "Pipeline execution resulted in 0 rows overall. Output table cannot be created without structure."}
 	}
 
 	return pipelineExecResult{
 		status:     "completed",
-		outputRows: int64(len(result.Rows)),
+		outputRows: int64(totalOutputRows),
 	}
 }
 

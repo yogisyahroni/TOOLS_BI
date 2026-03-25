@@ -61,6 +61,22 @@ type PipelineResult struct {
 	Order       []string                            // execution order
 }
 
+// IsPipelineChunkable returns true if the pipeline can be safely executed in chunks.
+// Pipelines with stateful nodes (aggregate, sort, join, dedup, limit, union) cannot be chunked sequentially.
+func IsPipelineChunkable(spec PipelineSpec) bool {
+	var numSources int
+	for _, node := range spec.Nodes {
+		switch strings.ToLower(node.Type) {
+		case "source":
+			numSources++
+		case "aggregate", "sort", "join", "dedup", "limit", "union":
+			return false
+		}
+	}
+	// Only chunkable if there's exactly one source and no stateful operations.
+	return numSources <= 1
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 // RunVisualPipeline executes a visual ETL pipeline and returns the result.
