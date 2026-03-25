@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { getApiUrl } from '@/lib/api';
+import { API_BASE } from '@/lib/api';
 
 export interface NL2SQLResult {
     sql: string;
@@ -65,7 +65,7 @@ export function useNL2SQL() {
         // Close existing connection
         eventSourceRef.current?.close();
 
-        const url = `${getApiUrl()}/nl2sql/stream?question=${encodeURIComponent(question)}&datasetId=${datasetId}`;
+        const url = `${API_BASE}/nl2sql/stream?question=${encodeURIComponent(question)}&datasetId=${datasetId}`;
         const eventSource = new EventSource(url);
         eventSourceRef.current = eventSource;
 
