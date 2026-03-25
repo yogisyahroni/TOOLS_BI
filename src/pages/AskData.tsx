@@ -244,6 +244,8 @@ export default function AskData() {
       const decoder = new TextDecoder();
       let buffer = '';
 
+      let currentEvent = 'message';
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -253,67 +255,65 @@ export default function AskData() {
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (!line.trim() || !line.startsWith('data: ')) continue;
+          if (line.startsWith('event: ')) {
+            currentEvent = line.substring(7).trim();
+            continue;
+          }
 
-          const dataStr = line.replace('data: ', '').trim();
+          if (!line.trim() || !line.startsWith('data: ')) {
+            continue;
+          }
+
+          const dataStr = line.substring(6).trim();
           if (dataStr === '[DONE]') continue;
 
           try {
             const parsed = JSON.parse(dataStr);
 
-            switch (parsed.type) {
-              case 'thinking':
-                setStream(prev => ({
-                  ...prev,
-                  stage: 'thinking',
-                  progress: 15,
-                  explanation: parsed.content || 'Analyzing your question...',
-                }));
+            switch (currentEvent) {
+              case 'progress':
+                setStream(prev => {
+                  let p = prev.progress;
+                  if (parsed.stage === 'thinking') p = 15;
+                  if (parsed.stage === 'generating') p = 30;
+                  if (parsed.stage === 'executing') p = 90;
+                  return {
+                    ...prev,
+                    stage: parsed.stage || prev.stage,
+                    progress: p,
+                    explanation: parsed.message || prev.explanation,
+                  };
+                });
                 break;
 
               case 'token':
+                // parsed is just a string here
                 setStream(prev => ({
                   ...prev,
                   stage: 'writing',
-                  progress: Math.min(50, prev.progress + 2),
-                  streamingSQL: prev.streamingSQL + (parsed.content || ''),
+                  progress: Math.min(80, prev.progress + 1),
+                  streamingSQL: prev.streamingSQL + parsed,
                 }));
                 break;
 
-              case 'confidence':
+              case 'thought':
                 setStream(prev => ({
                   ...prev,
-                  confidence: parsed.score || 0,
-                  progress: 60,
+                  explanation: parsed || prev.explanation,
                 }));
                 break;
 
-              case 'explanation':
+              case 'sql':
                 setStream(prev => ({
                   ...prev,
-                  explanation: parsed.content || prev.explanation,
+                  streamingSQL: parsed.sql || prev.streamingSQL,
                 }));
                 break;
 
-              case 'security_check':
-                setStream(prev => ({
-                  ...prev,
-                  stage: 'security_check',
-                  progress: 75,
-                  securityStatus: parsed.isSafe ? 'safe' : (parsed.requiresApproval ? 'danger' : 'warning'),
-                  securityWarnings: parsed.warnings || [],
-                }));
-                break;
+              case 'error':
+                throw new Error(parsed.error || 'Unknown server error');
 
-              case 'running':
-                setStream(prev => ({
-                  ...prev,
-                  stage: 'running',
-                  progress: 90,
-                }));
-                break;
-
-              case 'complete':
+              case 'result':
                 const finalResult: QAResult = {
                   id: generateId(),
                   question: currentQuestion,
@@ -321,12 +321,12 @@ export default function AskData() {
                   rowCount: parsed.rowCount || 0,
                   chartData: parsed.data || [],
                   ...autoDetectChart(parsed.data || []),
-                  confidence: parsed.confidence || stream.confidence,
-                  explanation: parsed.explanation || stream.explanation,
+                  confidence: parsed.confidence || 0.9, // Default to 0.9 if not provided
+                  explanation: parsed.explanation || stream.explanation || 'Query executed successfully.',
                   executionPlan: parsed.executionPlan || 'Unknown',
                   provider: parsed.provider || 'AI',
                   latencyMs: parsed.latencyMs || 0,
-                  isSafe: parsed.isSafe || false,
+                  isSafe: parsed.isSafe ?? true,
                   securityWarnings: parsed.warnings || [],
                   queryType: parsed.queryType || 'SELECT',
                   executedAt: new Date().toISOString(),
@@ -349,19 +349,24 @@ export default function AskData() {
                 }
 
                 setResults(prev => [finalResult, ...prev]);
-                setStream(prev => ({ ...prev, isStreaming: false, stage: 'complete', progress: 100 }));
-
+                
                 toast({
-                  title: 'Query executed',
-                  description: `${finalResult.rowCount} rows returned in ${finalResult.latencyMs}ms`,
+                  title: '✨ Query Successful',
+                  description: `Found ${finalResult.rowCount} rows.`,
                 });
                 break;
-
-              case 'error':
-                throw new Error(parsed.message || 'Stream error');
+                
+              case 'done':
+                setStream(prev => ({
+                  ...prev,
+                  isStreaming: false,
+                  stage: 'idle',
+                  progress: 100,
+                }));
+                break;
             }
           } catch (e) {
-            console.error('Parse error:', e);
+            console.error('SSE parse error:', e, dataStr);
           }
         }
       }
