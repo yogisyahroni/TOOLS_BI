@@ -172,10 +172,10 @@ export default function ConnectionsPage() {
         setTestingId(id);
         try {
             const res = await connectionApi.test(id);
-            if (res.status === 'success' || res.status === 'ok') {
+            if (res.status === 'success' || res.status === 'ok' || res.status === 'connected') {
                 toast({ title: 'Connected successfully!', description: `Latency: ${res.latencyMs}ms` });
             } else {
-                toast({ title: 'Connection failed', description: 'Check credentials', variant: 'destructive' });
+                toast({ title: 'Connection failed', description: res.message || 'Check credentials', variant: 'destructive' });
             }
         } catch (e: any) {
             toast({ title: 'Connection test failed', description: e.message, variant: 'destructive' });
