@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import axios from 'axios';
+import { format, parseISO, isValid } from 'date-fns';
 import { API_BASE } from '@/lib/api';
 import { Loader2, Zap } from 'lucide-react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
@@ -38,6 +39,20 @@ const COLORS = [
     'hsl(210, 80%, 55%)', 'hsl(30, 90%, 55%)', 'hsl(160, 60%, 45%)',
     'hsl(0, 70%, 55%)', 'hsl(45, 85%, 50%)', 'hsl(260, 50%, 60%)',
 ];
+
+const formatValue = (value: any) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') {
+        // Check if it's an ISO date string (YYYY-MM-DDTHH:mm:ss...)
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+            const date = parseISO(value);
+            if (isValid(date)) {
+                return format(date, 'dd MMM yyyy'); // matches ChartRenderer
+            }
+        }
+    }
+    return String(value);
+};
 
 function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string }) {
     const dsId = widget.dataSetId || (widget as any).datasetId || '';
@@ -174,7 +189,7 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
         const map = new Map<string, number>();
 
         rawData.forEach((row: any) => {
-            const x = String(row[widget.xAxis!] || 'Unknown');
+            const x = formatValue(row[widget.xAxis!] || 'Unknown');
             const g = String(row[widget.groupBy!] || 'Unknown');
             const v = Number(row[widget.yAxis!]) || 0;
             xSet.add(x);
@@ -217,10 +232,10 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
     if (!data.length) return <p className="text-muted-foreground text-sm text-center mt-8">Incomplete configuration</p>;
 
     const isHorizontal = widget.type === 'horizontal_bar';
-    const categoryNames = data.map(d => String(d.name));
+    const categoryNames = data.map(d => formatValue(d.name));
     const seriesData = data.map((d, i) => ({
         value: Number(d.value) || 0,
-        name: String(d.name),
+        name: formatValue(d.name),
         itemStyle: {
             color: COLORS[i % COLORS.length]
         }
