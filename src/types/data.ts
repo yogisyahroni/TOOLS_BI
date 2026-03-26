@@ -74,14 +74,14 @@ export interface AIConfig {
 export interface SavedChart {
   id: string;
   title: string;
-  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'gauge' | 'sunburst' | 'sankey' | 'combo' | 'pivot_table';
+  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'gauge' | 'sunburst' | 'sankey' | 'combo' | 'pivot_table' | 'bullet';
   dataSetId: string;
   xAxis: string;
   yAxis: string;
   groupBy?: string;
 }
 
-export type WidgetType = 'bar' | 'line' | 'pie' | 'area' | 'stat' | 'text' | 'action' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'waterfall' | 'heatmap' | 'boxplot' | 'horizontal_bar' | 'gauge' | 'sunburst' | 'sankey' | 'combo' | 'pivot_table';
+export type WidgetType = 'bar' | 'line' | 'pie' | 'area' | 'stat' | 'text' | 'action' | 'scatter' | 'radar' | 'funnel' | 'treemap' | 'waterfall' | 'heatmap' | 'boxplot' | 'horizontal_bar' | 'gauge' | 'sunburst' | 'sankey' | 'combo' | 'pivot_table' | 'bullet';
 
 export interface Widget {
   id: string;

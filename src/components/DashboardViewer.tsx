@@ -160,6 +160,38 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
         return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).slice(0, 50);
     };
 
+    const getGroupedChartData = () => {
+        if (!widget.xAxis || !widget.yAxis || !widget.groupBy) {
+            return { categories: [], groups: [], matrix: [] };
+        }
+        const xSet = new Set<string>();
+        const gSet = new Set<string>();
+        const map = new Map<string, number>();
+
+        rawData.forEach((row: any) => {
+            const x = String(row[widget.xAxis!] || 'Unknown');
+            const g = String(row[widget.groupBy!] || 'Unknown');
+            const v = Number(row[widget.yAxis!]) || 0;
+            xSet.add(x);
+            gSet.add(g);
+            const key = `${x}__${g}`;
+            map.set(key, (map.get(key) || 0) + v);
+        });
+
+        const categories = Array.from(xSet);
+        const groups = Array.from(gSet);
+
+        const matrix = categories.map(x => {
+            const obj: any = { name: x };
+            groups.forEach(g => {
+                obj[g] = map.get(`${x}__${g}`) || 0;
+            });
+            return obj;
+        });
+
+        return { categories, groups, matrix };
+    };
+
     if (widget.type === 'stat') {
         const sum = rawData.map(r => Number(r[widget.yAxis])).filter(n => !isNaN(n)).reduce((a, b) => a + b, 0);
         const count = rawData.map(r => Number(r[widget.yAxis])).filter(n => !isNaN(n)).length;
@@ -243,6 +275,41 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
         case 'treemap':
             option.series = [{ type: 'treemap', data: seriesData, roam: false, label: { show: true, formatter: '{b}\n{c}' }, itemStyle: { borderColor: '#0f172a' } }];
             break;
+        case 'bullet': {
+            const grouped = getGroupedChartData();
+            if (!grouped.categories.length || grouped.groups.length < 1) {
+                return <p className="text-muted-foreground text-sm text-center mt-8">Incomplete bullet configuration</p>;
+            }
+            const actualGroup = grouped.groups[0];
+            const targetGroup = grouped.groups[1] || 'Target'; // Handle cases where only 1 group exists
+            
+            option = {
+                backgroundColor: 'transparent',
+                grid: { top: 30, right: 30, bottom: 50, left: 80, containLabel: true },
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: [targetGroup, actualGroup], textStyle: { color: '#9ca3af' }, bottom: 0 },
+                yAxis: { type: 'category', data: grouped.categories, axisLabel: { color: '#9ca3af', fontSize: 10 } },
+                xAxis: { type: 'value', axisLabel: { color: '#9ca3af', fontSize: 10 }, splitLine: { lineStyle: { color: '#374151', type: 'dashed' } } },
+                series: [
+                    { 
+                        name: targetGroup, 
+                        type: 'bar', 
+                        barWidth: '60%', 
+                        data: grouped.matrix.map(row => row[targetGroup] || 0), 
+                        itemStyle: { color: '#334155' } 
+                    },
+                    { 
+                        name: actualGroup, 
+                        type: 'bar', 
+                        barGap: '-80%', 
+                        barWidth: '30%', 
+                        data: grouped.matrix.map(row => row[actualGroup] || 0), 
+                        itemStyle: { color: COLORS[0] } 
+                    }
+                ]
+            };
+            break;
+        }
         case 'waterfall': {
             let running = 0;
             const wfData = data.map(d => {
