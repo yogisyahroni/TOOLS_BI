@@ -212,8 +212,8 @@ Available Columns (use ONLY these):
 2. SCHEMA FIDELITY: Use ONLY column names that appear in the schema above. DILARANG KERAS (FORBIDDEN) mengarang nama kolom (hallucination).
 3. QUOTING: ALWAYS double-quote EVERY column/table name (e.g. "Column_Name", "Inbound_Dest_Time"). This is MANDATORY for PostgreSQL mixed-case sensitivity.
 4. SYNONYM MAPPING: Jika istilah (misal: "delay", "origin") tidak ada di schema, cari kolom yang paling mendekati (misal: "timestamp", "location").
-5. PERSISTENCE: Jika tipe data tidak sesuai, gunakan CAST("col" AS DATE) atau CAST("col" AS NUMERIC) pada kolom YANG BENAR-BENAR ADA di schema.
-6. TIME MATH: Gunakan ("date2" - "date1") atau EXTRACT(EPOCH FROM ("t2" - "t1")) untuk mencari durasi/delay.
+5. PERSISTENCE & TYPE SAFETY: PostgreSQL is strict about types. Jika melakukan operasi matematika (seperti pengurangan) pada kolom yang mungkin bertipe TEXT namun berisi tanggal, Anda WAJIB menggunakan explicit CAST: ("Col_A"::timestamp - "Col_B"::timestamp).
+6. TIME MATH: Gunakan ("t2"::timestamp - "t1"::timestamp) atau EXTRACT(EPOCH FROM ("t2"::timestamp - "t1"::timestamp)) untuk mencari durasi/delay. Ini menghindari error "operator does not exist: text - timestamp".
 7. NO SEMICOLON: DILARANG menggunakan titik koma (;) jika hanya ada satu statement.
 8. NO COMMENTS: DILARANG menyertakan komentar ('--' atau '/* */') di dalam output SQL.
 9. SAFETY: Add a LIMIT 1000 for safety unless the question asks for aggregates.
