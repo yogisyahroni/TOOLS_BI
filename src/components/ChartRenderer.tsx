@@ -14,7 +14,12 @@ import {
   ComposedChart, ReferenceLine
 } from 'recharts';
 
-export const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+export const COLORS = [
+  'hsl(174, 72%, 46%)', 'hsl(199, 89%, 48%)', 'hsl(142, 76%, 36%)',
+  'hsl(38, 92%, 50%)', 'hsl(280, 65%, 60%)', 'hsl(340, 82%, 52%)',
+  'hsl(210, 80%, 55%)', 'hsl(30, 90%, 55%)', 'hsl(160, 60%, 45%)',
+  'hsl(0, 70%, 55%)', 'hsl(45, 85%, 50%)', 'hsl(260, 50%, 60%)',
+];
 
 const formatValue = (value: any) => {
   if (value === null || value === undefined) return '';
@@ -1845,7 +1850,11 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
                   name={isGrouped ? key : undefined}
                   fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
                   radius={[4, 4, 0, 0]} 
-                />
+                >
+                  {!isGrouped && dataToUse.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -1866,7 +1875,11 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
                   name={isGrouped ? key : undefined}
                   fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
                   radius={[0, 4, 4, 0]} 
-                />
+                >
+                  {!isGrouped && dataToUse.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -1927,7 +1940,17 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
                   name={isGrouped ? key : undefined}
                   stroke={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
                   strokeWidth={2} 
-                  dot={{ fill: isGrouped ? COLORS[i % COLORS.length] : 'hsl(var(--primary))' }} 
+                  dot={(props: any) => {
+                    const { cx, cy, payload, index } = props;
+                    return (
+                      <circle 
+                        cx={cx} cy={cy} r={4} 
+                        fill={isGrouped ? COLORS[i % COLORS.length] : COLORS[index % COLORS.length]} 
+                        stroke="none" 
+                      />
+                    );
+                  }}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
                 />
               ))}
             </ReLineChart>
@@ -1959,6 +1982,16 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
                   stroke={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
                   fill={`url(#grad-${key})`} 
                   strokeWidth={2} 
+                  dot={(props: any) => {
+                    const { cx, cy, index } = props;
+                    return (
+                      <circle 
+                        cx={cx} cy={cy} r={3} 
+                        fill={isGrouped ? COLORS[i % COLORS.length] : COLORS[index % COLORS.length]} 
+                        stroke="none" 
+                      />
+                    );
+                  }}
                 />
               ))}
             </ReAreaChart>
@@ -1978,8 +2011,12 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
                   key={key} 
                   name={isGrouped ? key : "Value"}
                   data={dataToUse} 
-                  fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
-                />
+                  fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"}
+                >
+                  {!isGrouped && dataToUse.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Scatter>
               ))}
             </ScatterChart>
           </ResponsiveContainer>
