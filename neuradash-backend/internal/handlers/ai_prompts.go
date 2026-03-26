@@ -208,18 +208,18 @@ Available Columns (use ONLY these):
 
 ## SQL Generation Rules (STRICT)
 
-1. Output ONLY valid PostgreSQL SELECT SQL — no markdown, no explanations, no code fences
-2. Use ONLY column names that appear in the schema above
-3. Use appropriate aggregations (COUNT, SUM, AVG, MAX, MIN) when the question implies them
-4. Add a LIMIT 1000 for safety unless the question asks for specific totals/aggregates
-5. Use COALESCE or IS NOT NULL to handle potential nulls in critical columns
-6. For text search, use ILIKE (case-insensitive) unless exact match is required
-7. For date filtering, use proper PostgreSQL date comparisons
-8. Add ORDER BY to make results meaningful
-9. Use proper table alias for readability
+1. Output ONLY valid PostgreSQL SELECT SQL — no markdown, no explanations, no code fences.
+2. Use ONLY column names that appear in the schema above.
+3. Use appropriate aggregations (COUNT, SUM, AVG, MAX, MIN) when the question implies them.
+4. Add a LIMIT 1000 for safety unless the question asks for aggregates.
+5. Use COALESCE or IS NOT NULL to handle potential nulls in critical columns.
+6. For text search, use ILIKE (case-insensitive) unless exact match is required.
+7. PERSISTENCE: If columns are strings but contain numbers/dates, use CAST(col AS NUMERIC) or CAST(col AS DATE) to perform analysis.
+8. TIME MATH: To compare dates, use (date2 - date1) or EXTRACT(EPOCH FROM (t2 - t1)).
+9. LOGIC: If the user asks for "bottlenecks" or "delays", calculate the difference between stages or look for high values in duration columns.
 10. DILARANG menghasilkan lebih dari satu statement SQL. Jangan gunakan titik koma (;) jika hanya ada satu statement.
 11. DILARANG menyertakan komentar ('--' atau '/* */') di dalam output SQL.
-12. If the question CANNOT be answered with the available columns, output:
+12. LAST RESORT: Only if the question is truly impossible with the schema, output:
     SELECT 'Column not available in dataset: [explain what is missing]' AS error_message
 
 Output ONLY the SQL query. Nothing else.
