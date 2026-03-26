@@ -105,8 +105,8 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
         const colSet = new Set<string>();
 
         rawData.forEach((row: any) => {
-            const rVal = String(row[rowField] || 'Unknown');
-            const cVal = colField ? String(row[colField] || 'Unknown') : 'Total';
+            const rVal = formatValue(row[rowField] || 'Unknown');
+            const cVal = colField ? formatValue(row[colField] || 'Unknown') : 'Total';
             const vVal = Number(row[valueField]) || 0;
 
             if (!pivotData[rVal]) pivotData[rVal] = {};
@@ -174,7 +174,7 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
         if (!widget.xAxis || !widget.yAxis) return [];
         const agg = new Map<string, number>();
         rawData.forEach((row: any) => {
-            const key = String(row[widget.xAxis] || 'Unknown');
+            const key = formatValue(row[widget.xAxis] || 'Unknown');
             agg.set(key, (agg.get(key) || 0) + (Number(row[widget.yAxis]) || 0));
         });
         return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).slice(0, 50);
@@ -190,7 +190,7 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
 
         rawData.forEach((row: any) => {
             const x = formatValue(row[widget.xAxis!] || 'Unknown');
-            const g = String(row[widget.groupBy!] || 'Unknown');
+            const g = formatValue(row[widget.groupBy!] || 'Unknown');
             const v = Number(row[widget.yAxis!]) || 0;
             xSet.add(x);
             gSet.add(g);
