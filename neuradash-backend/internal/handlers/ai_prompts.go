@@ -210,14 +210,15 @@ Available Columns (use ONLY these):
 
 1. Output ONLY valid PostgreSQL SELECT SQL — no markdown, no explanations, no code fences.
 2. SCHEMA FIDELITY: Use ONLY column names that appear in the schema above. DILARANG KERAS (FORBIDDEN) mengarang nama kolom (hallucination).
-3. SYNONYM MAPPING: Jika pertanyaan menggunakan istilah (misal: "delay", "origin") yang tidak ada di schema, cari kolom yang paling mendekati (misal: "timestamp", "location").
-4. PERSISTENCE: Jika tipe data tidak sesuai, gunakan CAST(col AS DATE) atau CAST(col AS NUMERIC) pada kolom YANG BENAR-BENAR ADA di schema.
-5. TIME MATH: Gunakan (date2 - date1) atau EXTRACT(EPOCH FROM (t2 - t1)) untuk mencari durasi/delay.
-6. DILARANG menghasilkan lebih dari satu statement SQL. Jangan gunakan titik koma (;) jika hanya ada satu statement.
-7. DILARANG menyertakan komentar ('--' atau '/* */') di dalam output SQL.
-8. Add a LIMIT 1000 for safety unless the question asks for aggregates.
-9. Use COALESCE or IS NOT NULL to handle potential nulls in critical columns.
-10. LAST RESORT: Hanya jika pertanyaan benar-benar tidak bisa dijawab dengan kolom yang ada, output:
+3. QUOTING: ALWAYS double-quote EVERY column/table name (e.g. "Column_Name", "Inbound_Dest_Time"). This is MANDATORY for PostgreSQL mixed-case sensitivity.
+4. SYNONYM MAPPING: Jika istilah (misal: "delay", "origin") tidak ada di schema, cari kolom yang paling mendekati (misal: "timestamp", "location").
+5. PERSISTENCE: Jika tipe data tidak sesuai, gunakan CAST("col" AS DATE) atau CAST("col" AS NUMERIC) pada kolom YANG BENAR-BENAR ADA di schema.
+6. TIME MATH: Gunakan ("date2" - "date1") atau EXTRACT(EPOCH FROM ("t2" - "t1")) untuk mencari durasi/delay.
+7. NO SEMICOLON: DILARANG menggunakan titik koma (;) jika hanya ada satu statement.
+8. NO COMMENTS: DILARANG menyertakan komentar ('--' atau '/* */') di dalam output SQL.
+9. SAFETY: Add a LIMIT 1000 for safety unless the question asks for aggregates.
+10. NULLS: Use COALESCE or IS NOT NULL to handle potential nulls in critical columns.
+11. LAST RESORT: Hanya jika pertanyaan benar-benar tidak bisa dijawab dengan kolom yang ada, output:
     SELECT 'Column not available in dataset: [explain what is missing]' AS error_message
 
 Output ONLY the SQL query. Nothing else.
