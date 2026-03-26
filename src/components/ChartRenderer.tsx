@@ -171,7 +171,11 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
 
   // Generic Grouped Data (for Clustered, Stacked, Parallel, etc)
   const groupedData = useMemo(() => {
-    if (!['clustered_bar', 'stacked_bar', '100_stacked_bar', 'butterfly', 'marimekko', 'parallel', 'bullet', 'slopegraph'].includes(chartType) || !dataset || !xAxis || !yAxis || !groupBy) {
+    const supportedTypes = [
+      'bar', 'horizontal_bar', 'line', 'area', 'scatter', 'radar', 'stacked_area_100',
+      'clustered_bar', 'stacked_bar', '100_stacked_bar', 'butterfly', 'marimekko', 'parallel', 'bullet', 'slopegraph'
+    ];
+    if (!supportedTypes.includes(chartType) || !dataset || !xAxis || !yAxis || !groupBy) {
       return { categories: [] as string[], groups: [] as string[], matrix: [] as any[] };
     }
     const xSet = new Set<string>();
@@ -1818,39 +1822,223 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
 
     if (!chartData.length) return <EmptyChart />;
 
-    const commonProps = { data: chartData, margin: { top: 20, right: 30, left: 20, bottom: 60 } };
+    const isGrouped = !!(groupBy && groupedData.matrix.length > 0);
+    const dataToUse = isGrouped ? groupedData.matrix : chartData;
+    const seriesKeys = isGrouped ? groupedData.groups : ['value'];
+
+    const commonProps = { data: dataToUse, margin: { top: 20, right: 30, left: 20, bottom: 60 } };
 
     switch (chartType) {
       case 'bar':
-        return (<ResponsiveContainer width="100%" height="100%"><BarChart {...commonProps}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} angle={-45} textAnchor="end" /><YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} /><Tooltip contentStyle={tooltipStyle} /><Legend /><Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>);
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} angle={-45} textAnchor="end" />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+              {seriesKeys.map((key, i) => (
+                <Bar 
+                  key={key} 
+                  dataKey={key} 
+                  name={isGrouped ? key : undefined}
+                  fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
+                  radius={[4, 4, 0, 0]} 
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        );
       case 'horizontal_bar':
-        return (<ResponsiveContainer width="100%" height="100%"><BarChart {...commonProps} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} /><YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" fontSize={11} width={80} /><Tooltip contentStyle={tooltipStyle} /><Legend /><Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer>);
-      case 'line':
-        return (<ResponsiveContainer width="100%" height="100%"><ReLineChart {...commonProps}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} angle={-45} textAnchor="end" /><YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} /><Tooltip contentStyle={tooltipStyle} /><Legend /><Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: 'hsl(var(--primary))' }} /></ReLineChart></ResponsiveContainer>);
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart {...commonProps} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" fontSize={11} width={80} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+              {seriesKeys.map((key, i) => (
+                <Bar 
+                  key={key} 
+                  dataKey={key} 
+                  name={isGrouped ? key : undefined}
+                  fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
+                  radius={[0, 4, 4, 0]} 
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        );
       case 'pie':
-        return (<ResponsiveContainer width="100%" height="100%"><RePieChart><Pie data={chartData} cx="50%" cy="50%" outerRadius={120} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>{chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip contentStyle={tooltipStyle} /><Legend /></RePieChart></ResponsiveContainer>);
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <RePieChart>
+              <Pie 
+                data={chartData} 
+                cx="50%" 
+                cy="50%" 
+                outerRadius={120} 
+                dataKey="value" 
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              >
+                {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+            </RePieChart>
+          </ResponsiveContainer>
+        );
       case 'donut':
-        return (<ResponsiveContainer width="100%" height="100%"><RePieChart><Pie data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={120} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>{chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip contentStyle={tooltipStyle} /><Legend /></RePieChart></ResponsiveContainer>);
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <RePieChart>
+              <Pie 
+                data={chartData} 
+                cx="50%" 
+                cy="50%" 
+                innerRadius={70} 
+                outerRadius={120} 
+                dataKey="value" 
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              >
+                {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+            </RePieChart>
+          </ResponsiveContainer>
+        );
+      case 'line':
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <ReLineChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} angle={-45} textAnchor="end" />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+              {seriesKeys.map((key, i) => (
+                <Line 
+                  key={key} 
+                  type="monotone" 
+                  dataKey={key} 
+                  name={isGrouped ? key : undefined}
+                  stroke={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
+                  strokeWidth={2} 
+                  dot={{ fill: isGrouped ? COLORS[i % COLORS.length] : 'hsl(var(--primary))' }} 
+                />
+              ))}
+            </ReLineChart>
+          </ResponsiveContainer>
+        );
       case 'area':
-        return (<ResponsiveContainer width="100%" height="100%"><ReAreaChart {...commonProps}><defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} /><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} angle={-45} textAnchor="end" /><YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} /><Tooltip contentStyle={tooltipStyle} /><Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="url(#areaGrad)" strokeWidth={2} /></ReAreaChart></ResponsiveContainer>);
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <ReAreaChart {...commonProps}>
+              <defs>
+                {seriesKeys.map((key, i) => (
+                  <linearGradient key={`grad-${key}`} id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} stopOpacity={0} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} angle={-45} textAnchor="end" />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+              {seriesKeys.map((key, i) => (
+                <Area 
+                  key={key} 
+                  type="monotone" 
+                  dataKey={key} 
+                  name={isGrouped ? key : undefined}
+                  stroke={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
+                  fill={`url(#grad-${key})`} 
+                  strokeWidth={2} 
+                />
+              ))}
+            </ReAreaChart>
+          </ResponsiveContainer>
+        );
       case 'scatter':
-        return (<ResponsiveContainer width="100%" height="100%"><ScatterChart {...commonProps}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" /><XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} /><YAxis dataKey="value" stroke="hsl(var(--muted-foreground))" fontSize={11} /><Tooltip contentStyle={tooltipStyle} /><Scatter data={chartData} fill="hsl(var(--primary))" /></ScatterChart></ResponsiveContainer>);
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <YAxis dataKey={isGrouped ? seriesKeys[0] : "value"} stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+              {seriesKeys.map((key, i) => (
+                <Scatter 
+                  key={key} 
+                  name={isGrouped ? key : "Value"}
+                  data={dataToUse} 
+                  fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
+                />
+              ))}
+            </ScatterChart>
+          </ResponsiveContainer>
+        );
       case 'radar':
-        return (<ResponsiveContainer width="100%" height="100%"><RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}><PolarGrid stroke="hsl(var(--border))" /><PolarAngleAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} /><PolarRadiusAxis stroke="hsl(var(--muted-foreground))" fontSize={10} /><ReRadar dataKey="value" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} /><Legend /></RadarChart></ResponsiveContainer>);
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={dataToUse}>
+              <PolarGrid stroke="hsl(var(--border))" />
+              <PolarAngleAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <PolarRadiusAxis stroke="hsl(var(--muted-foreground))" fontSize={10} />
+              {seriesKeys.map((key, i) => (
+                <ReRadar 
+                  key={key} 
+                  name={key}
+                  dataKey={key} 
+                  stroke={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
+                  fill={isGrouped ? COLORS[i % COLORS.length] : "hsl(var(--primary))"} 
+                  fillOpacity={0.3} 
+                />
+              ))}
+              <Legend />
+            </RadarChart>
+          </ResponsiveContainer>
+        );
       case 'funnel':
         return (<ResponsiveContainer width="100%" height="100%"><FunnelChart><Tooltip contentStyle={tooltipStyle} /><Funnel dataKey="value" data={chartData.sort((a, b) => b.value - a.value)} isAnimationActive>{chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}<LabelList position="center" fill="hsl(var(--foreground))" stroke="none" dataKey="name" fontSize={11} /></Funnel></FunnelChart></ResponsiveContainer>);
       case 'treemap':
-        return (<ResponsiveContainer width="100%" height="100%"><Treemap data={chartData} dataKey="value" aspectRatio={4 / 3} stroke="hsl(var(--border))" fill="hsl(var(--primary))"                    content={(params: any) => {
-                      const { x, y, width, height, index, name } = params;
-                      return (
-                        <g>
-                          <rect x={x} y={y} width={width} height={height} style={{ fill: COLORS[index % COLORS.length], stroke: '#fff', strokeWidth: 1 }} />
-                          {width > 30 && height > 20 && (
-                            <text x={x + 4} y={y + 16} fill="#fff" fontSize={10} style={{ pointerEvents: 'none' }}>{name}</text>
-                          )}
-                        </g>
-                      );
-                    }} /></ResponsiveContainer>);
+        const CustomizedTreemapContent = (props: any) => {
+          const { x, y, width, height, index, name } = props;
+          return (
+            <g>
+              <rect 
+                x={x} 
+                y={y} 
+                width={width} 
+                height={height} 
+                style={{ fill: COLORS[index % COLORS.length], stroke: '#fff', strokeWidth: 1 }} 
+              />
+              {width > 30 && height > 20 && (
+                <text x={x + 4} y={y + 16} fill="#fff" fontSize={10} style={{ pointerEvents: 'none' }}>
+                  {name}
+                </text>
+              )}
+            </g>
+          );
+        };
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <Treemap 
+              data={chartData} 
+              dataKey="value" 
+              aspectRatio={4 / 3} 
+              stroke="hsl(var(--border))" 
+              fill="hsl(var(--primary))"
+              content={<CustomizedTreemapContent />} 
+            />
+          </ResponsiveContainer>
+        );
       case 'waterfall':
         return (
           <ResponsiveContainer width="100%" height="100%">

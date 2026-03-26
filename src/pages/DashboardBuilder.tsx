@@ -1368,7 +1368,7 @@ export default function DashboardBuilder() {
             const dashboard = dashboards.find(d => d.id === activeDashboardId);
             if (!dashboard) return;
             const newWidgets = dashboard.widgets.map(w => w.id === editingTextWidgetId ? { ...w, htmlContent: html } : w);
-            updateDashboardMut.mutate({ id: dashboard.id, payload: { ...dashboard, widgets: newWidgets } }, {
+            updateDashboardMut.mutate({ id: dashboard.id, payload: { widgets: newWidgets } }, {
                onSuccess: () => {
                  toast({ title: 'Text Updated', description: 'Text widget content has been saved successfully.' });
                }

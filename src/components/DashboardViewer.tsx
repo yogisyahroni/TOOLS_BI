@@ -3,7 +3,12 @@ import ReactECharts from 'echarts-for-react';
 import axios from 'axios';
 import { API_BASE } from '@/lib/api';
 import { Loader2, Zap } from 'lucide-react';
+import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 import type { DashboardConfig as Dashboard, Widget } from '@/types/data';
+
+const AnyResponsiveGridLayout = ResponsiveGridLayout as any;
 
 // Helper hook to fetch dataset data anonymously via token
 function useEmbedDatasetData(token: string, datasetId: string) {
@@ -365,26 +370,65 @@ function WidgetChartRenderer({ widget, token }: { widget: Widget, token: string 
 }
 
 export function DashboardViewer({ dashboard, token }: { dashboard: Dashboard, token: string }) {
+    const [containerWidth, setContainerWidth] = useState(1200);
+    const gridContainerRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!gridContainerRef.current) return;
+        const observer = new ResizeObserver((entries) => {
+            if (entries[0]) {
+                setContainerWidth(entries[0].contentRect.width);
+            }
+        });
+        observer.observe(gridContainerRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    const gridLayouts = React.useMemo(() => ({
+        lg: (dashboard.widgets || []).map((w: any) => ({
+            i: w.id,
+            x: w.x ?? 0,
+            y: w.y ?? Infinity,
+            w: w.w ?? (w.width === 'full' ? 12 : w.width === 'half' ? 6 : 4),
+            h: w.h ?? (w.type === 'stat' || w.type === 'text' || w.type === 'action' ? 2 : 4)
+        }))
+    }), [dashboard.widgets]);
+
     if (!dashboard.widgets || dashboard.widgets.length === 0) {
         return (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground p-8">
                 <p className="text-lg font-medium">No Widgets on this Dashboard</p>
             </div>
         );
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max p-4">
-            {dashboard.widgets.map((widget) => (
-                <div key={widget.id} className={`rounded-xl border shadow-sm overflow-hidden bg-card ${widget.width === 'full' ? 'md:col-span-2 lg:col-span-3' : widget.width === 'half' ? 'md:col-span-2' : ''}`}>
-                    <div className="p-3 border-b flex items-center justify-between border-border bg-muted/20">
-                        <span className="font-semibold text-foreground text-sm">{widget.title || 'Untitled'}</span>
+        <div ref={gridContainerRef} className="w-full">
+            <AnyResponsiveGridLayout
+                className="layout"
+                width={containerWidth}
+                layouts={gridLayouts}
+                breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+                cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
+                rowHeight={80}
+                margin={[24, 24]}
+                isDraggable={false}
+                isResizable={false}
+                useCSSTransforms={true}
+            >
+                {dashboard.widgets.map((widget) => (
+                    <div key={widget.id} className="rounded-xl border shadow-sm overflow-hidden bg-card flex flex-col">
+                        <div className="p-3 border-b flex items-center justify-between border-border bg-muted/20 shrink-0">
+                            <span className="font-semibold text-foreground text-sm truncate">{widget.title || 'Untitled'}</span>
+                        </div>
+                        <div className="flex-1 min-h-0 relative">
+                            <div className="absolute inset-0 p-4">
+                                <WidgetChartRenderer widget={widget} token={token} />
+                            </div>
+                        </div>
                     </div>
-                    <div className={`p-4 ${widget.type === 'stat' ? 'h-[160px]' : (widget.type === 'text' || widget.type === 'action') ? 'h-[140px]' : 'h-[250px] md:h-[300px]'}`}>
-                        <WidgetChartRenderer widget={widget} token={token} />
-                    </div>
-                </div>
-            ))}
+                ))}
+            </AnyResponsiveGridLayout>
         </div>
     );
 }
