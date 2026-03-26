@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import 'echarts-wordcloud';
+import { format, parseISO, isValid } from 'date-fns';
 import { ALL_CHART_TYPES } from '../constants/chartTypes';
 import {
   BarChart, Bar, LineChart as ReLineChart, Line,
@@ -14,6 +15,20 @@ import {
 } from 'recharts';
 
 export const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+const formatValue = (value: any) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') {
+    // Check if it's an ISO date string (YYYY-MM-DDTHH:mm:ss...)
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+      const date = parseISO(value);
+      if (isValid(date)) {
+        return format(date, 'dd MMM yyyy'); // e.g., 01 Jan 2024
+      }
+    }
+  }
+  return String(value);
+};
 
 const tooltipStyle = {
   backgroundColor: 'hsl(var(--popover))',
@@ -79,7 +94,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     if (!dataset || !xAxis || !yAxis) return [];
     const aggregated = new Map<string, number>();
     dataset.data.forEach(row => {
-      const key = String(row[xAxis] || 'Unknown');
+      const key = formatValue(row[xAxis] || 'Unknown');
       const val = Number(row[yAxis]) || 0;
       aggregated.set(key, (aggregated.get(key) || 0) + val);
     });
@@ -112,8 +127,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     const ySet = new Set<string>();
     const map = new Map<string, number>();
     dataset.data.forEach(row => {
-      const x = String(row[xAxis] || '');
-      const y = String(row[groupBy] || '');
+      const x = formatValue(row[xAxis] || '');
+      const y = formatValue(row[groupBy] || '');
       const v = Number(row[yAxis]) || 0;
       xSet.add(x); ySet.add(y);
       const key = `${y}__${x}`;
@@ -130,7 +145,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     if (chartType !== 'boxplot' || !dataset || !xAxis || !yAxis) return [];
     const groups = new Map<string, number[]>();
     dataset.data.forEach(row => {
-      const key = String(row[xAxis] || 'Unknown');
+      const key = formatValue(row[xAxis] || 'Unknown');
       const val = Number(row[yAxis]);
       if (!isNaN(val)) {
         if (!groups.has(key)) groups.set(key, []);
@@ -164,8 +179,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     const map = new Map<string, number>();
 
     dataset.data.forEach(row => {
-      const x = String(row[xAxis] || 'Unknown');
-      const g = String(row[groupBy] || 'Unknown');
+      const x = formatValue(row[xAxis] || 'Unknown');
+      const g = formatValue(row[groupBy] || 'Unknown');
       const v = Number(row[yAxis]) || 0;
       xSet.add(x); gSet.add(g);
       const key = `${x}__${g}`;
@@ -214,8 +229,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       const colSet = new Set<string>();
 
       dataset.data.forEach((row: any) => {
-        const rVal = String(row[rowField] || 'Unknown');
-        const cVal = colField ? String(row[colField] || 'Unknown') : 'Total';
+        const rVal = formatValue(row[rowField] || 'Unknown');
+        const cVal = colField ? formatValue(row[colField] || 'Unknown') : 'Total';
         const vVal = Number(row[valueField]) || 0;
 
         if (!pivotData[rVal]) pivotData[rVal] = {};
@@ -278,42 +293,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       );
     }
 
-    if (chartType === 'heatmap') {
-      if (!heatmapData.data.length) return <EmptyChart msg="Select X-Axis, Y-Axis, and Group By for heatmap" />;
-      return <HeatmapCell {...heatmapData} />;
-    }
-
-    if (chartType === 'boxplot') {
-      if (!boxplotData.length) return <EmptyChart />;
-      return (
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={boxplotData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} angle={-45} textAnchor="end" />
-            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-            <Tooltip contentStyle={tooltipStyle} content={({ payload }) => {
-              if (!payload?.[0]) return null;
-              const d = payload[0].payload;
-              return (
-                <div className="bg-popover border border-border rounded-lg p-3 text-sm text-popover-foreground shadow-lg">
-                  <p className="font-semibold">{d.name}</p>
-                  <p>Max: {d.max?.toFixed(1)}</p><p>Q3: {d.q3?.toFixed(1)}</p>
-                  <p>Median: {d.median?.toFixed(1)}</p><p>Q1: {d.q1?.toFixed(1)}</p>
-                  <p>Min: {d.min?.toFixed(1)}</p>
-                </div>
-              );
-            }} />
-            {/* Box: Q1 to Q3 */}
-            <Bar dataKey="q1" stackId="box" fill="transparent" />
-            <Bar dataKey="iqr" stackId="box" fill="hsl(var(--primary))" fillOpacity={0.6} stroke="hsl(var(--primary))" radius={[4, 4, 4, 4]} />
-            {/* Median line */}
-            {boxplotData.map((d, i) => (
-              <ReferenceLine key={i} y={d.median} stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="3 3" />
-            ))}
-          </ComposedChart>
-        </ResponsiveContainer>
-      );
-    }
+    // Removed redundant and broken heatmap/boxplot blocks to use main switch instead.
 
     if (chartType === 'stat') {
       if (!dataset || !yAxis) return <EmptyChart msg="Pilih Dataset dan Y-Axis untuk menghitung KPI/Stat" />;
@@ -359,8 +339,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       if (!dataset || !xAxis || !groupBy || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, Y-Axis, dan Group By untuk Sunburst" />;
       const groups = new Map<string, Map<string, number>>();
       dataset.data.forEach((row: any) => {
-        const parent = String(row[xAxis] || 'Unknown');
-        const child = String(row[groupBy] || 'Unknown');
+        const parent = formatValue(row[xAxis] || 'Unknown');
+        const child = formatValue(row[groupBy] || 'Unknown');
         const val = Number(row[yAxis]) || 0;
         if (!groups.has(parent)) groups.set(parent, new Map());
         const childMap = groups.get(parent)!;
@@ -383,8 +363,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       const nodesSet = new Set<string>();
       const linksMap = new Map<string, number>();
       dataset.data.forEach((row: any) => {
-        const source = String(row[xAxis] || 'Unknown');
-        const target = String(row[groupBy] || 'Unknown');
+        const source = formatValue(row[xAxis] || 'Unknown');
+        const target = formatValue(row[groupBy] || 'Unknown');
         const val = Number(row[yAxis]) || 0;
         nodesSet.add(source);
         nodesSet.add(target);
@@ -407,7 +387,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       if (!dataset || !xAxis || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, dan Y-Axis (serta opsional Group By) untuk Combo Chart" />;
       const agg = new Map<string, { bar: number, line: number }>();
       dataset.data.forEach((row: any) => {
-        const key = String(row[xAxis] || 'Unknown');
+        const key = formatValue(row[xAxis] || 'Unknown');
         const barVal = Number(row[yAxis]) || 0;
         const lineVal = groupBy ? (Number(row[groupBy]) || 0) : 0;
         if (!agg.has(key)) agg.set(key, { bar: 0, line: 0 });
@@ -735,7 +715,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
           }
         },
         xAxis: { type: 'value', splitLine: { lineStyle: { color: '#374151', type: 'dashed' } }, axisLabel: { color: '#9ca3af' } },
-        yAxis: { type: 'category', data: dataSlice.map((row: any, i: number) => String(row[xAxis] || i)), axisLabel: { color: '#9ca3af' } },
+        yAxis: { type: 'category', data: dataSlice.map((row: any, i: number) => formatValue(row[xAxis] || i)), axisLabel: { color: '#9ca3af' } },
         series: [{
           type: 'custom',
           renderItem: (params: any, api: any) => {
@@ -751,12 +731,11 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
           },
           itemStyle: { color: COLORS[0], borderRadius: 4 },
           data: dataSlice.map((row: any, i: number) => ({
-            name: String(row[xAxis] || i),
+            name: formatValue(row[xAxis] || i),
             value: [i, Number(row[c1]) || 0, Number(row[c2]) || 0]
           }))
         }]
       };
-      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
       return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
     }
 
@@ -845,7 +824,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         backgroundColor: 'transparent',
         grid: { top: 30, right: 30, bottom: 50, left: 50, containLabel: true },
         tooltip: { trigger: 'axis' },
-        xAxis: { type: 'category', boundaryGap: false, data: dataset.data.slice(0, 100).map((r: any) => String(r[xAxis])), axisLabel: { color: '#9ca3af' } },
+        xAxis: { type: 'category', boundaryGap: false, data: dataset.data.slice(0, 100).map((r: any) => formatValue(r[xAxis])), axisLabel: { color: '#9ca3af' } },
         yAxis: { type: 'value', max: bandSize, axisLabel: { color: '#9ca3af' } },
         series
       };
@@ -938,7 +917,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         grid: { top: 30, right: 30, bottom: 50, left: 50, containLabel: true },
         tooltip: { trigger: 'axis' },
         legend: { data: ['Actual', 'Ideal'], textStyle: { color: '#9ca3af' }, bottom: 0 },
-        xAxis: { type: 'category', data: dataSlice.map((r: any) => String(r[xAxis])), axisLabel: { color: '#9ca3af' } },
+        xAxis: { type: 'category', data: dataSlice.map((r: any) => formatValue(r[xAxis])), axisLabel: { color: '#9ca3af' } },
         yAxis: { type: 'value', axisLabel: { color: '#9ca3af' } },
         series: [
           { name: 'Actual', type: 'line', data: actualData, itemStyle: { color: COLORS[0] }, symbol: 'circle', symbolSize: 6, lineStyle: { width: 3 } },
@@ -1004,7 +983,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         backgroundColor: 'transparent',
         grid: { top: 30, right: 30, bottom: 50, left: 50, containLabel: true },
         tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => String(r[xAxis])), axisLabel: { color: '#9ca3af' } },
+        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => formatValue(r[xAxis])), axisLabel: { color: '#9ca3af' } },
         yAxis: { type: 'value', scale: true, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#374151', type: 'dashed' } } },
         series: [{
           type: 'candlestick',
@@ -1024,7 +1003,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         backgroundColor: 'transparent',
         grid: { top: 30, right: 30, bottom: 50, left: 50, containLabel: true },
         tooltip: { trigger: 'axis' },
-        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => String(r[xAxis])), axisLabel: { color: '#9ca3af' } },
+        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => formatValue(r[xAxis])), axisLabel: { color: '#9ca3af' } },
         yAxis: { type: 'value', scale: true, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#374151', type: 'dashed' } } },
         series: [{ type: 'line', step: 'middle', data, itemStyle: { color: COLORS[0] }, lineStyle: { width: 3 }, symbol: 'none' }]
       };
@@ -1047,7 +1026,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         backgroundColor: 'transparent',
         grid: { top: 30, right: 30, bottom: 50, left: 50, containLabel: true },
         tooltip: { trigger: 'axis' },
-        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => String(r[xAxis])), axisLabel: { color: '#9ca3af' } },
+        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => formatValue(r[xAxis])), axisLabel: { color: '#9ca3af' } },
         yAxis: { type: 'value', scale: true, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#374151', type: 'dashed' } } },
         series: [{
           type: 'custom',
@@ -1090,7 +1069,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         backgroundColor: 'transparent',
         grid: { top: 30, right: 30, bottom: 50, left: 50, containLabel: true },
         tooltip: { formatter: (p: any) => `Value: ${p.value[1]}` },
-        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => String(r[xAxis])), axisLabel: { color: '#9ca3af' } },
+        xAxis: { type: 'category', data: dataset.data.slice(0, 100).map((r: any) => formatValue(r[xAxis])), axisLabel: { color: '#9ca3af' } },
         yAxis: { type: 'value', scale: true, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#374151', type: 'dashed' } } },
         series: [{ type: 'scatter', data: scatterData }]
       };
@@ -1106,7 +1085,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
             tooltip: {},
             visualMap: { min: 0, max: 1000, calculable: true, orient: 'horizontal', left: 'center', bottom: '15%' },
             calendar: { top: 60, left: 30, right: 30, cellSize: ['auto', 20], range: '2024', itemStyle: { borderWidth: 0.5 } },
-            series: [{ type: 'heatmap', coordinateSystem: 'calendar', data: dataset.data.slice(0, 365).map((r:any) => [r[xAxis], Number(r[yAxis])||0]) }]
+            series: [{ type: 'heatmap', coordinateSystem: 'calendar', data: dataset.data.slice(0, 365).map((r:any) => [formatValue(r[xAxis]), Number(r[yAxis])||0]) }]
           };
           return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
         }
@@ -1119,7 +1098,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
              backgroundColor: 'transparent',
              tooltip: { trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: 'rgba(0,0,0,0.2)', width: 1, type: 'solid' } } },
              singleAxis: { top: 50, bottom: 50, axisTick: {}, axisLabel: {}, type: 'time', axisPointer: { animation: true, label: { show: true } }, splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.2 } } },
-             series: [{ type: 'themeRiver', emphasis: { itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0, 0, 0, 0.8)' } }, data: dataset.data.map((r:any) => [r[xAxis], Number(r[yAxis])||0, r[groupBy]]) }]
+             series: [{ type: 'themeRiver', emphasis: { itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0, 0, 0, 0.8)' } }, data: dataset.data.map((r:any) => [formatValue(r[xAxis]), Number(r[yAxis])||0, formatValue(r[groupBy])]) }]
            };
            return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
         }
@@ -1349,13 +1328,13 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
         }
         case 'heatmap': {
           if (dataset.data.length === 0) return <EmptyChart />;
-          const xCats = Array.from(new Set(dataset.data.map((r:any) => String(r[xAxis]||'')))).slice(0, 20);
-          const yCats = Array.from(new Set(dataset.data.map((r:any) => String(r[groupBy || yAxis]||'')))).slice(0, 20);
+          const xCats = Array.from(new Set(dataset.data.map((r:any) => formatValue(r[xAxis])))).slice(0, 20);
+          const yCats = Array.from(new Set(dataset.data.map((r:any) => formatValue(r[groupBy || yAxis])))).slice(0, 20);
           const zAxisName = (!groupBy || groupBy === yAxis) ? 'count' : yAxis;
           const map = new Map();
           dataset.data.forEach((r:any) => {
-             const x = String(r[xAxis]||'');
-             const y = String(r[groupBy || yAxis]||'');
+             const x = formatValue(r[xAxis]);
+             const y = formatValue(r[groupBy || yAxis]);
              const z = zAxisName === 'count' ? 1 : (Number(r[yAxis])||0);
              if(!map.has(x)) map.set(x, new Map());
              const ym = map.get(x);
@@ -1386,8 +1365,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
           let nodesMap = new Map();
           let links: any[] = [];
           dataset.data.slice(0, 200).forEach((r:any) => {
-            const src = String(r[groupBy]||'');
-            const tgt = String(r[xAxis]||'');
+            const src = formatValue(r[groupBy]);
+            const tgt = formatValue(r[xAxis]);
             if(!nodesMap.has(src)) nodesMap.set(src, { name: src, symbolSize: 20 });
             if(!nodesMap.has(tgt)) nodesMap.set(tgt, { name: tgt, symbolSize: 10 });
             links.push({ source: src, target: tgt, value: Number(r[yAxis])||1 });
@@ -1467,9 +1446,9 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
              };
              return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
           } else {
-             const categories = Array.from(new Set(dataset.data.map((r:any) => String(r[groupBy] || 'Unknown'))));
+             const categories = Array.from(new Set(dataset.data.map((r:any) => formatValue(r[groupBy])))) as string[];
              const boxData = categories.map(cat => {
-               const values = dataset.data.filter((r:any) => String(r[groupBy] || 'Unknown') === cat)
+               const values = dataset.data.filter((r:any) => formatValue(r[groupBy]) === cat)
                                           .map((r:any) => Number(r[yAxis]) || 0)
                                           .sort((a,b)=>a-b);
                if(!values.length) return [0,0,0,0,0];
@@ -1618,9 +1597,9 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       
       if (groupBy) {
         const grouped = dataset.data.reduce((acc: any, row: any) => {
-          const g = row[groupBy] || 'Unknown';
+          const g = formatValue(row[groupBy]);
           if (!acc[g]) acc[g] = [];
-          acc[g].push({ name: String(row[xAxis]), value: Number(row[yAxis]) || 0 });
+          acc[g].push({ name: formatValue(row[xAxis]), value: Number(row[yAxis]) || 0 });
           return acc;
         }, {});
         treeData = [{
@@ -1685,8 +1664,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       
       if (groupBy) {
         dataset.data.forEach((row: any) => {
-          const source = String(row[groupBy] || 'Unknown');
-          const target = String(row[xAxis] || 'Unknown');
+          const source = formatValue(row[groupBy]);
+          const target = formatValue(row[xAxis]);
           const value = Number(row[yAxis]) || 0;
           if (value > 0) {
             nodesSet.add(source);
@@ -1730,8 +1709,8 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       
       if (groupBy) {
         dataset.data.forEach((row: any) => {
-          const source = String(row[groupBy] || 'Unknown');
-          const target = String(row[xAxis] || 'Unknown');
+          const source = formatValue(row[groupBy]);
+          const target = formatValue(row[xAxis]);
           const value = Number(row[yAxis]) || 0;
           if (value > 0) {
             nodesSet.add(source);
@@ -1861,7 +1840,17 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       case 'funnel':
         return (<ResponsiveContainer width="100%" height="100%"><FunnelChart><Tooltip contentStyle={tooltipStyle} /><Funnel dataKey="value" data={chartData.sort((a, b) => b.value - a.value)} isAnimationActive>{chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}<LabelList position="center" fill="hsl(var(--foreground))" stroke="none" dataKey="name" fontSize={11} /></Funnel></FunnelChart></ResponsiveContainer>);
       case 'treemap':
-        return (<ResponsiveContainer width="100%" height="100%"><Treemap data={chartData} dataKey="value" aspectRatio={4 / 3} stroke="hsl(var(--border))" fill="hsl(var(--primary))" content={<TreemapContent />} /></ResponsiveContainer>);
+        return (<ResponsiveContainer width="100%" height="100%"><Treemap data={chartData} dataKey="value" aspectRatio={4 / 3} stroke="hsl(var(--border))" fill="hsl(var(--primary))"                    content={(params: any) => {
+                      const { x, y, width, height, index, name } = params;
+                      return (
+                        <g>
+                          <rect x={x} y={y} width={width} height={height} style={{ fill: COLORS[index % COLORS.length], stroke: '#fff', strokeWidth: 1 }} />
+                          {width > 30 && height > 20 && (
+                            <text x={x + 4} y={y + 16} fill="#fff" fontSize={10} style={{ pointerEvents: 'none' }}>{name}</text>
+                          )}
+                        </g>
+                      );
+                    }} /></ResponsiveContainer>);
       case 'waterfall':
         return (
           <ResponsiveContainer width="100%" height="100%">
