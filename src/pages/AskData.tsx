@@ -792,9 +792,15 @@ export default function AskData() {
                             <span className="ml-2 font-medium">{r.executionPlan}</span>
                           </div>
                         </div>
+                        <div className="pt-2 border-t border-border/50">
+                          <span className="text-muted-foreground block mb-1">SQL Query:</span>
+                          <pre className="p-2 bg-background/50 border border-border/50 rounded font-mono text-[10px] overflow-auto max-h-[150px] whitespace-pre-wrap select-all">
+                            {r.sql}
+                          </pre>
+                        </div>
                         <div>
                           <span className="text-muted-foreground">Explanation:</span>
-                          <p className="mt-1 text-foreground">{r.explanation}</p>
+                          <p className="mt-1 text-foreground leading-relaxed">{r.explanation}</p>
                         </div>
                         {r.securityWarnings.length > 0 && (
                           <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
