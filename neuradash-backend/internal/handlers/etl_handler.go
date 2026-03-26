@@ -337,6 +337,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 
 	isTableCreated := false
 	totalOutputRows := 0
+	var columnTypes map[string]string
 
 	for offset := 0; ; offset += chunkLimit {
 		var chunkRows []map[string]interface{}
@@ -405,6 +406,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 
 		// 2. Persist results to a physical SQL table
 		if !isTableCreated {
+			columnTypes = make(map[string]string)
 			// a. Drop existing table if it exists (Ensures idempotency)
 			h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
 
@@ -423,6 +425,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 				case time.Time, *time.Time:
 					sqlType = "TIMESTAMPTZ"
 				}
+				columnTypes[colName] = sqlType
 				colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
 			}
 
@@ -457,12 +460,14 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			// Sanitize time.Time to string (RFC3339) to prevent pgx encoding panics for TEXT columns
 			for _, row := range batch {
 				for k, v := range row {
-					switch t := v.(type) {
-					case time.Time:
-						row[k] = t.Format(time.RFC3339)
-					case *time.Time:
-						if t != nil {
+					if columnTypes[k] != "TIMESTAMPTZ" {
+						switch t := v.(type) {
+						case time.Time:
 							row[k] = t.Format(time.RFC3339)
+						case *time.Time:
+							if t != nil {
+								row[k] = t.Format(time.RFC3339)
+							}
 						}
 					}
 				}
