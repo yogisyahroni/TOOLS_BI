@@ -199,7 +199,7 @@ export default function AskData() {
   }, [results]);
 
   // 2026: History Fetching
-  const fetchHistory = useCallback(async () => {
+  const fetchHistory = useCallback(async (autoPopulate = false) => {
     if (!selectedDatasetId) return;
     setIsLoadingHistory(true);
     try {
@@ -209,6 +209,13 @@ export default function AskData() {
       if (res.ok) {
         const data = await res.json();
         setHistory(data);
+        
+        // Auto-populate results if current view is empty
+        if (autoPopulate && data.length > 0) {
+          const toRestore = data.slice(0, 3); // Restore top 3 most recent
+          const restoredResults = toRestore.map((item: any) => mapHistoryToResult(item));
+          setResults(restoredResults);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch history:', err);
@@ -219,7 +226,7 @@ export default function AskData() {
 
   useEffect(() => {
     if (selectedDatasetId) {
-      fetchHistory();
+      fetchHistory(true); // Enable auto-populate on initial load
     }
   }, [selectedDatasetId, fetchHistory]);
 
@@ -265,26 +272,28 @@ export default function AskData() {
     }
   }, [toast]);
 
+  const mapHistoryToResult = (item: any): QAResult => ({
+    id: item.id || generateId(),
+    question: item.question,
+    sql: item.sql,
+    rowCount: item.chartData?.length || 0,
+    chartData: item.chartData || [],
+    chartType: item.chartType || 'table',
+    xKey: item.xKey,
+    yKey: item.yKey,
+    confidence: item.confidence || 1.0,
+    explanation: item.explanation || '',
+    executionPlan: 'Restored from history',
+    provider: 'History',
+    latencyMs: 0,
+    isSafe: true,
+    securityWarnings: [],
+    queryType: 'SELECT',
+    executedAt: item.createdAt || item.executedAt || new Date().toISOString(),
+  });
+
   const restoreFromHistory = (item: any) => {
-    const restoredResult: QAResult = {
-      id: generateId(),
-      question: item.question,
-      sql: item.sql,
-      rowCount: item.chartData?.length || 0,
-      chartData: item.chartData || [],
-      chartType: item.chartType || 'table',
-      xKey: item.xKey,
-      yKey: item.yKey,
-      confidence: item.confidence || 1.0,
-      explanation: item.explanation || '',
-      executionPlan: 'Restored from history',
-      provider: 'History',
-      latencyMs: 0,
-      isSafe: true,
-      securityWarnings: [],
-      queryType: 'SELECT',
-      executedAt: item.createdAt || item.executedAt || new Date().toISOString(),
-    };
+    const restoredResult = mapHistoryToResult(item);
     
     // Check if this result is already in the main view
     setResults(prev => {
