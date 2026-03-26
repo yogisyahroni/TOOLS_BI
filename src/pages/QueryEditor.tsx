@@ -370,6 +370,7 @@ The JSON MUST conform exactly to this structure:
               onAIResponse={handleAIResponse}
               onCreateViews={handleCreateViews}
               isCreatingViews={isCreatingViews}
+              contextType="sql"
               className="h-full"
             />
           </div>

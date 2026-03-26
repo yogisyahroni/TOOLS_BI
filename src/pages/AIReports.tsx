@@ -491,6 +491,7 @@ Format tanggapan Anda sebagai laporan markdown komprehensif dalam Bahasa Indones
               systemPrompt={`You are a business analytics assistant for NeuraDash. Help users formulate analysis questions and understand their data. ${dataset ? `Current dataset: "${dataset.name}" with columns: ${dataset.columns.map(c => `${c.name} (${c.type})`).join(', ')}. ${dataset.rowCount} rows.` : 'No dataset selected yet.'}`}
               title="AI Analysis Chat"
               placeholder="Tanyakan tentang data Anda..."
+              contextType="report"
               className="h-full"
             />
           </div>

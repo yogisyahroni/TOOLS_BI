@@ -46,11 +46,12 @@ func NewAIHandler(db *gorm.DB, aiConf config.AIConfig, encryptionKey string) *AI
 // resolvedConfig holds the effective AI configuration for a single request.
 // It merges: user DB config > server env config fallback.
 type resolvedConfig struct {
-	Provider  string
-	APIKey    string
-	Model     string
-	MaxTokens int
-	BaseURL   string
+	Provider    string
+	APIKey      string
+	Model       string
+	MaxTokens   int
+	Temperature float64
+	BaseURL     string
 }
 
 // resolveUserConfig loads and decrypts the user's AI config from the database.
@@ -69,11 +70,12 @@ func (h *AIHandler) resolveUserConfig(userID string) (resolvedConfig, error) {
 			return resolvedConfig{}, fmt.Errorf("failed to decrypt API key: %w", decryptErr)
 		}
 		return resolvedConfig{
-			Provider:  userCfg.Provider,
-			APIKey:    rawKey,
-			Model:     userCfg.Model,
-			MaxTokens: userCfg.MaxTokens,
-			BaseURL:   userCfg.BaseURL,
+			Provider:    userCfg.Provider,
+			APIKey:      rawKey,
+			Model:       userCfg.Model,
+			MaxTokens:   userCfg.MaxTokens,
+			Temperature: userCfg.Temperature,
+			BaseURL:     userCfg.BaseURL,
 		}, nil
 	}
 
@@ -785,6 +787,7 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 			"model":       cfg.Model,
 			"messages":    messages,
 			"max_tokens":  cfg.MaxTokens,
+			"temperature": cfg.Temperature,
 			"tools":       []map[string]interface{}{sequentialThinkingToolDef()},
 			"tool_choice": "auto",
 		}
@@ -904,6 +907,7 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 			"model":       cfg.Model,
 			"messages":    messages,
 			"max_tokens":  cfg.MaxTokens,
+			"temperature": cfg.Temperature,
 			"stream":      true,
 			"tools":       []map[string]interface{}{sequentialThinkingToolDef()},
 			"tool_choice": "auto",

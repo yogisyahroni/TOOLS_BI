@@ -32,6 +32,7 @@ interface AIChatPanelProps {
   onCreateViews?: (recommendations: DatasetRecommendation[]) => void;
   className?: string;
   isCreatingViews?: boolean;
+  contextType?: 'sql' | 'chart' | 'report' | 'general';
 }
 
 export function AIChatPanel({
@@ -42,12 +43,15 @@ export function AIChatPanel({
   onCreateViews,
   className,
   isCreatingViews = false,
+  contextType = 'general',
 }: AIChatPanelProps) {
   const { data: aiConfig } = useAIConfig();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
+  const [isRefining, setIsRefining] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // State for selections inside the AI responses
@@ -163,6 +167,8 @@ export function AIChatPanel({
 
       if (!response.error && response.content && onAIResponse) {
         onAIResponse(response.content, jsonData);
+        // Automatically generate 3 suggestions for the next step
+        generateSuggestions(response.content);
       }
     } catch (err: any) {
       setIsLoading(false);
@@ -186,6 +192,47 @@ export function AIChatPanel({
         return { ...prev, [msgId]: currentSelections.filter(item => item.name !== rec.name) };
       }
     });
+  };
+
+  const handleRefine = async () => {
+    if (!input.trim() || isRefining) return;
+    setIsRefining(true);
+
+    const refinerPrompt = contextType === 'sql' 
+      ? "You are a SQL Expert. Refine this user prompt into a professional, clear, and unambiguous PostgreSQL query request. Focus ONLY on data extraction. DO NOT suggest charts or visualizations. Return ONLY the refined prompt text."
+      : "You are a Data Analyst Expert. Refine this user prompt into a professional, clear, and unambiguous data analysis or visualization request. Return ONLY the refined prompt text.";
+
+    try {
+      const response = await callAI([
+        { role: 'system', content: refinerPrompt },
+        { role: 'user', content: `Refine this: ${input}` }
+      ]);
+
+      if (response.content) {
+        setInput(response.content.trim());
+      }
+    } catch (err) {
+      console.error('Refine failed:', err);
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
+  const generateSuggestions = async (lastResponse: string) => {
+    try {
+      const response = await callAI([
+        { role: 'system', content: `Based on the AI's last response, generate 3 very short (max 5 words each) follow-up suggestions for the user. Context: ${contextType}. If SQL context, focus on joins or filters. If Chart context, focus on visualization styles. Return ONLY a JSON string array like ["Suggestion 1", "Suggestion 2", "Suggestion 3"].` },
+        { role: 'user', content: lastResponse }
+      ]);
+
+      if (response.content) {
+        const cleaned = response.content.match(/\[.*\]/s)?.[0] || response.content;
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed)) setSuggestions(parsed.slice(0, 3));
+      }
+    } catch (e) {
+      console.warn('Suggestions failed:', e);
+    }
   };
 
   return (
@@ -354,14 +401,45 @@ export function AIChatPanel({
 
                 {/* Input */}
                 <div className="p-3 border-t border-border bg-card">
-                  <div className="flex gap-2">
-                    <Textarea
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      placeholder={placeholder}
-                      className="min-h-[40px] max-h-[100px] resize-none text-xs bg-muted/40 border-border focus-visible:ring-primary/30 py-2.5"
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                    />
+                  {/* Suggestions area */}
+                  {suggestions.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar mb-1">
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          onClick={() => { setInput(s); setSuggestions([]); }}
+                          className="whitespace-nowrap px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] hover:bg-primary/20 transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                      <button onClick={() => setSuggestions([])} className="text-muted-foreground hover:text-foreground">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 relative">
+                    <div className="relative flex-1">
+                      <Textarea
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        placeholder={placeholder}
+                        className="min-h-[40px] max-h-[100px] resize-none text-xs bg-muted/40 border-border focus-visible:ring-primary/30 py-2.5 pr-10"
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                      />
+                      <button
+                        onClick={handleRefine}
+                        disabled={!input.trim() || isRefining}
+                        className={cn(
+                          "absolute right-2 top-2.5 p-1 rounded-md transition-all",
+                          isRefining ? "animate-pulse text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        )}
+                        title="Refine with AI (✨)"
+                      >
+                        <Sparkles className={cn("w-4 h-4", isRefining && "animate-spin-slow")} />
+                      </button>
+                    </div>
                     <Button onClick={sendMessage} disabled={isLoading || !input.trim()} size="icon" className="gradient-primary text-primary-foreground self-end h-10 w-10 shrink-0 shadow-sm hover:brightness-110">
                       <Send className="w-4 h-4" />
                     </Button>

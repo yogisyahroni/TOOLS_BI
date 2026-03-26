@@ -20,6 +20,8 @@ We've evolved far beyond a simple dashboarding tool. DataLens is equipped with o
 
 ### 🤖 AI-Powered Analytics
 - **Ask Data (NL2SQL)**: Chat with your data. A highly optimized AI inference engine converts natural language to optimized SQL queries and automatically renders the appropriate charts.
+- **Hybrid Prompt Refiner (✨)**: One-click "Polishing" of natural language inputs. Automatically transforms raw user queries into professional, unambiguous instructions tailored to SQL or Report contexts.
+- **Automated Follow-up Suggestions**: Predictive "Suggestion Pills" that appear after every AI response, guiding users toward deeper analysis or alternate visualization styles.
 - **AI Reports & Data Stories**: Automatically generates executive summaries and explanatory narratives from raw datasets or specific visualizations.
 - **Enterprise Data Assistant**: Context-aware AI assistant integrated directly into the SQL Query Editor and ETL pipelines to aid in complex logic formulation and debugging.
 
