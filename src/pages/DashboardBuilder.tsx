@@ -764,7 +764,7 @@ export default function DashboardBuilder() {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden bg-muted/20">
+      <div className="flex flex-1 overflow-hidden bg-muted/20 relative">
         {/* LEFT PANEL: Saved Charts Library */}
         <div className="w-72 border-r border-border bg-card/80 backdrop-blur-sm hidden md:flex flex-col shadow-sm z-30">
           <div className="p-4 border-b border-border font-semibold flex items-center justify-between text-foreground">
@@ -1181,7 +1181,7 @@ export default function DashboardBuilder() {
           {selectedWidgetId && selectedWidget && (
             <motion.div initial={{ width: 0, opacity: 0, x: 20 }} animate={{ width: 340, opacity: 1, x: 0 }} exit={{ width: 0, opacity: 0, x: 20 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="border-l border-border bg-card/95 backdrop-blur-xl flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.1)] z-40 relative">
+              className="border-l border-border bg-card/90 backdrop-blur-xl flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] z-50 absolute top-0 right-0 h-full">
 
               <div className="p-5 border-b border-border flex items-center justify-between bg-muted/10">
                 <div className="flex items-center gap-2 font-semibold text-foreground">
