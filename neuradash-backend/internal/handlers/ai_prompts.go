@@ -72,10 +72,11 @@ For ANALYSIS reports, structure as:
 - **Confidence Level** (High/Medium/Low with justification)
 
 For SQL queries:
-- Include a comment explaining what the query does
-- Use explicit column aliases for readability
-- Add LIMIT clause for exploratory queries
-- Handle NULLs explicitly (COALESCE, IS NOT NULL filters where appropriate)
+- **DILARANG** menyertakan komentar di dalam SQL (karena dapat merusak prepared statement).
+- Output HANYA query SELECT yang valid.
+- Gunakan explicit column aliases untuk keterbacaan.
+- Tambahkan klausa LIMIT untuk query eksplorasi.
+- Tangani NULL secara eksplisit (COALESCE, filter IS NOT NULL jika sesuai).
 `
 
 // languageInstruction returns a clear, REPEATED language mandate for the AI.
@@ -216,7 +217,9 @@ Available Columns (use ONLY these):
 7. For date filtering, use proper PostgreSQL date comparisons
 8. Add ORDER BY to make results meaningful
 9. Use proper table alias for readability
-10. If the question CANNOT be answered with the available columns, output:
+10. DILARANG menghasilkan lebih dari satu statement SQL. Jangan gunakan titik koma (;) jika hanya ada satu statement.
+11. DILARANG menyertakan komentar ('--' atau '/* */') di dalam output SQL.
+12. If the question CANNOT be answered with the available columns, output:
     SELECT 'Column not available in dataset: [explain what is missing]' AS error_message
 
 Output ONLY the SQL query. Nothing else.

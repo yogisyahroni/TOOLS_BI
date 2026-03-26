@@ -627,33 +627,12 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	var tableDef struct {
-		DataTableName string
-		Columns       json.RawMessage
-	}
-	if err := h.db.Table("datasets").Select("data_table_name, columns").
-		Where("id = ?", req.DatasetID).Scan(&tableDef).Error; err != nil {
+	tableName, schemaStr, sampleData, ok := h.extractDatasetContext(req.DatasetID)
+	if !ok {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
-	tableNameForPrompt := tableDef.DataTableName
-	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(tableDef.DataTableName)), "(SELECT") {
-		parts := strings.Split(tableDef.DataTableName, " AS ")
-		if len(parts) >= 2 {
-			tableNameForPrompt = strings.TrimSpace(parts[len(parts)-1])
-		}
-	}
-
-	schemaContext := fmt.Sprintf("Table: %s\nColumns: %s", tableNameForPrompt, string(tableDef.Columns))
-	prompt := fmt.Sprintf(`You are a PostgreSQL expert. Given the following table schema, write a SQL SELECT query to answer the user's question.
-ONLY output valid SQL, nothing else. Do not include markdown code fences.
-
-Schema:
-%s
-
-Question: %s
-
-SQL:`, schemaContext, req.Question)
+	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, req.Question)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -684,6 +663,13 @@ SQL:`, schemaContext, req.Question)
 		}
 
 		sqlQuery := strings.TrimSpace(sqlBuf.String())
+		// Strip markdown fences if model added them despite instructions
+		sqlQuery = strings.TrimPrefix(sqlQuery, "```sql")
+		sqlQuery = strings.TrimPrefix(sqlQuery, "```postgresql")
+		sqlQuery = strings.TrimPrefix(sqlQuery, "```")
+		sqlQuery = strings.TrimSuffix(sqlQuery, "```")
+		sqlQuery = strings.TrimSpace(sqlQuery)
+
 		sqlJSON, _ := json.Marshal(map[string]string{"sql": sqlQuery})
 		sendSSEEvent(w, "sql", string(sqlJSON))
 		w.Flush()
