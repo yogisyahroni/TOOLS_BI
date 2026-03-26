@@ -1081,3 +1081,52 @@ func jsonEscape(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
+
+// ListAskDataHistory returns the query history for the current user.
+func (h *AIHandler) ListAskDataHistory(c *fiber.Ctx) error {
+	userID := c.Locals("userId").(string)
+	datasetID := c.Query("datasetId")
+
+	var history []models.AskDataHistory
+	query := h.db.Where("user_id = ?", userID)
+	if datasetID != "" {
+		query = query.Where("dataset_id = ?", datasetID)
+	}
+
+	if err := query.Order("created_at DESC").Limit(50).Find(&history).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch history"})
+	}
+
+	return c.JSON(history)
+}
+
+// SaveAskDataHistory persists a query result for future reference.
+func (h *AIHandler) SaveAskDataHistory(c *fiber.Ctx) error {
+	userID := c.Locals("userId").(string)
+	var history models.AskDataHistory
+	if err := c.BodyParser(&history); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	history.ID = uuid.New().String()
+	history.UserID = userID
+	history.CreatedAt = time.Now()
+
+	if err := h.db.Create(&history).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to save history"})
+	}
+
+	return c.JSON(history)
+}
+
+// DeleteAskDataHistory removes a specific record from the user's history.
+func (h *AIHandler) DeleteAskDataHistory(c *fiber.Ctx) error {
+	userID := c.Locals("userId").(string)
+	id := c.Params("id")
+
+	if err := h.db.Where("id = ? AND user_id = ?", id, userID).Delete(&models.AskDataHistory{}).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to delete history item"})
+	}
+
+	return c.SendStatus(204)
+}

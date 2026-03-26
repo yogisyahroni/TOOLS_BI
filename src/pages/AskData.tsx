@@ -17,7 +17,8 @@ import {
   Clock,
   Zap,
   Lock,
-  Unlock
+  Unlock,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -176,6 +177,10 @@ export default function AskData() {
     securityWarnings: [],
   });
 
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
   const abortRef = useRef<AbortController | null>(null);
   const streamBoxRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -192,6 +197,108 @@ export default function AskData() {
       scrollRef.current.scrollTop = 0;
     }
   }, [results]);
+
+  // 2026: History Fetching
+  const fetchHistory = useCallback(async () => {
+    if (!selectedDatasetId) return;
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch(`${API_BASE}/ask-data/history?datasetId=${selectedDatasetId}`, {
+        headers: { 'Authorization': `Bearer ${getAccessToken()}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch history:', err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [selectedDatasetId]);
+
+  useEffect(() => {
+    if (selectedDatasetId) {
+      fetchHistory();
+    }
+  }, [selectedDatasetId, fetchHistory]);
+
+  const saveToHistory = useCallback(async (result: QAResult) => {
+    try {
+      await fetch(`${API_BASE}/ask-data/history`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAccessToken()}`
+        },
+        body: JSON.stringify({
+          datasetId: selectedDatasetId,
+          question: result.question,
+          sql: result.sql,
+          explanation: result.explanation,
+          chartType: result.chartType,
+          chartData: result.chartData,
+          xKey: result.xKey,
+          yKey: result.yKey,
+          confidence: result.confidence
+        })
+      });
+      fetchHistory();
+    } catch (err) {
+      console.error('Failed to save history:', err);
+    }
+  }, [selectedDatasetId, fetchHistory]);
+
+  const deleteHistoryItem = useCallback(async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`${API_BASE}/ask-data/history/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getAccessToken()}` }
+      });
+      if (res.ok) {
+        setHistory(prev => prev.filter(item => item.id !== id));
+        toast({ title: 'History deleted' });
+      }
+    } catch (err) {
+      console.error('Failed to delete history:', err);
+    }
+  }, [toast]);
+
+  const restoreFromHistory = (item: any) => {
+    const restoredResult: QAResult = {
+      id: generateId(),
+      question: item.question,
+      sql: item.sql,
+      rowCount: item.chartData?.length || 0,
+      chartData: item.chartData || [],
+      chartType: item.chartType || 'table',
+      xKey: item.xKey,
+      yKey: item.yKey,
+      confidence: item.confidence || 1.0,
+      explanation: item.explanation || '',
+      executionPlan: 'Restored from history',
+      provider: 'History',
+      latencyMs: 0,
+      isSafe: true,
+      securityWarnings: [],
+      queryType: 'SELECT',
+      executedAt: item.createdAt || item.executedAt || new Date().toISOString(),
+    };
+    
+    // Check if this result is already in the main view
+    setResults(prev => {
+      const exists = prev.some(r => r.sql === restoredResult.sql && r.question === restoredResult.question);
+      if (exists) {
+        toast({ title: 'Query already in view' });
+        return prev;
+      }
+      return [restoredResult, ...prev];
+    });
+    
+    setShowHistory(false);
+    toast({ title: 'Restored from history' });
+  };
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
@@ -349,6 +456,7 @@ export default function AskData() {
                 }
 
                 setResults(prev => [finalResult, ...prev]);
+                saveToHistory(finalResult);
                 
                 toast({
                   title: '✨ Query Successful',
@@ -408,6 +516,7 @@ export default function AskData() {
     };
 
     setResults(prev => [finalResult, ...prev]);
+    saveToHistory(finalResult);
     setPendingResult(null);
     setShowApprovalDialog(false);
 
@@ -848,78 +957,131 @@ export default function AskData() {
 
             {/* AI Assistant Panel */}
             <div className="flex-1 bg-card rounded-xl border border-border shadow-card flex flex-col min-h-[400px] overflow-hidden">
-              <div className="p-4 border-b border-border bg-gradient-to-r from-muted/30 to-muted/10 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="font-semibold text-sm">AI Assistant</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-[10px] text-muted-foreground">Online</span>
-                </div>
+                  AI Intelligence
+                </h3>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`h-8 px-2 ${showHistory ? 'text-primary' : 'text-muted-foreground'}`}
+                  onClick={() => setShowHistory(!showHistory)}
+                >
+                  <Clock className="w-4 h-4 mr-1" />
+                  History
+                </Button>
               </div>
 
-              {/* Suggestions */}
-              <div className="flex-1 p-4 overflow-y-auto bg-muted/5 custom-scrollbar">
-                {suggestions.length > 0 ? (
-                  <div className="space-y-3">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Suggested Questions
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      {suggestions.map((suggestion, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setQuestion(suggestion)}
-                          className="px-3 py-2 text-left rounded-lg bg-background border border-border text-xs text-muted-foreground hover:bg-primary/5 hover:text-primary hover:border-primary/20 transition-all"
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {showHistory ? (
+                  <div className="flex-1 flex flex-col space-y-3 p-4 overflow-y-auto custom-scrollbar">
+                    {isLoadingHistory ? (
+                      <div className="flex flex-col items-center justify-center h-full space-y-2 opacity-50">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                        <span className="text-xs">Loading history...</span>
+                      </div>
+                    ) : history.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full space-y-2 opacity-40 grayscale">
+                        <Clock className="w-8 h-8" />
+                        <span className="text-xs">No history found</span>
+                      </div>
+                    ) : (
+                      history.map((item) => (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, x: 5 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="group relative p-3 rounded-lg border border-border/50 bg-muted/20 hover:bg-primary/5 hover:border-primary/30 cursor-pointer transition-all"
+                          onClick={() => restoreFromHistory(item)}
                         >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
+                          <p className="text-xs font-medium text-foreground pr-6 line-clamp-2">
+                            {item.question}
+                          </p>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-[10px] text-muted-foreground">
+                              {new Date(item.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <Badge variant="outline" className="text-[9px] px-1 h-4 bg-background">
+                              {Math.round((item.confidence || 0) * 100)}%
+                            </Badge>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 w-6 h-6 opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 transition-opacity"
+                            onClick={(e) => deleteHistoryItem(item.id, e)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </motion.div>
+                      ))
+                    )}
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-50">
-                    <MessageSquare className="w-8 h-8 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground max-w-[200px]">
-                      Select a dataset to see tailored suggestions.
-                    </p>
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 p-4 overflow-y-auto bg-muted/5 custom-scrollbar">
+                      {suggestions.length > 0 ? (
+                        <div className="space-y-3">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Suggested Questions
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            {suggestions.map((suggestion, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setQuestion(suggestion)}
+                                className="px-3 py-2 text-left rounded-lg bg-background border border-border text-xs text-muted-foreground hover:bg-primary/5 hover:text-primary hover:border-primary/20 transition-all"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-50">
+                          <MessageSquare className="w-8 h-8 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground max-w-[200px]">
+                            Select a dataset to see tailored suggestions.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3 bg-card border-t border-border">
+                      <div className="relative">
+                        <Textarea
+                          placeholder={selectedDataset ? `Ask about ${selectedDataset.name}...` : 'Select dataset first'}
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleAsk();
+                            }
+                          }}
+                          disabled={!selectedDataset || stream.isStreaming}
+                          className="min-h-[80px] resize-none pr-12 text-sm bg-background border-border"
+                        />
+                        <Button
+                          size="icon"
+                          className="absolute right-2 bottom-2 h-8 w-8 gradient-primary"
+                          onClick={handleAsk}
+                          disabled={!selectedDataset || !question.trim() || stream.isStreaming}
+                        >
+                          {stream.isStreaming ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-primary-foreground" />
+                          ) : (
+                            <Send className="w-4 h-4 text-primary-foreground" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-center text-muted-foreground mt-2">
+                        Press Enter to send, Shift+Enter for new line
+                      </p>
+                    </div>
                   </div>
                 )}
-              </div>
-
-              {/* Input */}
-              <div className="p-3 bg-card border-t border-border">
-                <div className="relative">
-                  <Textarea
-                    placeholder={selectedDataset ? `Ask about ${selectedDataset.name}...` : 'Select dataset first'}
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleAsk();
-                      }
-                    }}
-                    disabled={!selectedDataset || stream.isStreaming}
-                    className="min-h-[80px] resize-none pr-12 text-sm bg-background border-border"
-                  />
-                  <Button
-                    size="icon"
-                    className="absolute right-2 bottom-2 h-8 w-8 gradient-primary"
-                    onClick={handleAsk}
-                    disabled={!selectedDataset || !question.trim() || stream.isStreaming}
-                  >
-                    {stream.isStreaming ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-primary-foreground" />
-                    ) : (
-                      <Send className="w-4 h-4 text-primary-foreground" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-[10px] text-center text-muted-foreground mt-2">
-                  Press Enter to send, Shift+Enter for new line
-                </p>
               </div>
             </div>
           </motion.div>

@@ -150,3 +150,22 @@ type EmbedToken struct {
 }
 
 func (EmbedToken) TableName() string { return "embed_tokens" }
+
+// AskDataHistory stores persistent query results for the AI chat (Ask Data).
+type AskDataHistory struct {
+	ID          string          `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID      string          `json:"userId" gorm:"type:uuid;not null;index"`
+	DatasetID   string          `json:"datasetId" gorm:"type:uuid;not null;index"`
+	Question    string          `json:"question" gorm:"type:text;not null"`
+	SQL         string          `json:"sql" gorm:"type:text;not null"`
+	Explanation string          `json:"explanation" gorm:"type:text"`
+	ChartType   string          `json:"chartType" gorm:"size:50"`
+	ChartData   json.RawMessage `json:"chartData" gorm:"type:jsonb"`
+	XKey        string          `json:"xKey" gorm:"size:100"`
+	YKey        string          `json:"yKey" gorm:"size:100"`
+	Confidence  float64         `json:"confidence"`
+	CreatedAt   time.Time       `json:"createdAt"`
+}
+
+func (AskDataHistory) TableName() string { return "ask_data_history" }
+

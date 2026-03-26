@@ -431,6 +431,9 @@ func main() {
 	api.Post("/ask-data", aiH.AskData)
 	api.Post("/ask-data/stream", aiH.StreamAskData)       // SSE: token-by-token SQL + results
 	api.Post("/reports/stream", aiH.StreamGenerateReport) // SSE: streamed report generation
+	api.Get("/ask-data/history", authRequired, aiH.ListAskDataHistory)
+	api.Post("/ask-data/history", authRequired, aiH.SaveAskDataHistory)
+	api.Delete("/ask-data/history/:id", authRequired, aiH.DeleteAskDataHistory)
 
 	// User Settings routes
 	settings := api.Group("/settings")
@@ -802,6 +805,7 @@ func autoMigrate(db *gorm.DB) error {
 		&models.DrillConfig{},  // BUG-M2: drill hierarchy configs
 		&models.EmbedToken{},   // BUG-M5: secure embed tokens
 		&models.Comment{},      // Phase 15: Multiplayer comments
+		&models.AskDataHistory{}, // Phase 40: Persistent query history for Ask Data
 	); err != nil {
 		return err
 	}
@@ -814,6 +818,7 @@ func autoMigrate(db *gorm.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_bookmarks_user_created ON bookmarks(user_id, created_at DESC)",
 		"CREATE INDEX IF NOT EXISTS idx_annotations_user_dataset ON annotations(user_id, dataset_id)",
 		"CREATE INDEX IF NOT EXISTS idx_drill_configs_user_dataset ON drill_configs(user_id, dataset_id)",
+		"CREATE INDEX IF NOT EXISTS idx_ask_data_history_user_dataset ON ask_data_histories(user_id, dataset_id)",
 		"CREATE INDEX IF NOT EXISTS idx_embed_tokens_user ON embed_tokens(user_id, created_at DESC)",
 		// Phase 36: additional missing indexes identified in DB audit
 		"CREATE INDEX IF NOT EXISTS idx_audit_log_action_resource ON audit_log(action, resource_type, created_at DESC)",
