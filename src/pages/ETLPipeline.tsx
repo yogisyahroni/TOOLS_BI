@@ -926,6 +926,20 @@ Always prioritize business value and data quality.`;
                           </span>
                         </div>
                         
+                        {(pipeline.inputRows !== undefined || pipeline.outputRows !== undefined) && (
+                          <div className="flex items-center gap-2 px-2 py-1 bg-muted/30 rounded-lg border border-border/30 text-[9px] font-medium animate-in fade-in slide-in-from-right-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground">Processed:</span>
+                              <span className="text-indigo-400 font-bold">{(pipeline.inputRows || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="w-px h-2.5 bg-border/50" />
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground">Output:</span>
+                              <span className="text-emerald-400 font-bold">{(pipeline.outputRows || 0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        )}
+                      
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"
