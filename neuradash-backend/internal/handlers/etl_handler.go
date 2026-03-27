@@ -344,11 +344,17 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		
 		if isExternal {
 			sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, engine.QuoteIdentifier(sourceDataset.DataTableName))
+			
+			// For chunked queries, we MUST have a stable ORDER BY to prevent duplicate/missing rows.
+			// Ideally we use a primary key, but since we don't know it here, we'll try to find any column to sort by.
+			// A simple "ORDER BY 1" (first column) is usually a safe default for deterministic batching.
+			orderBy := "ORDER BY 1"
+			
 			if chunkLimit > 0 {
-				sqlQuery = fmt.Sprintf(`%s LIMIT %d OFFSET %d`, sqlQuery, chunkLimit, offset)
+				sqlQuery = fmt.Sprintf(`%s %s LIMIT %d OFFSET %d`, sqlQuery, orderBy, chunkLimit, offset)
 			} else {
 				// Hard 50k protection for non-chunkable external queries to prevent Render Server OOM
-				sqlQuery = fmt.Sprintf(`%s LIMIT 50000`, sqlQuery)
+				sqlQuery = fmt.Sprintf(`%s %s LIMIT 50000`, sqlQuery, orderBy)
 			}
 			res, err := dbConn.Query(ctx, sqlQuery, 0)
 			if err != nil {
@@ -356,7 +362,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			}
 			chunkRows = res.Rows
 		} else {
-			q := h.db.Table(sourceDataset.DataTableName)
+			q := h.db.Table(sourceDataset.DataTableName).Order("1") // Deterministic order for LIMIT/OFFSET
 			if chunkLimit > 0 {
 				q = q.Limit(chunkLimit).Offset(offset)
 			} else {
