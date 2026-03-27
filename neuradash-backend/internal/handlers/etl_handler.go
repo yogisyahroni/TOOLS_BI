@@ -354,18 +354,16 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		var chunkRows []map[string]interface{}
 		
 		if isExternal {
-			sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, engine.QuoteIdentifier(sourceDataset.DataTableName))
+			var sqlQuery string
 			
-			// For chunked queries, we MUST have a stable ORDER BY to prevent duplicate/missing rows.
-			// Ideally we use a primary key, but since we don't know it here, we'll try to find any column to sort by.
-			// A simple "ORDER BY 1" (first column) is usually a safe default for deterministic batching.
+			// SUB-ROUTINE BETA: Consistent ORDER BY is MANDATORY for offset batching.
+			// Without it, databases like Postgres don't guarantee row order between queries.
 			orderBy := "ORDER BY 1"
 			
 			if chunkLimit > 0 {
-				sqlQuery = fmt.Sprintf(`%s %s LIMIT %d OFFSET %d`, sqlQuery, orderBy, chunkLimit, offset)
+				sqlQuery = fmt.Sprintf(`SELECT * FROM %s %s LIMIT %d OFFSET %d`, engine.QuoteIdentifier(sourceDataset.DataTableName), orderBy, chunkLimit, offset)
 			} else {
-				// Hard 100k protection for non-chunkable external queries to prevent Render Server OOM
-				sqlQuery = fmt.Sprintf(`%s %s LIMIT 100000`, sqlQuery, orderBy)
+				sqlQuery = fmt.Sprintf(`SELECT * FROM %s %s LIMIT 100000`, engine.QuoteIdentifier(sourceDataset.DataTableName), orderBy)
 			}
 			res, err := dbConn.Query(ctx, sqlQuery, 0)
 			if err != nil {
