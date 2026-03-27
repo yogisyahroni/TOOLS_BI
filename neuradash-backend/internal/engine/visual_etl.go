@@ -217,7 +217,7 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 
 		var out []map[string]interface{}
 		for _, row := range rows {
-			v, ok := parseFloat(row[col])
+			v, ok := toFloat(row[col])
 			if !ok {
 				continue
 			}
@@ -397,7 +397,7 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 
 				var vals []float64
 				for _, r := range g.rows {
-					if f, ok := parseFloat(r[col]); ok {
+					if f, ok := toFloat(r[col]); ok {
 						vals = append(vals, f)
 					}
 				}
@@ -550,27 +550,40 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 			newRow := copyRow(row)
 			val := row[col]
 
+			// Text operations should handle nil by treating as empty string
+			// instead of skipping entirely
+			strVal := ""
 			if val != nil {
-				switch op {
-				case "uppercase":
-					newRow[col] = strings.ToUpper(fmt.Sprintf("%v", val))
-				case "lowercase":
-					newRow[col] = strings.ToLower(fmt.Sprintf("%v", val))
-				case "trim":
-					newRow[col] = strings.TrimSpace(fmt.Sprintf("%v", val))
-				case "round":
+				strVal = fmt.Sprintf("%v", val)
+			}
+
+			switch op {
+			case "uppercase":
+				newRow[col] = strings.ToUpper(strVal)
+			case "lowercase":
+				newRow[col] = strings.ToLower(strVal)
+			case "trim":
+				newRow[col] = strings.TrimSpace(strVal)
+			case "round":
+				if val != nil {
 					if f, ok := toFloat(val); ok {
 						newRow[col] = math.Round(f)
 					}
-				case "abs":
+				}
+			case "abs":
+				if val != nil {
 					if f, ok := toFloat(val); ok {
 						newRow[col] = math.Abs(f)
 					}
-				case "add":
+				}
+			case "add":
+				if val != nil {
 					if f, ok := toFloat(val); ok {
 						newRow[col] = f + operand
 					}
-				case "multiply":
+				}
+			case "multiply":
+				if val != nil {
 					if f, ok := toFloat(val); ok {
 						newRow[col] = f * operand
 					}

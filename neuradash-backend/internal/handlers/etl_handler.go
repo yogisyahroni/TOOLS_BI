@@ -433,21 +433,49 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			// a. Drop existing table if it exists (Ensures idempotency)
 			h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
 
-			// b. Create table structure based on the first row
-			firstRow := result.Rows[0]
-			var colDefs []string
-			for colName, val := range firstRow {
-				sqlType := "TEXT"
-				switch val.(type) {
-				case int, int64, int32, int16, int8:
-					sqlType = "BIGINT"
-				case float64, float32:
-					sqlType = "NUMERIC"
-				case bool:
-					sqlType = "BOOLEAN"
-				case time.Time, *time.Time:
-					sqlType = "TIMESTAMPTZ"
+			// b. Create table structure based on data discovery
+			// We scan a few rows to find the best types for each column
+			allCols := make(map[string]string)
+			rowsToScan := 10
+			if len(result.Rows) < rowsToScan {
+				rowsToScan = len(result.Rows)
+			}
+
+			for i := 0; i < rowsToScan; i++ {
+				for colName, val := range result.Rows[i] {
+					if val == nil {
+						if _, exists := allCols[colName]; !exists {
+							allCols[colName] = "TEXT" // Default
+						}
+						continue
+					}
+
+					sqlType := "TEXT"
+					switch v := val.(type) {
+					case int, int64, int32, int16, int8:
+						sqlType = "BIGINT"
+					case float64, float32:
+						sqlType = "NUMERIC"
+					case bool:
+						sqlType = "BOOLEAN"
+					case time.Time, *time.Time:
+						sqlType = "TIMESTAMPTZ"
+					case string:
+						// Heuristic: check if it looks like a number but came as string
+						sqlType = "TEXT"
+					default:
+						_ = v
+					}
+					
+					// Upgrade if we found a more specific type
+					if current, exists := allCols[colName]; !exists || current == "TEXT" {
+						allCols[colName] = sqlType
+					}
 				}
+			}
+
+			var colDefs []string
+			for colName, sqlType := range allCols {
 				columnTypes[colName] = sqlType
 				colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
 			}

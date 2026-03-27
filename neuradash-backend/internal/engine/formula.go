@@ -213,7 +213,7 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 
 		var total float64
 		for _, row := range ctx.Rows {
-			v, ok := parseFloat(row[col])
+			v, ok := toFloat(row[col])
 			if !ok {
 				continue
 			}
@@ -294,7 +294,7 @@ func (f *funcCall) eval(ctx FormulaContext) (interface{}, error) {
 
 		count := 0
 		for _, row := range ctx.Rows {
-			v, ok := parseFloat(row[col])
+			v, ok := toFloat(row[col])
 			if ok && applyOp(opStr, v, tf) {
 				count++
 			}
@@ -846,7 +846,7 @@ func colName(args []exprNode, idx int, fn string) (string, error) {
 func extractFloats(rows []map[string]interface{}, col string) []float64 {
 	out := make([]float64, 0, len(rows))
 	for _, row := range rows {
-		if f, ok := parseFloat(row[col]); ok {
+		if f, ok := toFloat(row[col]); ok {
 			out = append(out, f)
 		}
 	}
@@ -856,7 +856,7 @@ func extractFloats(rows []map[string]interface{}, col string) []float64 {
 func sumCol(rows []map[string]interface{}, col string) float64 {
 	var total float64
 	for _, row := range rows {
-		if f, ok := parseFloat(row[col]); ok {
+		if f, ok := toFloat(row[col]); ok {
 			total += f
 		}
 	}
