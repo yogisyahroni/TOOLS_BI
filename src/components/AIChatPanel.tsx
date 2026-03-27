@@ -53,6 +53,7 @@ export function AIChatPanel({
   const [isRefining, setIsRefining] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // State for selections inside the AI responses
   const [selectedViews, setSelectedViews] = useState<Record<string, DatasetRecommendation[]>>({});
@@ -62,6 +63,15 @@ export function AIChatPanel({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Handle auto-resizing for textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 200);
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  }, [input]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -422,10 +432,11 @@ export function AIChatPanel({
                   <div className="flex gap-2 relative">
                     <div className="relative flex-1">
                       <Textarea
+                        ref={textareaRef}
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         placeholder={placeholder}
-                        className="min-h-[40px] max-h-[100px] resize-none text-xs bg-muted/40 border-border focus-visible:ring-primary/30 py-2.5 pr-10"
+                        className="min-h-[40px] max-h-[200px] resize-none text-xs bg-muted/40 border-border focus-visible:ring-primary/30 py-2.5 pr-10 overflow-y-auto transition-[height] duration-200"
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                       />
                       <button
