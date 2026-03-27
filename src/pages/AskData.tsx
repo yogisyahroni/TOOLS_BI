@@ -183,6 +183,8 @@ export default function AskData() {
 
   const abortRef = useRef<AbortController | null>(null);
   const streamBoxRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll
@@ -197,6 +199,15 @@ export default function AskData() {
       scrollRef.current.scrollTop = 0;
     }
   }, [results]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 200);
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  }, [question]);
 
   // 2026: History Fetching
   const fetchHistory = useCallback(async (autoPopulate = false) => {
@@ -1060,6 +1071,7 @@ export default function AskData() {
                     <div className="p-3 bg-card border-t border-border">
                       <div className="relative">
                         <Textarea
+                          ref={textareaRef}
                           placeholder={selectedDataset ? `Ask about ${selectedDataset.name}...` : 'Select dataset first'}
                           value={question}
                           onChange={(e) => setQuestion(e.target.value)}
@@ -1070,7 +1082,7 @@ export default function AskData() {
                             }
                           }}
                           disabled={!selectedDataset || stream.isStreaming}
-                          className="min-h-[80px] resize-none pr-12 text-sm bg-background border-border"
+                          className="min-h-[45px] max-h-[200px] resize-none pr-12 text-sm bg-background border-border overflow-y-auto transition-[height] duration-200"
                         />
                         <Button
                           size="icon"
