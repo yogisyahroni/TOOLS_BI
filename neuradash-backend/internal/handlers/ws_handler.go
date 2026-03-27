@@ -3,8 +3,8 @@ package handlers
 import (
 	"strings"
 
-	"datalens/internal/middleware"
-	"datalens/internal/realtime"
+	"neuradash/internal/middleware"
+	"neuradash/internal/realtime"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"

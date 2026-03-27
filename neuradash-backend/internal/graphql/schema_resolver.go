@@ -6,7 +6,7 @@ package graphql
 
 import (
 	"context"
-	"datalens/internal/models"
+	"neuradash/internal/models"
 	"fmt"
 
 	"gorm.io/gorm"

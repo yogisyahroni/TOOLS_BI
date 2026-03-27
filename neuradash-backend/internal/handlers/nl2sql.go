@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"datalens/internal/services"
+	"neuradash/internal/services"
 )
 
 type NL2SQLHandler struct {

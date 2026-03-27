@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"datalens/internal/engine"
+	"neuradash/internal/engine"
 )
 
 // helper: rows for testing

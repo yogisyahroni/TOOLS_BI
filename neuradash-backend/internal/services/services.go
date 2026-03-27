@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"datalens/internal/models"
-	"datalens/internal/repository"
+	"neuradash/internal/models"
+	"neuradash/internal/repository"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"

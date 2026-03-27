@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"datalens/internal/models"
+	"neuradash/internal/models"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────

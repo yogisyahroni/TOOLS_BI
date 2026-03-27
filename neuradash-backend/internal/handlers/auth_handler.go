@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"datalens/internal/email"
-	"datalens/internal/middleware"
-	"datalens/internal/models"
+	"neuradash/internal/email"
+	"neuradash/internal/middleware"
+	"neuradash/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"datalens/internal/models"
+	"neuradash/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

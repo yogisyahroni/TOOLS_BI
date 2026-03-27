@@ -5,7 +5,7 @@ package repository
 import (
 	"context"
 
-	"datalens/internal/models"
+	"neuradash/internal/models"
 )
 
 // ---- Dataset ----------------------------------------------------------------

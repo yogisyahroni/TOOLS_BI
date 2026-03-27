@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"datalens/internal/models"
-	"datalens/internal/realtime"
+	"neuradash/internal/models"
+	"neuradash/internal/realtime"
 
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"

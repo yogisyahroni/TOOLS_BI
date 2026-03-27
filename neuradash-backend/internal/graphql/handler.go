@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"os"
 
-	"datalens/internal/repository"
+	"neuradash/internal/repository"
 
 	"github.com/99designs/gqlgen/graphql"
 	gqlhandler "github.com/99designs/gqlgen/graphql/handler"

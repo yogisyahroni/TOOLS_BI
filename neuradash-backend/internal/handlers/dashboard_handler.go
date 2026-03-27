@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"datalens/internal/middleware"
-	"datalens/internal/models"
-	"datalens/internal/realtime"
-	"datalens/internal/services"
+	"neuradash/internal/middleware"
+	"neuradash/internal/models"
+	"neuradash/internal/realtime"
+	"neuradash/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

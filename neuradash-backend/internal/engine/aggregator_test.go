@@ -3,7 +3,7 @@ package engine_test
 import (
 	"testing"
 
-	"datalens/internal/engine"
+	"neuradash/internal/engine"
 )
 
 // ─── sanitizeCol (indirectly tested via buildWhereClause) ────────────────────

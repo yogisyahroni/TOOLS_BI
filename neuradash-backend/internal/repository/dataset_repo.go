@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"datalens/internal/models"
+	"neuradash/internal/models"
 
 	"gorm.io/gorm"
 )

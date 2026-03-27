@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"datalens/internal/handlers"
+	"neuradash/internal/handlers"
 	"github.com/gofiber/fiber/v2"
 )
 

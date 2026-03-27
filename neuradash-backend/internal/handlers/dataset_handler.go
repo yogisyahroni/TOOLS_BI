@@ -14,11 +14,11 @@ import (
 	"time"
 	"unicode"
 
-	"datalens/internal/connectors"
-	"datalens/internal/middleware"
-	"datalens/internal/models"
-	"datalens/internal/services"
-	"datalens/internal/storage"
+	"neuradash/internal/connectors"
+	"neuradash/internal/middleware"
+	"neuradash/internal/models"
+	"neuradash/internal/services"
+	"neuradash/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

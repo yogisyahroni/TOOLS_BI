@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"datalens/internal/engine"
+	"neuradash/internal/engine"
 )
 
 // ─── Topological sort ────────────────────────────────────────────────────────

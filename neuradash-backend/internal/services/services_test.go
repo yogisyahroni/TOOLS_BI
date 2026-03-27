@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"datalens/internal/models"
-	"datalens/internal/services"
+	"neuradash/internal/models"
+	"neuradash/internal/services"
 
 	"github.com/google/uuid"
 )

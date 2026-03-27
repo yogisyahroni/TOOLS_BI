@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"datalens/internal/middleware"
-	"datalens/internal/models"
+	"neuradash/internal/middleware"
+	"neuradash/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"datalens/internal/models"
+	"neuradash/internal/models"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"

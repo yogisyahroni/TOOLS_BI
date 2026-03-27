@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"datalens/internal/models"
+	"neuradash/internal/models"
 
 	"gorm.io/gorm"
 )

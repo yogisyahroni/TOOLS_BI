@@ -1,4 +1,4 @@
-# DataLens Backend — Setup Guide
+# NeuraDash Backend — Setup Guide
 
 ## Stack
 

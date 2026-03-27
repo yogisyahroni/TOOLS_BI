@@ -12,7 +12,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
-const otelTracerName = "datalens/fiber"
+const otelTracerName = "neuradash/fiber"
 
 // Tracing returns a Fiber middleware that:
 //  1. Extracts W3C traceparent/tracestate headers from the incoming request.

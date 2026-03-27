@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"datalens/internal/config"
-	"datalens/internal/models"
+	"neuradash/internal/config"
+	"neuradash/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"

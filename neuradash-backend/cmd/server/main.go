@@ -11,19 +11,19 @@ import (
 	"syscall"
 	"time"
 
-	"datalens/internal/config"
-	"datalens/internal/email"
-	"datalens/internal/graphql"
-	"datalens/internal/handlers"
-	"datalens/internal/middleware"
-	"datalens/internal/migrations"
-	"datalens/internal/models"
-	"datalens/internal/realtime"
-	"datalens/internal/repository"
-	"datalens/internal/scheduler"
-	"datalens/internal/services"
-	"datalens/internal/storage"
-	"datalens/internal/telemetry"
+	"neuradash/internal/config"
+	"neuradash/internal/email"
+	"neuradash/internal/graphql"
+	"neuradash/internal/handlers"
+	"neuradash/internal/middleware"
+	"neuradash/internal/migrations"
+	"neuradash/internal/models"
+	"neuradash/internal/realtime"
+	"neuradash/internal/repository"
+	"neuradash/internal/scheduler"
+	"neuradash/internal/services"
+	"neuradash/internal/storage"
+	"neuradash/internal/telemetry"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
@@ -64,7 +64,7 @@ func main() {
 	// No-op exporter in prod unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
 	// Security: Use timed context for OTel init
 	initOtelCtx, cancelOtel := context.WithTimeout(context.Background(), 10*time.Second)
-	tp, otelErr := telemetry.InitTracer(initOtelCtx, "datalens-backend", cfg.Server.Env)
+	tp, otelErr := telemetry.InitTracer(initOtelCtx, "neuradash-backend", cfg.Server.Env)
 	cancelOtel() // cancel immediately as we don't need it after init
 	if otelErr != nil {
 		log.Warn().Err(otelErr).Msg("OpenTelemetry tracer init failed (non-fatal — tracing disabled)")

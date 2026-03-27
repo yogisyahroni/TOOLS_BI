@@ -9,7 +9,7 @@ run:
 
 # Build production binary
 build:
-	CGO_ENABLED=0 go build -ldflags="-w -s" -o bin/datalens ./cmd/server
+	CGO_ENABLED=0 go build -ldflags="-w -s" -o bin/neuradash ./cmd/server
 
 # Run all tests with coverage
 test:

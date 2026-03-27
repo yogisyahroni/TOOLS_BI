@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	"datalens/internal/middleware"
-	"datalens/internal/models"
-	"datalens/internal/realtime"
+	"neuradash/internal/middleware"
+	"neuradash/internal/models"
+	"neuradash/internal/realtime"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"

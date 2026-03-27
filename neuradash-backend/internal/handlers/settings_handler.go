@@ -3,9 +3,9 @@ package handlers
 import (
 	"errors"
 
-	"datalens/internal/crypto"
-	"datalens/internal/middleware"
-	"datalens/internal/models"
+	"neuradash/internal/crypto"
+	"neuradash/internal/middleware"
+	"neuradash/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
