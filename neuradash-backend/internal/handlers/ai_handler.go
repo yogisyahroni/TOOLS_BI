@@ -693,9 +693,33 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 			return
 		}
 
+		// 2026: Generate Business Interpretation
+		interpretation := ""
+		if len(results) > 0 {
+			sendSSEEvent(w, "progress", `{"stage":"interpreting","message":"AI is interpreting the data insights..."}`)
+			w.Flush()
+
+			resultsSubset := results
+			if len(results) > 20 {
+				resultsSubset = results[:20]
+			}
+			subsetJSON, _ := json.Marshal(resultsSubset)
+
+			interpPrompt := BuildAskDataInterpretationPrompt(req.Question, sqlQuery, string(subsetJSON), len(results))
+
+			// We use callOpenAI (non-streaming) for interpretation to get it as a single block
+			interpResult, err := h.callOpenAI(cfg, interpPrompt)
+			if err == nil {
+				interpretation = interpResult
+			}
+		}
+
 		resultJSON, _ := json.Marshal(map[string]interface{}{
-			"question": req.Question, "sql": sqlQuery,
-			"data": results, "rowCount": len(results),
+			"question":       req.Question,
+			"sql":            sqlQuery,
+			"data":           results,
+			"rowCount":       len(results),
+			"interpretation": interpretation, // New field for 2026
 		})
 		sendSSEEvent(w, "result", string(resultJSON))
 		sendSSEEvent(w, "done", "{}")

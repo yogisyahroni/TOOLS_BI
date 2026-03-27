@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageSquare,
@@ -97,6 +98,7 @@ interface QAResult {
   securityWarnings: string[];
   queryType: string;
   executedAt: string;
+  interpretation?: string;
 }
 
 interface StreamState {
@@ -108,6 +110,7 @@ interface StreamState {
   explanation: string;
   securityStatus: 'pending' | 'safe' | 'warning' | 'danger';
   securityWarnings: string[];
+  interpretation?: string;
   error?: string;
 }
 
@@ -148,11 +151,41 @@ function getConfidenceColor(confidence: number): string {
 }
 
 function getConfidenceLabel(confidence: number): string {
-  if (confidence >= 0.9) return 'High Confidence';
-  if (confidence >= 0.7) return 'Medium Confidence';
-  return 'Low Confidence - Review Required';
+  if (confidence >= 0.9) return 'High';
+  if (confidence >= 0.7) return 'Medium';
+  return 'Low';
 }
 
+const AIInterpretation = ({ content }: { content?: string }) => {
+  if (!content) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative overflow-hidden group mb-6"
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 opacity-50 blur-xl group-hover:opacity-75 transition-opacity duration-500" />
+      <div className="relative p-5 rounded-2xl border border-primary/20 bg-background/40 backdrop-blur-md shadow-lg shadow-primary/5">
+        <div className="flex items-center gap-2 mb-3 text-primary">
+          <Sparkles className="h-5 w-5 animate-pulse" />
+          <h3 className="font-semibold text-sm tracking-tight uppercase">AI Kesimpulan Bisnis</h3>
+        </div>
+        <div className="prose prose-sm prose-invert max-w-none text-muted-foreground leading-relaxed">
+          <ReactMarkdown
+            components={{
+              strong: ({ ...props }) => <span className="text-foreground font-semibold" {...props} />,
+              li: ({ ...props }) => <li className="marker:text-primary ml-1" {...props} />,
+              p: ({ ...props }) => <p className="mb-2 last:mb-0" {...props} />
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
 export default function AskData() {
   const { data: datasets = [] } = useDatasets();
   const { toast } = useToast();
@@ -457,6 +490,7 @@ export default function AskData() {
                   securityWarnings: parsed.warnings || [],
                   queryType: parsed.queryType || 'SELECT',
                   executedAt: new Date().toISOString(),
+                  interpretation: parsed.interpretation || '',
                 };
 
                 // 2026: Security Check sebelum add ke results
@@ -889,6 +923,7 @@ export default function AskData() {
 
                   {/* Chart */}
                   <div className="p-4">
+                    <AIInterpretation content={r.interpretation} />
                     {renderChart(r)}
                   </div>
 
