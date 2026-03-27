@@ -16,8 +16,9 @@ type ETLPipeline struct {
 	OutputData      json.RawMessage `json:"outputData" gorm:"type:jsonb;default:'[]'"`
 	Steps           json.RawMessage `json:"steps" gorm:"type:jsonb;default:'[]'"`
 	Status          string          `json:"status" gorm:"default:idle"` // idle,running,completed,error
-	Error           string          `json:"error" gorm:"type:text"`
 	LastRunAt       *time.Time      `json:"lastRunAt"`
+	InputRows       *int            `json:"inputRows"`
+	OutputRows      *int            `json:"outputRows"`
 	CreatedAt       time.Time       `json:"createdAt"`
 }
 
@@ -55,6 +56,7 @@ type PipelineRun struct {
 	CompletedAt *time.Time      `json:"completedAt"`
 	DurationMs  *int            `json:"durationMs"`
 	NodeResults json.RawMessage `json:"nodeResults" gorm:"type:jsonb;default:'{}'"`
+	InputRows   *int            `json:"inputRows"`
 	OutputRows  *int            `json:"outputRows"`
 	Error       string          `json:"error" gorm:"type:text"`
 	TriggeredBy string          `json:"triggeredBy" gorm:"default:manual"` // manual,cron,webhook

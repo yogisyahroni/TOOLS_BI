@@ -162,7 +162,6 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 	if err := h.db.Model(&pipeline).Select("Status", "OutputTableName", "Error").Updates(models.ETLPipeline{
 		Status:          "running",
 		OutputTableName: pipeline.OutputTableName,
-		Error:           "", // Clear previous error
 	}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update pipeline status"})
 	}
@@ -222,6 +221,9 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 			if result.outputRows >= 0 {
 				runUpdates["output_rows"] = int(result.outputRows)
 			}
+			if result.inputRows >= 0 {
+				runUpdates["input_rows"] = int(result.inputRows)
+			}
 			if err := tx.Model(&run).Updates(runUpdates).Error; err != nil {
 				return err
 			}
@@ -232,6 +234,12 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 				"last_run_at":       &now,
 				"output_table_name": pipeline.OutputTableName,
 				"error":             result.errMsg,
+			}
+			if result.outputRows >= 0 {
+				pipelineUpdates["output_rows"] = int(result.outputRows)
+			}
+			if result.inputRows >= 0 {
+				pipelineUpdates["input_rows"] = int(result.inputRows)
 			}
 			if err := tx.Model(&pipeline).Updates(pipelineUpdates).Error; err != nil {
 				return err
@@ -250,6 +258,7 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 			Payload: fiber.Map{
 				"pipelineId": pipeline.ID,
 				"status":     result.status,
+				"inputRows":  result.inputRows,
 				"outputRows": result.outputRows,
 				"tableName":  pipeline.OutputTableName,
 				"error":      result.errMsg,
@@ -279,6 +288,7 @@ func (h *ETLHandler) GetPipelineRuns(c *fiber.Ctx) error {
 type pipelineExecResult struct {
 	status     string
 	errMsg     string
+	inputRows  int64
 	outputRows int64
 }
 
@@ -336,6 +346,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 	}
 
 	isTableCreated := false
+	totalInputRows := 0
 	totalOutputRows := 0
 	var columnTypes map[string]string
 
@@ -380,6 +391,8 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		if len(chunkRows) == 0 {
 			break
 		}
+
+		totalInputRows += len(chunkRows)
 
 		sourceNode := engine.NodeSpec{
 			ID:     sourceNodeID,
@@ -505,6 +518,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 
 	return pipelineExecResult{
 		status:     "completed",
+		inputRows:  int64(totalInputRows),
 		outputRows: int64(totalOutputRows),
 	}
 }
