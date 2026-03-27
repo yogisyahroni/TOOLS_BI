@@ -550,6 +550,118 @@ func (h *DatasetHandler) UpdateRefreshConfig(c *fiber.Ctx) error {
 	return c.JSON(ds)
 }
 
+// RefreshDataset manual trigger for a dataset.
+// POST /api/v1/datasets/:id/refresh
+func (h *DatasetHandler) RefreshDataset(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	id := c.Params("id")
+
+	var ds models.Dataset
+	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, userID).First(&ds).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
+	}
+
+	if err := h.PerformRefresh(&ds); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Refresh failed: %v", err)})
+	}
+
+	return c.JSON(fiber.Map{"message": "Dataset refreshed successfully", "rowCount": ds.RowCount})
+}
+
+// PerformRefresh executes the actual data sync from external to internal.
+func (h *DatasetHandler) PerformRefresh(ds *models.Dataset) error {
+	if !strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		return fmt.Errorf("only external connection datasets can be refreshed")
+	}
+
+	connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+	var conn models.DBConnection
+	if err := h.db.Where("id = ?", connID).First(&conn).Error; err != nil {
+		return fmt.Errorf("external connection not found: %w", err)
+	}
+
+	opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	dbConn, err := connectors.Open(opts)
+	if err != nil {
+		return fmt.Errorf("failed to open external connection: %w", err)
+	}
+	defer dbConn.Close()
+
+	// 1. Get column names from internal table to ensure alignment
+	rows, err := h.db.Raw(fmt.Sprintf(`SELECT * FROM "%s" LIMIT 0`, ds.DataTableName)).Rows()
+	if err != nil {
+		return fmt.Errorf("failed to get internal table schema: %w", err)
+	}
+	cols, _ := rows.Columns()
+	rows.Close()
+
+	// Filter out _row_id
+	var actualCols []string
+	for _, c := range cols {
+		if c != "_row_id" {
+			actualCols = append(actualCols, c)
+		}
+	}
+
+	// 2. Pull data from external source
+	// ds.FileName is used as the table name/query for external connection datasets
+	externalQuery := fmt.Sprintf(`SELECT %s FROM %s`, strings.Join(actualCols, ", "), ds.FileName)
+	if strings.Contains(strings.ToUpper(ds.FileName), "SELECT ") {
+		// If it's a raw query
+		externalQuery = ds.FileName
+	}
+
+	res, err := dbConn.Query(ctx, externalQuery, 1000000) // Support up to 1M rows for refresh
+	if err != nil {
+		return fmt.Errorf("failed to pull data from external source: %w", err)
+	}
+
+	// 3. Truncate internal table
+	if err := h.db.Exec(fmt.Sprintf(`TRUNCATE TABLE "%s"`, ds.DataTableName)).Error; err != nil {
+		return fmt.Errorf("failed to truncate internal table: %w", err)
+	}
+
+	// 4. Transform res.Rows (MAP) to [][]string (expected by bulkInsertRows)
+	stringRows := make([][]string, len(res.Rows))
+	for i, row := range res.Rows {
+		stringRows[i] = make([]string, len(actualCols))
+		for j, colName := range actualCols {
+			val := row[colName]
+			if val == nil {
+				stringRows[i][j] = ""
+			} else {
+				stringRows[i][j] = fmt.Sprintf("%v", val)
+			}
+		}
+	}
+
+	// 5. Bulk insert into internal table
+	if err := bulkInsertRows(h.db, ds.DataTableName, actualCols, stringRows); err != nil {
+		return fmt.Errorf("failed to bulk insert refreshed data: %w", err)
+	}
+
+	// 6. Update metadata
+	ds.RowCount = len(res.Rows)
+	ds.UpdatedAt = time.Now()
+	if err := h.db.Model(ds).Updates(map[string]interface{}{
+		"row_count":  ds.RowCount,
+		"updated_at": ds.UpdatedAt,
+	}).Error; err != nil {
+		return fmt.Errorf("failed to update dataset metadata: %w", err)
+	}
+
+	// PERF-07: Invalidate stats cache
+	if h.rdb != nil {
+		_ = h.rdb.Del(context.Background(), fmt.Sprintf("stats:%s", ds.ID)).Err()
+	}
+
+	return nil
+}
+
+
 // --- File Parsing Helpers ---
 
 func parseCSV(r io.Reader) (headers []string, rows [][]string, err error) {

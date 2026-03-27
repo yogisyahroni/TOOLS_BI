@@ -340,6 +340,7 @@ func main() {
 	datasets.Get("/:id/stats", datasetH.GetDatasetStats)
 	datasets.Delete("/:id", datasetH.DeleteDataset)
 	datasets.Put("/:id/refresh-config", datasetH.UpdateRefreshConfig)
+	datasets.Post("/:id/refresh", datasetH.RefreshDataset)
 	datasets.Post("/ai-generate", datasetH.AIGenerateDataset)
 
 	// Dashboard routes
