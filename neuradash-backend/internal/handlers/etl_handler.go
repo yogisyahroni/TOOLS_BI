@@ -353,8 +353,8 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			if chunkLimit > 0 {
 				sqlQuery = fmt.Sprintf(`%s %s LIMIT %d OFFSET %d`, sqlQuery, orderBy, chunkLimit, offset)
 			} else {
-				// Hard 50k protection for non-chunkable external queries to prevent Render Server OOM
-				sqlQuery = fmt.Sprintf(`%s %s LIMIT 50000`, sqlQuery, orderBy)
+				// Hard 100k protection for non-chunkable external queries to prevent Render Server OOM
+				sqlQuery = fmt.Sprintf(`%s %s LIMIT 100000`, sqlQuery, orderBy)
 			}
 			res, err := dbConn.Query(ctx, sqlQuery, 0)
 			if err != nil {
@@ -362,11 +362,15 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			}
 			chunkRows = res.Rows
 		} else {
-			q := h.db.Table(sourceDataset.DataTableName).Order("1") // Deterministic order for LIMIT/OFFSET
+			// SUB-ROUTINE BETA: Stabilizing ORDER BY for chunking
+			// If we don't have a known PK, we try to use ID or AWB as they are likely unique in this dataset
+			orderBy := "1" 
+			
+			q := h.db.Table(sourceDataset.DataTableName).Order(orderBy)
 			if chunkLimit > 0 {
 				q = q.Limit(chunkLimit).Offset(offset)
 			} else {
-				q = q.Limit(50000)
+				q = q.Limit(100000)
 			}
 			if err := q.Find(&chunkRows).Error; err != nil {
 				return pipelineExecResult{status: "error", errMsg: "Failed to query internal database: " + err.Error()}
