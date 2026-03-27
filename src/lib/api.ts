@@ -100,6 +100,7 @@ api.interceptors.response.use(
         // The browser will send the httpOnly cookie automatically with withCredentials: true.
 
         if (isRefreshing) {
+            console.debug('[API] Refresh in progress, queueing request:', original.url);
             return new Promise((resolve, reject) => {
                 failedQueue.push({ resolve, reject });
             }).then((token) => {
@@ -108,6 +109,7 @@ api.interceptors.response.use(
             });
         }
 
+        console.warn('[API] 401 Unauthorized detected. Attempting silent refresh...', original.url);
         original._retry = true;
         isRefreshing = true;
 
@@ -118,12 +120,14 @@ api.interceptors.response.use(
             const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, {
                 withCredentials: true,
             });
+            console.info('[API] Refresh successful. Retrying failed requests.');
             setAccessToken(data.accessToken);
             // No need to setRefreshToken manually; backend will set it via cookie if rotated.
             processQueue(null, data.accessToken);
             original.headers.Authorization = `Bearer ${data.accessToken}`;
             return api(original);
         } catch (err) {
+            console.error('[API] Refresh failed. Clearing session.', err);
             processQueue(err, null);
             clearTokens();
             // Prevent infinite reload loops if loadMe fails while already on public auth pages
