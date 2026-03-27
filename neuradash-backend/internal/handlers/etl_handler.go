@@ -155,7 +155,8 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 
 	// Generate output table name if not exists before starting async run
 	if pipeline.OutputTableName == "" {
-		pipeline.OutputTableName = fmt.Sprintf("etl_out_%s", strings.ReplaceAll(uuid.New().String(), "-", "_"))
+		// SUB-ROUTINE BETA: Always use lowercase for UUIDs in table names to avoid PG case-sensitivity hell
+		pipeline.OutputTableName = fmt.Sprintf("etl_out_%s", strings.ToLower(strings.ReplaceAll(uuid.New().String(), "-", "_")))
 	}
 
 	// Persist the status and output table name IMMEDIATELY
@@ -573,7 +574,8 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 	}
 
 	// 1. Inspect the table to get column metadata
-	columnTypes, err := h.db.Migrator().ColumnTypes(pipeline.OutputTableName)
+	// SUB-ROUTINE BETA: We MUST quote the table name because it was created with quotes in executePipelineInternal
+	columnTypes, err := h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(pipeline.OutputTableName))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to inspect output table: %v. Ensure the pipeline run was successful.", err)})
 	}
@@ -601,7 +603,7 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 
 	// 2. Count rows
 	var rowCount int64
-	h.db.Table(pipeline.OutputTableName).Count(&rowCount)
+	h.db.Table(engine.QuoteIdentifier(pipeline.OutputTableName)).Count(&rowCount)
 
 	// 3. Create or update Dataset record
 	datasetID := uuid.New().String()
