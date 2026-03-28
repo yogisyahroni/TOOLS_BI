@@ -577,7 +577,30 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 	// SUB-ROUTINE BETA: We MUST quote the table name because it was created with quotes in executePipelineInternal
 	columnTypes, err := h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(pipeline.OutputTableName))
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to inspect output table: %v. Ensure the pipeline run was successful.", err)})
+		fmt.Printf("[ETL] Table %s missing during save, attempting recovery from cache...\n", pipeline.OutputTableName)
+		// AUTO-RECOVERY: If table is missing, re-create it from JSONB cache
+		if len(pipeline.OutputData) > 0 {
+			var cachedRows []map[string]interface{}
+			if errJson := json.Unmarshal(pipeline.OutputData, &cachedRows); errJson == nil && len(cachedRows) > 0 {
+				// We call executePipelineInternal again but with a special context or logic? 
+				// Actually, we can just use storageSvc to re-persist if it's small, 
+				// but executePipelineInternal is better as it handles large data.
+				// For now, let's re-run the pipeline execution to re-generate the table.
+				// This is safer than just persisting the sample cache (which is only 100 rows).
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				defer cancel()
+				res := h.executePipelineInternal(ctx, &pipeline)
+				if res.status != "completed" {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to recover output table: " + res.errMsg})
+				}
+				// Try inspecting again
+				columnTypes, err = h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(pipeline.OutputTableName))
+			}
+		}
+		
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to inspect output table: %v. Ensure the pipeline run was successful.", err)})
+		}
 	}
 
 	var cols []models.ColumnDef
