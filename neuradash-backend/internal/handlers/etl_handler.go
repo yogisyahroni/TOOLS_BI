@@ -523,7 +523,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 				}
 			}
 
-			if err := h.db.Table(p.OutputTableName).CreateInBatches(batch, len(batch)).Error; err != nil {
+			if err := h.db.Table(engine.QuoteIdentifier(p.OutputTableName)).CreateInBatches(batch, len(batch)).Error; err != nil {
 				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
 			}
 		}
