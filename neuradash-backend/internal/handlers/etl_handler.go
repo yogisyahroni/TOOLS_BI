@@ -129,8 +129,9 @@ func (h *ETLHandler) DeletePipeline(c *fiber.Ctx) error {
 
 	// 2. Drop the physical table if it exists (SUB-ROUTINE BETA: Cleanup protocol)
 	if pipeline.OutputTableName != "" {
-		if err := h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, pipeline.OutputTableName)).Error; err != nil {
-			fmt.Printf("[ETL] Warning: Failed to drop output table %s on deletion: %v\n", pipeline.OutputTableName, err)
+		trimmedName := strings.TrimSpace(pipeline.OutputTableName)
+		if err := h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, trimmedName)).Error; err != nil {
+			fmt.Printf("[ETL] Warning: Failed to drop output table %s on deletion: %v\n", trimmedName, err)
 			// We continue anyway to ensure the metadata is deleted
 		}
 	}
@@ -419,7 +420,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		// 2. Persist results to a physical SQL table
 		if !isTableCreated {
 			columnTypes = make(map[string]string)
-			h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
+			h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, strings.TrimSpace(p.OutputTableName)))
 
 			allCols := make(map[string]string)
 			rowsToScan := 10
@@ -463,7 +464,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 				colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
 			}
 
-			createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, p.OutputTableName, strings.Join(colDefs, ", "))
+			createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, strings.TrimSpace(p.OutputTableName), strings.Join(colDefs, ", "))
 			if err := h.db.Exec(createSQL).Error; err != nil {
 				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to create output table: %v", err)}
 			}
@@ -504,7 +505,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 				}
 			}
 
-			if err := h.db.Table(engine.QuoteIdentifier(p.OutputTableName)).CreateInBatches(batch, len(batch)).Error; err != nil {
+			if err := h.db.Table(engine.QuoteIdentifier(strings.TrimSpace(p.OutputTableName))).CreateInBatches(batch, len(batch)).Error; err != nil {
 				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
 			}
 		}
@@ -554,7 +555,9 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 
 	// 1. Inspect the table to get column metadata
 	// SUB-ROUTINE BETA: We MUST quote the table name because it was created with quotes in executePipelineInternal
-	columnTypes, err := h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(pipeline.OutputTableName))
+	// Trim spaces from table name to avoid lookup failures if DB has padded it (e.g. CHAR type)
+	tableName := strings.TrimSpace(pipeline.OutputTableName)
+	columnTypes, err := h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(tableName))
 	if err != nil {
 		fmt.Printf("[ETL] Table %s missing during save, attempting recovery from cache...\n", pipeline.OutputTableName)
 		// AUTO-RECOVERY: If table is missing, re-create it from JSONB cache
@@ -573,7 +576,7 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to recover output table: " + res.errMsg})
 				}
 				// Try inspecting again
-				columnTypes, err = h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(pipeline.OutputTableName))
+				columnTypes, err = h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(strings.TrimSpace(pipeline.OutputTableName)))
 			}
 		}
 		
@@ -605,7 +608,7 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 
 	// 2. Count rows
 	var rowCount int64
-	h.db.Table(engine.QuoteIdentifier(pipeline.OutputTableName)).Count(&rowCount)
+	h.db.Table(engine.QuoteIdentifier(strings.TrimSpace(pipeline.OutputTableName))).Count(&rowCount)
 
 	// 3. Create or update Dataset record
 	datasetID := uuid.New().String()
@@ -618,7 +621,7 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 		FileName:      fmt.Sprintf("%s_output.sql", strings.ToLower(strings.ReplaceAll(pipeline.Name, " ", "_"))),
 		Columns:       colJSON,
 		RowCount:      int(rowCount),
-		DataTableName: pipeline.OutputTableName,
+		DataTableName: strings.TrimSpace(pipeline.OutputTableName),
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 	}
