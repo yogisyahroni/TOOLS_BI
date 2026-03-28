@@ -367,13 +367,14 @@ function StepConfigEditor({
 export default function ETLPipelinePage() {
   const { runWorker } = useDataWorker();
   const { data: pipelinesData = [] } = usePipelines();
-  const pipelines = pipelinesData as any[];
+  const pipelines = (pipelinesData || []) as any[];
   const createPipelineMut = useCreatePipeline();
   const updatePipelineMut = useUpdatePipeline();
   const deletePipelineMut = useDeletePipeline();
   const runPipelineMut = useRunPipeline();
   const uploadDatasetMut = useUploadDataset();
-  const { data: dataSets = [] } = useDatasets();
+  const { data: dataSetsData = [] } = useDatasets();
+  const dataSets = (dataSetsData || []) as any[];
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -442,7 +443,7 @@ export default function ETLPipelinePage() {
   };
 
   const addStep = async (pipelineId: string, type: ETLStep['type']) => {
-    const currentPipelines = queryClient.getQueryData<any[]>(['pipelines']) || pipelines;
+    const currentPipelines = (queryClient.getQueryData<any[]>(['pipelines']) || pipelines || []) as any[];
     const pipeline = currentPipelines.find(p => p.id === pipelineId);
     if (!pipeline) return;
     const currentSteps = (pipeline.steps as ETLStep[]) || [];
