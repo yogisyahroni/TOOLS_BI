@@ -829,7 +829,7 @@ Always prioritize business value and data quality.`;
                       <table className="w-full text-[10px]">
                         <thead>
                           <tr className="bg-muted/50">
-                            {draftPreview.length > 0 && Object.keys(draftPreview[0]).map(col => (
+                            {draftPreview?.length > 0 && draftPreview[0] && Object.keys(draftPreview[0]).map(col => (
                               <th key={col} className="px-2 py-1 text-left text-muted-foreground font-mono">{col}</th>
                             ))}
                           </tr>
@@ -837,7 +837,7 @@ Always prioritize business value and data quality.`;
                         <tbody>
                           {draftPreview.slice(0, 5).map((row, i) => (
                             <tr key={i} className="border-t border-border">
-                              {Object.values(row).map((val, j) => (
+                              {row && Object.values(row).map((val, j) => (
                                 <td key={j} className="px-2 py-0.5 font-mono text-muted-foreground">{String(val)}</td>
                               ))}
                             </tr>
@@ -863,7 +863,7 @@ Always prioritize business value and data quality.`;
               {pipelines.map((pipeline: any, index: number) => {
                 const sourceDatasetId = pipeline.sourceDataSetId || pipeline.sourceDatasetId;
                 const sourceDs = dataSets.find(ds => ds.id === sourceDatasetId);
-                const sourceColumns = sourceDs?.columns.map(c => ({ name: c.name, type: c.type })) || [];
+                const sourceColumns = sourceDs?.columns?.map(c => ({ name: c.name, type: c.type })) || [];
                 const preview = previewData[pipeline.id];
                 const pipelineSteps = (pipeline.steps as ETLStep[]) || [];
                 const isPipelineExpanded = expandedPipelines.has(pipeline.id);
@@ -1127,7 +1127,7 @@ Always prioritize business value and data quality.`;
                               <table className="w-full text-[10px]">
                                 <thead>
                                   <tr className="bg-muted/50">
-                                    {Object.keys(preview[0]).map(col => (
+                                    {preview?.length > 0 && preview[0] && Object.keys(preview[0]).map(col => (
                                       <th key={col} className="px-3 py-2 text-left text-muted-foreground font-mono uppercase tracking-tighter border-b border-border/50 whitespace-nowrap">{col}</th>
                                     ))}
                                   </tr>
@@ -1135,7 +1135,7 @@ Always prioritize business value and data quality.`;
                                 <tbody>
                                   {preview.slice(0, 20).map((row, i) => (
                                     <tr key={i} className="border-t border-border/40 hover:bg-muted/20 transition-colors">
-                                      {Object.values(row).map((val, j) => (
+                                      {row && Object.values(row).map((val, j) => (
                                         <td key={j} className="px-3 py-1.5 font-mono text-foreground/80 whitespace-nowrap">{String(val)}</td>
                                       ))}
                                     </tr>
