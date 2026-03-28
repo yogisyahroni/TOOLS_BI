@@ -154,7 +154,7 @@ export default function Datasets() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              {selectedDataset?.columns.map((col) => (
+                              {selectedDataset?.columns?.length > 0 && selectedDataset.columns.map((col) => (
                                 <TableHead key={col.name}>{col.name}</TableHead>
                               ))}
                             </TableRow>
@@ -214,7 +214,7 @@ export default function Datasets() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Database className="w-4 h-4 text-primary" />
-                  <span>{ds.columns.length} columns</span>
+                  <span>{ds.columns?.length || 0} columns</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border text-sm text-muted-foreground">
