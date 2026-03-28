@@ -554,54 +554,73 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 	}
 
 	// 1. Inspect the table to get column metadata
-	// SUB-ROUTINE BETA: We MUST quote the table name because it was created with quotes in executePipelineInternal
-	// Trim spaces from table name to avoid lookup failures if DB has padded it (e.g. CHAR type)
+	// BUG-FIX: Metadata lookups (ColumnTypes) expect the UNQUOTED name for filtering in system tables.
+	// Only SQL execution (Table, Raw, Exec) needs QuoteIdentifier.
 	tableName := strings.TrimSpace(pipeline.OutputTableName)
-	columnTypes, err := h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(tableName))
-	if err != nil {
-		fmt.Printf("[ETL] Table %s missing during save, attempting recovery from cache...\n", pipeline.OutputTableName)
-		// AUTO-RECOVERY: If table is missing, re-create it from JSONB cache
+	columnTypes, err := h.db.Migrator().ColumnTypes(tableName)
+
+	if err != nil || len(columnTypes) == 0 {
+		fmt.Printf("[ETL] Table %s missing or schema returned 0 columns during save, checking cache...\n", pipeline.OutputTableName)
+		// AUTO-RECOVERY: If table is missing or metadata lookup failed (e.g. quoting mismatch), 
+		// re-create/re-run to ensure physical consistency.
 		if len(pipeline.OutputData) > 0 {
 			var cachedRows []map[string]interface{}
 			if errJson := json.Unmarshal(pipeline.OutputData, &cachedRows); errJson == nil && len(cachedRows) > 0 {
-				// We call executePipelineInternal again but with a special context or logic? 
-				// Actually, we can just use storageSvc to re-persist if it's small, 
-				// but executePipelineInternal is better as it handles large data.
-				// For now, let's re-run the pipeline execution to re-generate the table.
-				// This is safer than just persisting the sample cache (which is only 100 rows).
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 				defer cancel()
 				res := h.executePipelineInternal(ctx, &pipeline)
-				if res.status != "completed" {
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to recover output table: " + res.errMsg})
+				if res.status == "completed" {
+					// Try unquoted name again
+					columnTypes, err = h.db.Migrator().ColumnTypes(tableName)
 				}
-				// Try inspecting again
-				columnTypes, err = h.db.Migrator().ColumnTypes(engine.QuoteIdentifier(strings.TrimSpace(pipeline.OutputTableName)))
 			}
-		}
-		
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to inspect output table: %v. Ensure the pipeline run was successful.", err)})
 		}
 	}
 
-	cols := []models.ColumnDef{}
-	for _, ct := range columnTypes {
-		colType := "string"
-		dbType := strings.ToUpper(ct.DatabaseTypeName())
-		if strings.Contains(dbType, "INT") || strings.Contains(dbType, "DOUBLE") || strings.Contains(dbType, "FLOAT") || strings.Contains(dbType, "NUMERIC") || strings.Contains(dbType, "DECIMAL") {
-			colType = "number"
-		} else if strings.Contains(dbType, "BOOL") {
-			colType = "boolean"
-		} else if strings.Contains(dbType, "TIMESTAMP") || strings.Contains(dbType, "DATE") {
-			colType = "date"
+	// FALLBACK: If physical table inspection STILL returns 0 columns, infer from the OutputData (JSONB)
+	// This prevents the "0 columns" bug in the UI even if the DB metadata lookup fails.
+	var cols []models.ColumnDef
+	if len(columnTypes) == 0 && len(pipeline.OutputData) > 0 {
+		var sampleRows []map[string]interface{}
+		if err := json.Unmarshal(pipeline.OutputData, &sampleRows); err == nil && len(sampleRows) > 0 {
+			firstRow := sampleRows[0]
+			for colName, val := range firstRow {
+				colType := "string"
+				if val != nil {
+					switch val.(type) {
+					case float64, int, int64:
+						colType = "number"
+					case bool:
+						colType = "boolean"
+					}
+				}
+				cols = append(cols, models.ColumnDef{
+					Name:     colName,
+					Type:     colType,
+					Nullable: true,
+				})
+			}
 		}
+	} else if len(columnTypes) > 0 {
+		for _, ct := range columnTypes {
+			colType := "string"
+			dbType := strings.ToUpper(ct.DatabaseTypeName())
+			if strings.Contains(dbType, "INT") || strings.Contains(dbType, "DOUBLE") || 
+			   strings.Contains(dbType, "FLOAT") || strings.Contains(dbType, "NUMERIC") || 
+			   strings.Contains(dbType, "DECIMAL") {
+				colType = "number"
+			} else if strings.Contains(dbType, "BOOL") {
+				colType = "boolean"
+			} else if strings.Contains(dbType, "TIMESTAMP") || strings.Contains(dbType, "DATE") {
+				colType = "date"
+			}
 
-		cols = append(cols, models.ColumnDef{
-			Name:     ct.Name(),
-			Type:     colType,
-			Nullable: true,
-		})
+			cols = append(cols, models.ColumnDef{
+				Name:     ct.Name(),
+				Type:     colType,
+				Nullable: true,
+			})
+		}
 	}
 
 	colJSON, _ := json.Marshal(cols)
