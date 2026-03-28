@@ -356,11 +356,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		
 		if isExternal {
 			var sqlQuery string
-			
-			// SUB-ROUTINE BETA: Consistent ORDER BY is MANDATORY for offset batching.
-			// Without it, databases like Postgres don't guarantee row order between queries.
 			orderBy := "ORDER BY 1"
-			
 			if chunkLimit > 0 {
 				sqlQuery = fmt.Sprintf(`SELECT * FROM %s %s LIMIT %d OFFSET %d`, engine.QuoteIdentifier(sourceDataset.DataTableName), orderBy, chunkLimit, offset)
 			} else {
@@ -372,10 +368,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			}
 			chunkRows = res.Rows
 		} else {
-			// SUB-ROUTINE BETA: Stabilizing ORDER BY for chunking
-			// If we don't have a known PK, we try to use ID or AWB as they are likely unique in this dataset
 			orderBy := "1" 
-			
 			q := h.db.Table(sourceDataset.DataTableName).Order(orderBy)
 			if chunkLimit > 0 {
 				q = q.Limit(chunkLimit).Offset(offset)
@@ -405,21 +398,18 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			Nodes: append([]engine.NodeSpec{sourceNode}, baseNodes...),
 		}
 
-		// 1. Run visual pipeline engine for this chunk
 		result, err := engine.RunVisualPipeline(ctx, h.db, pipelineForChunk)
 		if err != nil {
 			return pipelineExecResult{status: "error", errMsg: err.Error()}
 		}
 
 		if len(result.Errors) > 0 {
-			// Collect first error for status report
 			for _, errText := range result.Errors {
 				return pipelineExecResult{status: "error", errMsg: errText}
 			}
 		}
 
 		if len(result.Rows) == 0 {
-			// Filter might have removed all rows in this chunk, continue to next chunk
 			if chunkLimit == 0 {
 				break
 			}
@@ -429,22 +419,18 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		// 2. Persist results to a physical SQL table
 		if !isTableCreated {
 			columnTypes = make(map[string]string)
-			// a. Drop existing table if it exists (Ensures idempotency)
 			h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, p.OutputTableName))
 
-			// b. Create table structure based on data discovery
-			// We scan a few rows to find the best types for each column
 			allCols := make(map[string]string)
 			rowsToScan := 10
 			if len(result.Rows) < rowsToScan {
 				rowsToScan = len(result.Rows)
 			}
-
 			for i := 0; i < rowsToScan; i++ {
 				for colName, val := range result.Rows[i] {
 					if val == nil {
 						if _, exists := allCols[colName]; !exists {
-							allCols[colName] = "TEXT" // Default
+							allCols[colName] = "TEXT"
 						}
 						continue
 					}
@@ -460,13 +446,11 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 					case time.Time, *time.Time:
 						sqlType = "TIMESTAMPTZ"
 					case string:
-						// Heuristic: check if it looks like a number but came as string
 						sqlType = "TEXT"
 					default:
 						_ = v
 					}
 					
-					// Upgrade if we found a more specific type
 					if current, exists := allCols[colName]; !exists || current == "TEXT" {
 						allCols[colName] = sqlType
 					}
@@ -485,7 +469,6 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			}
 			isTableCreated = true
 
-			// Save a small sample (first 100 rows) to JSONB for instant preview
 			sampleSize := 100
 			if len(result.Rows) < sampleSize {
 				sampleSize = len(result.Rows)
@@ -498,16 +481,14 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			}
 		}
 
-		// c. Batch insert data (Using batch size of 500)
+		// 3. Batch insert data
 		batchSizeDB := 500
 		for i := 0; i < len(result.Rows); i += batchSizeDB {
 			end := i + batchSizeDB
 			if end > len(result.Rows) {
 				end = len(result.Rows)
 			}
-			
 			batch := result.Rows[i:end]
-			// Sanitize time.Time to string (RFC3339) to prevent pgx encoding panics for TEXT columns
 			for _, row := range batch {
 				for k, v := range row {
 					if columnTypes[k] != "TIMESTAMPTZ" {
@@ -529,18 +510,15 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 
 		totalOutputRows += len(result.Rows)
-
-		// Force aggressive Garbage Collection over the massive map allocations
-		// before processing the next chunk. This protects low-RAM environments.
 		runtime.GC()
 
 		if chunkLimit == 0 {
-			break // if 0, it means we fetched everything in one go
+			break 
 		}
 	}
 
 	if !isTableCreated {
-		return pipelineExecResult{status: "error", errMsg: "Pipeline execution resulted in 0 rows overall. Output table cannot be created without structure."}
+		return pipelineExecResult{status: "error", errMsg: "Pipeline execution resulted in 0 rows overall."}
 	}
 
 	return pipelineExecResult{
@@ -548,6 +526,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		inputRows:  int64(totalInputRows),
 		outputRows: int64(totalOutputRows),
 	}
+
 }
 
 // SaveAsDataset converts a pipeline's output table into a permanent SQL dataset.
