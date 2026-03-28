@@ -603,7 +603,7 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 		}
 	}
 
-	var cols []models.ColumnDef
+	cols := []models.ColumnDef{}
 	for _, ct := range columnTypes {
 		colType := "string"
 		dbType := strings.ToUpper(ct.DatabaseTypeName())
@@ -678,7 +678,7 @@ func (h *ETLHandler) GetPipelinePreview(c *fiber.Ctx) error {
 	}
 
 	// 2. Infer columns from the data (since we're using JSONB now)
-	var cols []models.ColumnDef
+	cols := []models.ColumnDef{}
 	if len(data) > 0 {
 		firstRow := data[0]
 		for name, val := range firstRow {
