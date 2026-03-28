@@ -1117,7 +1117,7 @@ Always prioritize business value and data quality.`;
                         )}
 
                         {/* Preview */}
-                        {(previewData[p.id] || []).length > 0 && (
+                        {Array.isArray(previewData[p.id]) && (previewData[p.id] || []).length > 0 && (
                           <div className="bg-muted/10 rounded-xl border border-border/50 p-4">
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
