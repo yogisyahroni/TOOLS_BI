@@ -20,6 +20,7 @@ export interface ETLPipeline {
   name: string;
   steps: ETLStep[];
   sourceDataSetId: string;
+  upsertKey?: string;
   status: 'idle' | 'running' | 'completed' | 'error';
   error?: string;
   lastRun?: Date;

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ETLStorageService handles dynamic table creation and data persistence for ETL results.
@@ -23,28 +24,48 @@ func NewETLStorageService(localDB *gorm.DB, supabaseDB *gorm.DB) *ETLStorageServ
 }
 
 // PersistETLResult stores ETL rows into a dynamic table in both databases.
-func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName string, rows []map[string]interface{}) error {
+// If upsertKey is provided, it performs an UPSERT (ON CONFLICT DO UPDATE) instead of simple INSERT.
+func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName string, rows []map[string]interface{}, upsertKey string) error {
 	if len(rows) == 0 {
 		return nil
 	}
 
 	// 1. Ensure table exists in local DB
-	if err := s.ensureTableExists(s.localDB, tableName, rows[0]); err != nil {
+	if err := s.ensureTableExists(s.localDB, tableName, rows[0], upsertKey); err != nil {
 		return fmt.Errorf("local db: failed to ensure table: %w", err)
 	}
 
-	// 2. Insert into local DB in batches of 1000 to prevent memory spikes and SQL limits
-	if err := s.localDB.WithContext(ctx).Table(tableName).CreateInBatches(rows, 1000).Error; err != nil {
-		return fmt.Errorf("local db: failed to insert rows: %w", err)
+	// 2. Insert into local DB in batches of 1000
+	db := s.localDB.WithContext(ctx).Table(tableName)
+	if upsertKey != "" {
+		// Use ON CONFLICT (upsertKey) DO UPDATE SET ...
+		// We update ALL columns except the key itself.
+		db = db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: upsertKey}},
+			UpdateAll: true,
+		})
+	}
+	
+	if err := db.CreateInBatches(rows, 1000).Error; err != nil {
+		return fmt.Errorf("local db: failed to insert/upsert rows: %w", err)
 	}
 
 	// 3. Sync to Supabase if configured
 	if s.supabaseDB != nil {
-		if err := s.ensureTableExists(s.supabaseDB, tableName, rows[0]); err != nil {
+		if err := s.ensureTableExists(s.supabaseDB, tableName, rows[0], upsertKey); err != nil {
 			return fmt.Errorf("supabase db: failed to ensure table: %w", err)
 		}
-		if err := s.supabaseDB.WithContext(ctx).Table(tableName).CreateInBatches(rows, 1000).Error; err != nil {
-			return fmt.Errorf("supabase db: failed to insert rows: %w", err)
+		
+		sDB := s.supabaseDB.WithContext(ctx).Table(tableName)
+		if upsertKey != "" {
+			sDB = sDB.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: upsertKey}},
+				UpdateAll: true,
+			})
+		}
+
+		if err := sDB.CreateInBatches(rows, 1000).Error; err != nil {
+			return fmt.Errorf("supabase db: failed to insert/upsert rows: %w", err)
 		}
 	}
 
@@ -52,16 +73,26 @@ func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName stri
 }
 
 // ensureTableExists dynamically creates or migrates a table based on data keys.
-func (s *ETLStorageService) ensureTableExists(db *gorm.DB, tableName string, sampleRow map[string]interface{}) error {
+func (s *ETLStorageService) ensureTableExists(db *gorm.DB, tableName string, sampleRow map[string]interface{}, upsertKey string) error {
 	// SANITY CHECK: Validate table name to prevent SQL injection
 	if strings.ContainsAny(tableName, " ;'\"--") {
 		return fmt.Errorf("invalid table name: %s", tableName)
 	}
 
-	// For ETL, we always want a fresh table to avoid data corruption or stale data from previous runs.
+	// For UPSERT mode, we don't drop the table if it exists.
+	// But for standard OVERWRITE mode (default), we always want a fresh table.
 	if db.Migrator().HasTable(tableName) {
-		if err := db.Migrator().DropTable(tableName); err != nil {
-			return fmt.Errorf("failed to drop existing table %s: %w", tableName, err)
+		if upsertKey == "" {
+			if err := db.Migrator().DropTable(tableName); err != nil {
+				return fmt.Errorf("failed to drop existing table %s: %w", tableName, err)
+			}
+		} else {
+			// In UPSERT mode, the table exists - we are good.
+			// Just ensure the UNIQUE index exists on the upsertKey.
+			// We try to create it, ignoring errors if it already exists.
+			indexName := fmt.Sprintf("idx_%s_%s_unique", tableName, upsertKey)
+			db.Exec(fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON \"%s\" (\"%s\")", indexName, tableName, upsertKey))
+			return nil 
 		}
 	}
 
@@ -77,7 +108,17 @@ func (s *ETLStorageService) ensureTableExists(db *gorm.DB, tableName string, sam
 	}
 
 	query := fmt.Sprintf("CREATE TABLE \"%s\" (%s)", tableName, strings.Join(columns, ", "))
-	return db.Exec(query).Error
+	if err := db.Exec(query).Error; err != nil {
+		return err
+	}
+
+	// If we have an upsertKey, create a UNIQUE index on it immediately
+	if upsertKey != "" {
+		indexName := fmt.Sprintf("idx_%s_%s_unique", tableName, upsertKey)
+		return db.Exec(fmt.Sprintf("CREATE UNIQUE INDEX %s ON \"%s\" (\"%s\")", indexName, tableName, upsertKey)).Error
+	}
+
+	return nil
 }
 
 func (s *ETLStorageService) mapToPostgresType(v interface{}) string {

@@ -1116,6 +1116,65 @@ Always prioritize business value and data quality.`;
                           </DragDropContext>
                         )}
 
+                        {/* Sync Strategy Settings */}
+                        <div className="bg-muted/10 rounded-xl border border-border/50 p-4 space-y-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Settings2 className="w-3 h-3 text-muted-foreground" />
+                            <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-primary/80">Update Strategy (Smart Sync)</h4>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">Sync Mode</Label>
+                              <Select 
+                                value={p.upsertKey ? 'upsert' : 'overwrite'} 
+                                onValueChange={(val) => {
+                                  if (val === 'overwrite') {
+                                    updatePipelineMut.mutate({ id: p.id, payload: { upsertKey: null } as any });
+                                  } else {
+                                    // Default to first column if upsert selected
+                                    const firstCol = sourceColumns[0]?.name || '';
+                                    updatePipelineMut.mutate({ id: p.id, payload: { upsertKey: firstCol } as any });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="bg-background border-border h-9 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="overwrite" className="text-xs">Overwrite (Full Replace)</SelectItem>
+                                  <SelectItem value="upsert" className="text-xs">Smart Sync (Upsert)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <p className="text-[9px] text-muted-foreground leading-relaxed">
+                                {p.upsertKey 
+                                  ? "Updates existing rows by matching a unique key. Best for periodic logs." 
+                                  : "Replaces the entire destination dataset on every run."}
+                              </p>
+                            </div>
+
+                            {p.upsertKey && (
+                              <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                                <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">Unique Key / ID Column</Label>
+                                <Select 
+                                  value={p.upsertKey} 
+                                  onValueChange={(val) => updatePipelineMut.mutate({ id: p.id, payload: { upsertKey: val } as any })}
+                                >
+                                  <SelectTrigger className="bg-background border-border border-primary/20 h-9 text-xs ring-offset-background focus:ring-primary/20">
+                                    <SelectValue placeholder="Select key..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {sourceColumns.map(c => (
+                                      <SelectItem key={c.name} value={c.name} className="text-xs">{c.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-[9px] text-primary/70 font-medium">Required for matching existing records.</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         {/* Preview */}
                         {Array.isArray(previewData[p.id]) && (previewData[p.id] || []).length > 0 && (
                           <div className="bg-muted/10 rounded-xl border border-border/50 p-4">

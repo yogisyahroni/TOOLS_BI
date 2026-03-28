@@ -563,6 +563,7 @@ export interface ETLPipeline {
     name: string;
     sourceDatasetId: string;
     outputDatasetId?: string;
+    upsertKey?: string;
     steps: unknown[];
     status: string;
     lastRunAt?: string;
@@ -573,6 +574,7 @@ export interface ETLPipeline {
 export interface PipelineCreate {
     name: string;
     sourceDatasetId: string;
+    upsertKey?: string;
     steps?: Record<string, unknown>[];
 }
 
