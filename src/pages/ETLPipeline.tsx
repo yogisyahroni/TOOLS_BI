@@ -68,7 +68,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">Column</Label>
             <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -94,7 +94,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">Column</Label>
             <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -126,7 +126,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">Group By</Label>
             <Select value={config.groupBy || ''} onValueChange={v => onUpdate({ ...config, groupBy: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Group by column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -134,7 +134,7 @@ function StepConfigEditor({
               <Label className="text-xs text-muted-foreground">Agg Column</Label>
               <Select value={config._aggCol || ''} onValueChange={v => onUpdate({ ...config, _aggCol: v })}>
                 <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-                <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
@@ -180,7 +180,7 @@ function StepConfigEditor({
         <div>
           <Label className="text-xs text-muted-foreground">Select Columns</Label>
           <div className="flex flex-wrap gap-1 mt-1">
-            {columns.map(c => {
+            {(columns || []).map(c => {
               const selected = (config.columns || []).includes(c.name);
               return (
                 <button
@@ -209,7 +209,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">Column</Label>
             <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -230,7 +230,7 @@ function StepConfigEditor({
         <div>
           <Label className="text-xs text-muted-foreground">Columns to Check (Leave empty to check entire row)</Label>
           <div className="flex flex-wrap gap-1 mt-1">
-            {columns.map(c => {
+            {(columns || []).map(c => {
               const selected = (config.columns || []).includes(c.name);
               return (
                 <button
@@ -259,7 +259,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">Date Column</Label>
             <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -288,7 +288,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">JSON Column</Label>
             <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -309,7 +309,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">Column</Label>
             <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -337,7 +337,7 @@ function StepConfigEditor({
             <Label className="text-xs text-muted-foreground">Column</Label>
             <Select value={config.column || ''} onValueChange={v => onUpdate({ ...config, column: v })}>
               <SelectTrigger className="bg-muted/50 border-border h-8 text-xs"><SelectValue placeholder="Column" /></SelectTrigger>
-              <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(columns || []).map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
@@ -861,27 +861,27 @@ Always prioritize business value and data quality.`;
             </motion.div>
           ) : (
             <div className="space-y-4">
-              {pipelines.map((pipeline: any, index: number) => {
-                const sourceDatasetId = pipeline.sourceDataSetId || pipeline.sourceDatasetId;
+              {pipelines.map((p: any, index: number) => {
+                const sourceDatasetId = p.sourceDataSetId || p.sourceDatasetId;
                 const sourceDs = dataSets.find(ds => ds.id === sourceDatasetId);
                 const sourceColumns = sourceDs?.columns?.map(c => ({ name: c.name, type: c.type })) || [];
-                const preview = previewData[pipeline.id];
-                const pipelineSteps = (pipeline.steps as ETLStep[]) || [];
-                const isPipelineExpanded = expandedPipelines.has(pipeline.id);
+                const preview = previewData[p.id];
+                const pipelineSteps = (p.steps as ETLStep[]) || [];
+                const isPipelineExpanded = expandedPipelines.has(p.id);
 
                 const togglePipeline = (e: React.MouseEvent) => {
                   // Don't toggle if clicking buttons
                   if ((e.target as HTMLElement).closest('button')) return;
                   
                   const next = new Set(expandedPipelines);
-                  if (isPipelineExpanded) next.delete(pipeline.id);
-                  else next.add(pipeline.id);
+                  if (isPipelineExpanded) next.delete(p.id);
+                  else next.add(p.id);
                   setExpandedPipelines(next);
                 };
 
                 return (
                   <motion.div 
-                    key={pipeline.id} 
+                    key={p.id} 
                     initial={{ opacity: 0, y: 20 }} 
                     animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: index * 0.1 }} 
@@ -907,7 +907,7 @@ Always prioritize business value and data quality.`;
                         </div>
                         <div>
                           <h3 className={cn("font-semibold transition-colors", isPipelineExpanded ? "text-primary" : "text-foreground")}>
-                            {pipeline.name}
+                            {p.name}
                           </h3>
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
                             {sourceDs?.name || 'Unknown Source'} • {pipelineSteps.length} Steps
@@ -916,27 +916,27 @@ Always prioritize business value and data quality.`;
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2 pr-2 border-r border-border/50">
-                          {getStatusIcon(pipeline.status)}
+                          {getStatusIcon(p.status)}
                           <span className={cn(
                             "text-[10px] font-bold uppercase",
-                            pipeline.status === 'running' ? "text-primary animate-pulse" :
-                            pipeline.status === 'completed' ? "text-success" :
-                            pipeline.status === 'error' ? "text-destructive" : "text-muted-foreground"
+                            p.status === 'running' ? "text-primary animate-pulse" :
+                            p.status === 'completed' ? "text-success" :
+                            p.status === 'error' ? "text-destructive" : "text-muted-foreground"
                           )}>
-                            {pipeline.status || 'idle'}
+                            {p.status || 'idle'}
                           </span>
                         </div>
                         
-                        {(pipeline.inputRows !== undefined || pipeline.outputRows !== undefined) && (
+                        {(p.inputRows !== undefined || p.outputRows !== undefined) && (
                           <div className="flex items-center gap-2 px-2 py-1 bg-muted/30 rounded-lg border border-border/30 text-[9px] font-medium animate-in fade-in slide-in-from-right-1">
                             <div className="flex items-center gap-1">
                               <span className="text-muted-foreground">Processed:</span>
-                              <span className="text-indigo-400 font-bold">{(pipeline.inputRows || 0).toLocaleString()}</span>
+                              <span className="text-indigo-400 font-bold">{(p.inputRows || 0).toLocaleString()}</span>
                             </div>
                             <div className="w-px h-2.5 bg-border/50" />
                             <div className="flex items-center gap-1">
                               <span className="text-muted-foreground">Output:</span>
-                              <span className="text-emerald-400 font-bold">{(pipeline.outputRows || 0).toLocaleString()}</span>
+                              <span className="text-emerald-400 font-bold">{(p.outputRows || 0).toLocaleString()}</span>
                             </div>
                           </div>
                         )}
@@ -946,26 +946,26 @@ Always prioritize business value and data quality.`;
                             size="sm"
                             variant="ghost"
                             className="h-8 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
-                            onClick={(e) => { e.stopPropagation(); runPipeline(pipeline.id); }}
-                            disabled={pipeline.status === 'running' || pipelineSteps.length === 0}
+                            onClick={(e) => { e.stopPropagation(); runPipeline(p.id); }}
+                            disabled={p.status === 'running' || pipelineSteps.length === 0}
                           >
-                            {pipeline.status === 'running' ? (
+                            {p.status === 'running' ? (
                               <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                             ) : (
                               <Play className="w-4 h-4" />
                             )}
                           </Button>
                           
-                          {(preview || pipeline.status === 'completed') && (
+                          {(preview || p.status === 'completed') && (
                             <Button
                               size="sm"
                               variant="ghost"
                               className={cn(
                                 "h-8 px-2 transition-all",
-                                pipeline.status === 'completed' ? "text-success hover:bg-success/10" : "text-muted-foreground opacity-30"
+                                p.status === 'completed' ? "text-success hover:bg-success/10" : "text-muted-foreground opacity-30"
                               )}
-                              onClick={(e) => { e.stopPropagation(); pipeline.status === 'completed' && saveOutput(pipeline.id); }}
-                              disabled={pipeline.status !== 'completed'}
+                              onClick={(e) => { e.stopPropagation(); p.status === 'completed' && saveOutput(p.id); }}
+                              disabled={p.status !== 'completed'}
                             >
                               <Save className="w-4 h-4" />
                             </Button>
@@ -975,7 +975,7 @@ Always prioritize business value and data quality.`;
                             size="sm" 
                             variant="ghost" 
                             className="h-8 px-2 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                            onClick={(e) => { e.stopPropagation(); handleRemovePipeline(pipeline.id); }}
+                            onClick={(e) => { e.stopPropagation(); handleRemovePipeline(p.id); }}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -994,13 +994,13 @@ Always prioritize business value and data quality.`;
                     >
                       <div className="p-4 pt-0 space-y-4">
                         {/* Pipeline Error */}
-                        {pipeline.status === 'error' && pipeline.error && (
+                        {p.status === 'error' && p.error && (
                           <div className="mt-2">
                             <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start gap-3">
                               <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                               <div className="text-xs text-destructive">
                                 <p className="font-bold mb-1 uppercase tracking-tight">Execution Error</p>
-                                <p className="font-mono bg-destructive/5 p-2 rounded border border-destructive/10 leading-relaxed">{pipeline.error}</p>
+                                <p className="font-mono bg-destructive/5 p-2 rounded border border-destructive/10 leading-relaxed">{p.error}</p>
                               </div>
                             </div>
                           </div>
@@ -1019,7 +1019,7 @@ Always prioritize business value and data quality.`;
                                 variant="outline"
                                 size="sm"
                                 className="text-[10px] h-7 px-3 shrink-0 bg-muted/30 hover:bg-primary/10 hover:text-primary hover:border-primary/40 transition-all border-dashed"
-                                onClick={() => addStep(pipeline.id, st.value as ETLStep['type'])}
+                                onClick={() => addStep(p.id, st.value as ETLStep['type'])}
                               >
                                 <st.icon className="w-3 h-3 mr-1.5" /> {st.label}
                               </Button>
@@ -1028,16 +1028,16 @@ Always prioritize business value and data quality.`;
                         </div>
 
                         {/* Steps */}
-                        {pipelineSteps.length > 0 && (
-                          <DragDropContext onDragEnd={(result) => handleDragEnd(result, pipeline.id)}>
-                            <Droppable droppableId={`pipeline-${pipeline.id}`}>
+                        {p.steps?.length > 0 && (
+                          <DragDropContext onDragEnd={(result) => handleDragEnd(result, p.id)}>
+                            <Droppable droppableId={`pipeline-${p.id}`}>
                               {(provided) => (
                                 <div
                                   {...provided.droppableProps}
                                   ref={provided.innerRef}
                                   className="bg-muted/20 rounded-xl border border-border/50 overflow-hidden"
                                 >
-                                  {pipelineSteps.map((step, si) => {
+                                  {(p.steps as any[]).map((step, si) => {
                                     const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
                                     const isStepExpanded = expandedSteps.has(step.id);
                                     return (
@@ -1083,7 +1083,7 @@ Always prioritize business value and data quality.`;
                                               </div>
                                               <div className="flex items-center gap-2">
                                                 <button 
-                                                  onClick={e => { e.stopPropagation(); removeStep(pipeline.id, step.id); }} 
+                                                  onClick={e => { e.stopPropagation(); removeStep(p.id, step.id); }} 
                                                   className="text-muted-foreground hover:text-destructive p-1 transition-colors z-10"
                                                 >
                                                   <Trash2 className="w-3 h-3" />
@@ -1100,7 +1100,7 @@ Always prioritize business value and data quality.`;
                                                 <StepConfigEditor
                                                   step={step}
                                                   columns={sourceColumns}
-                                                  onUpdate={config => updateStepConfig(pipeline.id, step.id, config)}
+                                                  onUpdate={config => updateStepConfig(p.id, step.id, config)}
                                                 />
                                               </div>
                                             </motion.div>
@@ -1117,27 +1117,31 @@ Always prioritize business value and data quality.`;
                         )}
 
                         {/* Preview */}
-                        {preview && preview.length > 0 && Array.isArray(preview) && (
+                        {(previewData[p.id] || []).length > 0 && (
                           <div className="bg-muted/10 rounded-xl border border-border/50 p-4">
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                                <Layers className="w-3 h-3" /> Pratinjau Output ({preview.length} baris)
+                                <Layers className="w-3 h-3" /> Pratinjau Output ({(previewData[p.id] || []).length} baris)
                               </h4>
                             </div>
                             <div className="overflow-auto max-h-[300px] rounded-lg border border-border/50 bg-card">
                               <table className="w-full text-[10px]">
                                 <thead>
                                   <tr className="bg-muted/50">
-                                    {preview[0] && Object.keys(preview[0]).map(col => (
-                                      <th key={col} className="px-3 py-2 text-left text-muted-foreground font-mono uppercase tracking-tighter border-b border-border/50 whitespace-nowrap">{col}</th>
+                                    {Object.keys((previewData[p.id] || [])[0] || {}).map(col => (
+                                      <th key={col} className="text-left py-2 px-3 text-[10px] uppercase tracking-wider text-muted-foreground font-medium border-b border-border/50 bg-muted/30">
+                                        {col}
+                                      </th>
                                     ))}
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {preview.slice(0, 20).map((row, i) => (
-                                    <tr key={i} className="border-t border-border/40 hover:bg-muted/20 transition-colors">
-                                      {row && Object.values(row).map((val, j) => (
-                                        <td key={j} className="px-3 py-1.5 font-mono text-foreground/80 whitespace-nowrap">{String(val)}</td>
+                                  {(previewData[p.id] || []).slice(0, 20).map((row, i) => (
+                                    <tr key={i} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
+                                      {Object.values(row || {}).map((val, j) => (
+                                        <td key={j} className="py-2 px-3 text-[10px] text-foreground/80 truncate max-w-[150px]">
+                                          {String(val ?? '')}
+                                        </td>
                                       ))}
                                     </tr>
                                   ))}
