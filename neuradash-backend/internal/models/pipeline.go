@@ -20,6 +20,7 @@ type ETLPipeline struct {
 	InputRows       *int            `json:"inputRows"`
 	OutputRows      *int            `json:"outputRows"`
 	Error           string          `json:"error" gorm:"type:text"`
+	UpsertKey       string          `json:"upsertKey" gorm:"type:text"`
 	CreatedAt       time.Time       `json:"createdAt"`
 }
 
@@ -42,6 +43,7 @@ type VisualPipeline struct {
 	Schedule          string          `json:"schedule"`
 	IsTemplate        bool            `json:"isTemplate" gorm:"default:false"`
 	Tags              json.RawMessage `json:"tags" gorm:"type:jsonb;default:'[]'"`
+	UpsertKey         string          `json:"upsertKey" gorm:"type:text"`
 	CreatedAt         time.Time       `json:"createdAt"`
 	UpdatedAt         time.Time       `json:"updatedAt"`
 }

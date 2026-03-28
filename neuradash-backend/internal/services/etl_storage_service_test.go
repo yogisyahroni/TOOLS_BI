@@ -33,7 +33,7 @@ func TestETLStorageService_PersistETLResult(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = svc.PersistETLResult(ctx, tableName, rows)
+	err = svc.PersistETLResult(ctx, tableName, rows, "")
 	assert.NoError(t, err)
 
 	// Verify table exists and data is inserted
@@ -54,7 +54,7 @@ func TestETLStorageService_InvalidTableName(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	svc := NewETLStorageService(db, nil)
 
-	err := svc.PersistETLResult(context.Background(), "invalid; table", []map[string]interface{}{{"id": 1}})
+	err := svc.PersistETLResult(context.Background(), "invalid; table", []map[string]interface{}{{"id": 1}}, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid table name")
 }

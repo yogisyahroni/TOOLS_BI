@@ -61,6 +61,7 @@ func (h *ETLHandler) CreatePipeline(c *fiber.Ctx) error {
 	var req struct {
 		Name            string                   `json:"name"`
 		SourceDatasetID string                   `json:"sourceDatasetId"`
+		UpsertKey       string                   `json:"upsertKey"`
 		Steps           []map[string]interface{} `json:"steps"`
 	}
 	if err := c.BodyParser(&req); err != nil {
@@ -78,6 +79,7 @@ func (h *ETLHandler) CreatePipeline(c *fiber.Ctx) error {
 		Name:            req.Name,
 		SourceDatasetID: req.SourceDatasetID,
 		Steps:           json.RawMessage(stepsJSON),
+		UpsertKey:       req.UpsertKey,
 		Status:          "idle",
 		CreatedAt:       time.Now(),
 	}
@@ -96,8 +98,9 @@ func (h *ETLHandler) UpdatePipeline(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Pipeline not found"})
 	}
 	var req struct {
-		Name  *string                  `json:"name"`
-		Steps []map[string]interface{} `json:"steps"`
+		Name      *string                  `json:"name"`
+		UpsertKey *string                  `json:"upsertKey"`
+		Steps     []map[string]interface{} `json:"steps"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
@@ -105,6 +108,9 @@ func (h *ETLHandler) UpdatePipeline(c *fiber.Ctx) error {
 	updates := map[string]interface{}{}
 	if req.Name != nil {
 		updates["name"] = *req.Name
+	}
+	if req.UpsertKey != nil {
+		updates["upsert_key"] = *req.UpsertKey
 	}
 	if req.Steps != nil {
 		stepsJSON, _ := json.Marshal(req.Steps)
@@ -350,7 +356,6 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 	isTableCreated := false
 	totalInputRows := 0
 	totalOutputRows := 0
-	var columnTypes map[string]string
 
 	for offset := 0; ; offset += chunkLimit {
 		var chunkRows []map[string]interface{}
@@ -417,96 +422,23 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			continue
 		}
 
-		// 2. Persist results to a physical SQL table
+		// 2. Persist results using the Storage Service (SUB-ROUTINE BETA: Persistence Protocol)
+		// This now supports UPSERT if p.UpsertKey is provided.
+		if err := h.storageSvc.PersistETLResult(ctx, p.OutputTableName, result.Rows, p.UpsertKey); err != nil {
+			return pipelineExecResult{status: "error", errMsg: "Failed to persist results: " + err.Error()}
+		}
+
 		if !isTableCreated {
-			columnTypes = make(map[string]string)
-			h.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, strings.TrimSpace(p.OutputTableName)))
-
-			allCols := make(map[string]string)
-			rowsToScan := 10
-			if len(result.Rows) < rowsToScan {
-				rowsToScan = len(result.Rows)
-			}
-			for i := 0; i < rowsToScan; i++ {
-				for colName, val := range result.Rows[i] {
-					if val == nil {
-						if _, exists := allCols[colName]; !exists {
-							allCols[colName] = "TEXT"
-						}
-						continue
-					}
-
-					sqlType := "TEXT"
-					switch v := val.(type) {
-					case int, int64, int32, int16, int8:
-						sqlType = "BIGINT"
-					case float64, float32:
-						sqlType = "NUMERIC"
-					case bool:
-						sqlType = "BOOLEAN"
-					case time.Time, *time.Time:
-						sqlType = "TIMESTAMPTZ"
-					case string:
-						sqlType = "TEXT"
-					default:
-						_ = v
-					}
-					
-					if current, exists := allCols[colName]; !exists || current == "TEXT" {
-						allCols[colName] = sqlType
-					}
-				}
-			}
-
-			var colDefs []string
-			for colName, sqlType := range allCols {
-				columnTypes[colName] = sqlType
-				colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, colName, sqlType))
-			}
-
-			createSQL := fmt.Sprintf(`CREATE TABLE "%s" (%s)`, strings.TrimSpace(p.OutputTableName), strings.Join(colDefs, ", "))
-			if err := h.db.Exec(createSQL).Error; err != nil {
-				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to create output table: %v", err)}
-			}
 			isTableCreated = true
-
+			// Save preview sample for UI
 			sampleSize := 100
 			if len(result.Rows) < sampleSize {
 				sampleSize = len(result.Rows)
 			}
 			sampleRows := result.Rows[:sampleSize]
 			outputJSON, _ := json.Marshal(sampleRows)
-			
 			if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
 				fmt.Printf("[ETL] Warning: Failed to save preview sample: %v\n", err)
-			}
-		}
-
-		// 3. Batch insert data
-		batchSizeDB := 500
-		for i := 0; i < len(result.Rows); i += batchSizeDB {
-			end := i + batchSizeDB
-			if end > len(result.Rows) {
-				end = len(result.Rows)
-			}
-			batch := result.Rows[i:end]
-			for _, row := range batch {
-				for k, v := range row {
-					if columnTypes[k] != "TIMESTAMPTZ" {
-						switch t := v.(type) {
-						case time.Time:
-							row[k] = t.Format(time.RFC3339)
-						case *time.Time:
-							if t != nil {
-								row[k] = t.Format(time.RFC3339)
-							}
-						}
-					}
-				}
-			}
-
-			if err := h.db.Table(engine.QuoteIdentifier(strings.TrimSpace(p.OutputTableName))).CreateInBatches(batch, len(batch)).Error; err != nil {
-				return pipelineExecResult{status: "error", errMsg: fmt.Sprintf("Failed to insert data batch: %v", err)}
 			}
 		}
 
@@ -553,25 +485,26 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Pipeline status is '%s'. It must be 'completed' to save output.", pipeline.Status)})
 	}
 
-	// 1. Inspect the table to get column metadata
-	// BUG-FIX: Metadata lookups (ColumnTypes) expect the UNQUOTED name for filtering in system tables.
-	// Only SQL execution (Table, Raw, Exec) needs QuoteIdentifier.
 	tableName := strings.TrimSpace(pipeline.OutputTableName)
-	columnTypes, err := h.db.Migrator().ColumnTypes(tableName)
+	
+	// We use an interface slice because GORM Migrator returns []gorm.ColumnType 
+	// but sql.Rows returns []*sql.ColumnType. Both implement similar methods but different interfaces.
+	var anyColumnTypes []interface{}
+	gormTypes, _ := h.db.Migrator().ColumnTypes(tableName)
+	for _, gt := range gormTypes {
+		anyColumnTypes = append(anyColumnTypes, gt)
+	}
 
-	if err != nil || len(columnTypes) == 0 {
-		fmt.Printf("[ETL] Table %s missing or schema returned 0 columns during save, checking cache...\n", pipeline.OutputTableName)
-		// AUTO-RECOVERY: If table is missing or metadata lookup failed (e.g. quoting mismatch), 
-		// re-create/re-run to ensure physical consistency.
-		if len(pipeline.OutputData) > 0 {
-			var cachedRows []map[string]interface{}
-			if errJson := json.Unmarshal(pipeline.OutputData, &cachedRows); errJson == nil && len(cachedRows) > 0 {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-				defer cancel()
-				res := h.executePipelineInternal(ctx, &pipeline)
-				if res.status == "completed" {
-					// Try unquoted name again
-					columnTypes, err = h.db.Migrator().ColumnTypes(tableName)
+	// If GORM Migrator fails to find columns, try a more direct "Probing" query.
+	// This is instantaneous even on millions of rows because of LIMIT 0.
+	if len(anyColumnTypes) == 0 {
+		rows, errQuery := h.db.Table(engine.QuoteIdentifier(tableName)).Limit(0).Rows()
+		if errQuery == nil {
+			defer rows.Close()
+			if types, errTypes := rows.ColumnTypes(); errTypes == nil && len(types) > 0 {
+				// We found columns via direct query!
+				for _, t := range types {
+					anyColumnTypes = append(anyColumnTypes, t)
 				}
 			}
 		}
@@ -580,7 +513,7 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 	// FALLBACK: If physical table inspection STILL returns 0 columns, infer from the OutputData (JSONB)
 	// This prevents the "0 columns" bug in the UI even if the DB metadata lookup fails.
 	var cols []models.ColumnDef
-	if len(columnTypes) == 0 && len(pipeline.OutputData) > 0 {
+	if len(anyColumnTypes) == 0 && len(pipeline.OutputData) > 0 {
 		var sampleRows []map[string]interface{}
 		if err := json.Unmarshal(pipeline.OutputData, &sampleRows); err == nil && len(sampleRows) > 0 {
 			firstRow := sampleRows[0]
@@ -601,10 +534,23 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 				})
 			}
 		}
-	} else if len(columnTypes) > 0 {
-		for _, ct := range columnTypes {
-			colType := "string"
-			dbType := strings.ToUpper(ct.DatabaseTypeName())
+	}
+	for _, ct := range anyColumnTypes {
+		colType := "string"
+		colName := ""
+		dbType := ""
+
+		// Duck typing interface check for ColumnType
+		type columnInfo interface {
+			Name() string
+			DatabaseTypeName() string
+		}
+
+		if gi, ok := ct.(columnInfo); ok {
+			colName = gi.Name()
+			dbType = strings.ToUpper(gi.DatabaseTypeName())
+		}
+
 			if strings.Contains(dbType, "INT") || strings.Contains(dbType, "DOUBLE") || 
 			   strings.Contains(dbType, "FLOAT") || strings.Contains(dbType, "NUMERIC") || 
 			   strings.Contains(dbType, "DECIMAL") {
@@ -616,12 +562,11 @@ func (h *ETLHandler) SaveAsDataset(c *fiber.Ctx) error {
 			}
 
 			cols = append(cols, models.ColumnDef{
-				Name:     ct.Name(),
+				Name:     colName,
 				Type:     colType,
 				Nullable: true,
 			})
 		}
-	}
 
 	colJSON, _ := json.Marshal(cols)
 
