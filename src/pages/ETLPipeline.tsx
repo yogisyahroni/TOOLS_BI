@@ -791,7 +791,7 @@ Always prioritize business value and data quality.`;
 
                   {showDraftSteps && (
                     <div className="mb-4 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                      {draftSteps.map((step, i) => {
+                      {draftSteps?.map((step, i) => {
                         const StepIcon = stepTypes.find(t => t.value === step.type)?.icon || Filter;
                         return (
                           <div key={step.id} className="flex items-center justify-between bg-muted/30 rounded-lg p-2 border border-border/50">
@@ -825,28 +825,28 @@ Always prioritize business value and data quality.`;
                     </div>
                   )}
 
-                  {draftPreview && draftPreview.length > 0 && Array.isArray(draftPreview) && (
-                    <div className="overflow-auto max-h-[250px] rounded-lg border border-border bg-muted/20">
-                      <table className="w-full text-[10px]">
-                        <thead>
-                          <tr className="bg-muted/50">
-                            {draftPreview[0] && Object.keys(draftPreview[0]).map(col => (
-                              <th key={col} className="px-2 py-1 text-left text-muted-foreground font-mono">{col}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {draftPreview.slice(0, 5).map((row, i) => (
-                            <tr key={i} className="border-t border-border">
-                              {row && Object.values(row).map((val, j) => (
-                                <td key={j} className="px-2 py-0.5 font-mono text-muted-foreground">{String(val)}</td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  {Array.isArray(draftPreview) && draftPreview.length > 0 ? (
+                    <div className="overflow-x-auto border rounded-xl bg-background/50 backdrop-blur-sm">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-muted/50 border-b">
+                                <tr>
+                                    {Object.keys(draftPreview[0] ?? {}).map(k => (
+                                        <th key={k} className="p-3 font-medium text-muted-foreground whitespace-nowrap">{k}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {draftPreview.slice(0, 5).map((row, i) => (
+                                    <tr key={i} className="hover:bg-muted/30 transition-colors">
+                                        {Object.values(row ?? {}).map((v, j) => (
+                                            <td key={j} className="p-3 whitespace-nowrap">{String(v ?? '')}</td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>
@@ -861,7 +861,7 @@ Always prioritize business value and data quality.`;
             </motion.div>
           ) : (
             <div className="space-y-4">
-              {pipelines.map((p: any, index: number) => {
+              {pipelines?.map((p: any, index: number) => {
                 const sourceDatasetId = p.sourceDataSetId || p.sourceDatasetId;
                 const sourceDs = dataSets.find(ds => ds.id === sourceDatasetId);
                 const sourceColumns = sourceDs?.columns?.map(c => ({ name: c.name, type: c.type })) || [];
