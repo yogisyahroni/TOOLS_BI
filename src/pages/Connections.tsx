@@ -127,7 +127,12 @@ export default function ConnectionsPage() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [queryConnId, setQueryConnId] = useState<string | null>(null);
     const [sqlDraft, setSqlDraft] = useState('SELECT 1');
-    const [queryResult, setQueryResult] = useState<{ columns: string[]; data: Record<string, unknown>[]; durationMs: number } | null>(null);
+    const [queryResult, setQueryResult] = useState<{ 
+        columns: string[]; 
+        data: Record<string, unknown>[]; 
+        durationMs: number; 
+        rowCount: number 
+    } | null>(null);
     const [showSchemaDialog, setShowSchemaDialog] = useState(false);
     const [selectedConnection, setSelectedConnection] = useState<string | null>(null);
     const { data: schema, isLoading: isLoadingSchema } = useConnectionSchema(selectedConnection);
@@ -203,7 +208,12 @@ export default function ConnectionsPage() {
     const handleQuery = async (id: string) => {
         try {
             const res = await connectionApi.query(id, { sql: sqlDraft, limit: 200 });
-            setQueryResult({ columns: res.columns, data: res.data, durationMs: res.rowCount });
+            setQueryResult({ 
+                columns: res.columns, 
+                data: res.data, 
+                durationMs: res.durationMs,
+                rowCount: res.rowCount 
+            });
         } catch (e: any) {
             toast({ title: 'Query failed', description: e.message, variant: 'destructive' });
         }
