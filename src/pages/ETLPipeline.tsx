@@ -401,6 +401,20 @@ export default function ETLPipelinePage() {
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [expandedPipelines, setExpandedPipelines] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<Record<string, Record<string, any>[]>>({});
+  const [progressMap, setProgressMap] = useState<Record<string, { processedRows: number }>>({});
+
+  // Listen for ETL progress updates
+  // SUB-ROUTINE GAMMA: Real-time feedback ensures the UI feels alive.
+  useWSEvent('etl_progress', useCallback((payload: any) => {
+    if (payload?.pipelineId) {
+      setProgressMap(prev => ({
+        ...prev,
+        [payload.pipelineId]: { 
+          processedRows: payload.processedRows 
+        }
+      }));
+    }
+  }, []));
 
   // Background fetch for completed pipelines preview
   useEffect(() => {
@@ -927,17 +941,21 @@ Always prioritize business value and data quality.`;
                           </span>
                         </div>
                         
-                        {(p.inputRows !== undefined || p.outputRows !== undefined) && (
+                        {(p.outputRows !== undefined || progressMap[p.id]?.processedRows !== undefined) && (
                           <div className="flex items-center gap-2 px-2 py-1 bg-muted/30 rounded-lg border border-border/30 text-[9px] font-medium animate-in fade-in slide-in-from-right-1">
                             <div className="flex items-center gap-1">
                               <span className="text-muted-foreground">Processed:</span>
-                              <span className="text-indigo-400 font-bold">{(p.inputRows || 0).toLocaleString()}</span>
+                              <span className="text-indigo-400 font-bold">{(progressMap[p.id]?.processedRows ?? p.outputRows ?? 0).toLocaleString()} rows</span>
                             </div>
-                            <div className="w-px h-2.5 bg-border/50" />
-                            <div className="flex items-center gap-1">
-                              <span className="text-muted-foreground">Output:</span>
-                              <span className="text-emerald-400 font-bold">{(p.outputRows || 0).toLocaleString()}</span>
-                            </div>
+                            {p.status === 'completed' && p.inputRows !== undefined && (
+                              <>
+                                <div className="w-px h-2.5 bg-border/50" />
+                                <div className="flex items-center gap-1">
+                                  <span className="text-muted-foreground">Input:</span>
+                                  <span className="text-emerald-400 font-bold">{(p.inputRows || 0).toLocaleString()}</span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                       

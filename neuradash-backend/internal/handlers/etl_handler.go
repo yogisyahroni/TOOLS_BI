@@ -357,6 +357,52 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 	totalInputRows := 0
 	totalOutputRows := 0
 
+	// SUB-ROUTINE BETA: Prepare target table ONCE before starting the chunked loop.
+	// We fetch a 1-row sample to determine the schema if it's the first run.
+	if isExternal {
+		// Sample from external
+		sampleQuery := fmt.Sprintf(`SELECT * FROM %s LIMIT 1`, engine.QuoteIdentifier(sourceDataset.DataTableName))
+		res, err := dbConn.Query(ctx, sampleQuery, 1)
+		if err == nil && len(res.Rows) > 0 {
+			// Run a mini-pipeline for 1 row to get output schema
+			sourceNode := engine.NodeSpec{
+				ID:     sourceNodeID,
+				Type:   "source",
+				Config: map[string]interface{}{"data": res.Rows},
+			}
+			miniPipeline := engine.PipelineSpec{
+				Nodes: append([]engine.NodeSpec{sourceNode}, baseNodes...),
+			}
+			sampleRes, err := engine.RunVisualPipeline(ctx, h.db, miniPipeline)
+			if err == nil && len(sampleRes.Rows) > 0 {
+				if err := h.storageSvc.PrepareTargetTable(ctx, p.OutputTableName, sampleRes.Rows[0], p.UpsertKey); err != nil {
+					return pipelineExecResult{status: "error", errMsg: "Schema preparation failed: " + err.Error()}
+				}
+				isTableCreated = true
+			}
+		}
+	} else {
+		// Sample from internal
+		var sampleRows []map[string]interface{}
+		if err := h.db.Table(sourceDataset.DataTableName).Limit(1).Find(&sampleRows).Error; err == nil && len(sampleRows) > 0 {
+			sourceNode := engine.NodeSpec{
+				ID:     sourceNodeID,
+				Type:   "source",
+				Config: map[string]interface{}{"data": sampleRows},
+			}
+			miniPipeline := engine.PipelineSpec{
+				Nodes: append([]engine.NodeSpec{sourceNode}, baseNodes...),
+			}
+			sampleRes, err := engine.RunVisualPipeline(ctx, h.db, miniPipeline)
+			if err == nil && len(sampleRes.Rows) > 0 {
+				if err := h.storageSvc.PrepareTargetTable(ctx, p.OutputTableName, sampleRes.Rows[0], p.UpsertKey); err != nil {
+					return pipelineExecResult{status: "error", errMsg: "Schema preparation failed: " + err.Error()}
+				}
+				isTableCreated = true
+			}
+		}
+	}
+
 	for offset := 0; ; offset += chunkLimit {
 		var chunkRows []map[string]interface{}
 		
@@ -443,6 +489,20 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 
 		totalOutputRows += len(result.Rows)
+		
+		// PROGRESS BROADCAST: Inform frontend of current progress in the middle of the loop.
+		// SUB-ROUTINE GAMMA: Real-time feedback ensures the UI doesn't look "stuck".
+		h.hub.SendToUser(p.UserID, realtime.Event{
+			Type: "etl_progress",
+			Payload: map[string]interface{}{
+				"pipelineId":    p.ID,
+				"runId":         p.ID,
+				"status":        "running",
+				"processedRows": totalOutputRows,
+				"percent":       -1,
+			},
+		})
+
 		runtime.GC()
 
 		if chunkLimit == 0 {
