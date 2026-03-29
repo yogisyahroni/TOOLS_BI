@@ -279,13 +279,13 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	tableName, schemaStr, sampleData, ok := h.extractDatasetContext(req.DatasetID)
+	tableName, schemaStr, sampleData, columnValues, ok := h.extractDatasetContext(req.DatasetID)
 	if !ok {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
 	// Use expert prompt: Data Engineer (schema fidelity) + Data Scientist (anti-hallucination)
-	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, req.Question)
+	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, columnValues, req.Question)
 
 	sqlQuery, err := h.callOpenAI(cfg, prompt)
 	if err != nil {
@@ -346,10 +346,10 @@ func (h *AIHandler) GenerateReport(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	tableName, schemaStr, sampleData, _ := h.extractDatasetContext(req.DatasetID)
+	tableName, schemaStr, sampleData, columnValues, _ := h.extractDatasetContext(req.DatasetID)
 
 	// Use expert prompt from Data Storytelling + Data Scientist skills
-	prompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt, req.Language)
+	prompt := BuildReportPrompt(schemaStr, tableName, sampleData, columnValues, req.Prompt, req.Language)
 	content, err := h.callOpenAI(cfg, prompt)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed"})
@@ -391,11 +391,10 @@ func (h *AIHandler) GenerateReport(c *fiber.Ctx) error {
 }
 
 // extractDatasetContext fetches the dataset table name, a formatted schema string,
-// and a sample of up to 3 real rows from the actual data table.
-// This is critical for anti-hallucination: AI receives real schema + real data.
-func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaStr, sampleData string, ok bool) {
+// a sample of up to 5 real rows, and distinct values for categorical/string columns.
+func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaStr, sampleData, columnValues string, ok bool) {
 	if datasetID == "" {
-		return "", "", "", false
+		return "", "", "", "", false
 	}
 
 	var ds struct {
@@ -406,11 +405,12 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 	}
 	if err := h.db.Table("datasets").Select("data_table_name, columns, storage_key, user_id").
 		Where("id = ?", datasetID).Scan(&ds).Error; err != nil || ds.DataTableName == "" {
-		return "", "", "", false
+		return "", "", "", "", false
 	}
 
-	// Format schema as readable column list
+	// 1. Format schema as readable column list & identify categorical candidates
 	var cols []map[string]interface{}
+	var stringCols []string
 	if json.Unmarshal(ds.Columns, &cols) == nil {
 		var sb strings.Builder
 		for _, col := range cols {
@@ -418,6 +418,10 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 			dtype, _ := col["type"].(string)
 			if name != "" {
 				sb.WriteString(fmt.Sprintf("  - %s (%s)\n", name, dtype))
+				// If it's a string/text type, it's a candidate for distinct values
+				if dtype == "string" || dtype == "TEXT" || dtype == "VARCHAR" {
+					stringCols = append(stringCols, name)
+				}
 			}
 		}
 		schemaStr = sb.String()
@@ -425,14 +429,10 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 		schemaStr = string(ds.Columns) // fallback raw JSON
 	}
 
-	// Fetch real sample rows (max 5) for type inference & grounding.
-	// CRITICAL: DataTableName may be "public.belajar_data" (schema.table) or just "belajar_data".
-	// We must quote schema and table separately: "public"."belajar_data"
-	// Using %q on the full string would produce "public.belajar_data" (dot inside quotes) → PostgreSQL error.
+	// 2. Fetch real sample rows (max 5)
 	fullTableName := strings.TrimSpace(ds.DataTableName)
 	if strings.HasPrefix(strings.ToUpper(fullTableName), "(SELECT") {
-		// It is a virtual view (e.g., "(SELECT * FROM tbl) AS virt"), keep it exactly as is
-		// to avoid breaking the subquery wrapper.
+		// virtual view skip
 	} else if strings.Contains(fullTableName, ".") {
 		parts := strings.SplitN(fullTableName, ".", 2)
 		fullTableName = fmt.Sprintf(`"%s"."%s"`, parts[0], parts[1])
@@ -443,41 +443,74 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 	var samples []map[string]interface{}
 	sampleQuery := fmt.Sprintf("SELECT * FROM %s LIMIT 5", fullTableName)
 
-	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+	// 3. Fetch Distinct Values for string columns
+	var cvSb strings.Builder
+	isExternal := strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+
+	if isExternal {
 		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
 		var conn models.DBConnection
 		if err := h.db.Where("id = ? AND user_id = ?", connID, ds.UserID).First(&conn).Error; err == nil {
 			opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 
 			dbConn, err := connectors.Open(opts)
 			if err == nil {
 				defer dbConn.Close()
-				res, errQuery := dbConn.Query(ctx, sampleQuery, 5)
-				if errQuery == nil {
+				// Samples
+				res, _ := dbConn.Query(ctx, sampleQuery, 5)
+				if res != nil {
 					samples = res.Rows
-				} else {
-					sampleData = fmt.Sprintf("(Failed to query external database: %v)", errQuery)
 				}
-			} else {
-				sampleData = fmt.Sprintf("(Failed to open external DB connection: %v)", err)
+				
+				// Distinct Values
+				for _, colName := range stringCols {
+					dQuery := fmt.Sprintf(`SELECT DISTINCT "%s" FROM %s WHERE "%s" IS NOT NULL LIMIT 5`, colName, fullTableName, colName)
+					dRes, errD := dbConn.Query(ctx, dQuery, 5)
+					if errD == nil && len(dRes.Rows) > 0 {
+						var vals []string
+						for _, r := range dRes.Rows {
+							if v, ok := r[colName]; ok && v != nil {
+								vals = append(vals, fmt.Sprintf("'%v'", v))
+							}
+						}
+						if len(vals) > 0 {
+							cvSb.WriteString(fmt.Sprintf("  - %s: %s\n", colName, strings.Join(vals, ", ")))
+						}
+					}
+				}
 			}
-		} else {
-			sampleData = "(External connection configuration not found)"
 		}
 	} else {
-		if err := h.db.Raw(sampleQuery).Find(&samples).Error; err != nil {
-			sampleData = fmt.Sprintf("(Failed to fetch internal sample data: %v)", err)
+		// Internal Samples
+		h.db.Raw(sampleQuery).Find(&samples)
+
+		// Internal Distinct Values
+		for _, colName := range stringCols {
+			var distinctVals []interface{}
+			dQuery := fmt.Sprintf(`SELECT DISTINCT "%s" FROM %s WHERE "%s" IS NOT NULL LIMIT 5`, colName, fullTableName, colName)
+			if err := h.db.Raw(dQuery).Scan(&distinctVals).Error; err == nil && len(distinctVals) > 0 {
+				var vals []string
+				for _, v := range distinctVals {
+					vals = append(vals, fmt.Sprintf("'%v'", v))
+				}
+				cvSb.WriteString(fmt.Sprintf("  - %s: %s\n", colName, strings.Join(vals, ", ")))
+			}
 		}
+	}
+
+	columnValues = cvSb.String()
+	if columnValues == "" {
+		columnValues = "(No categorical data found)"
 	}
 
 	if len(samples) > 0 {
 		if b, err := json.MarshalIndent(samples, "", "  "); err == nil {
 			sampleData = string(b)
 		}
-	} else if sampleData == "" {
-		sampleData = "(Sample data unavailable — table is empty or query failed)"
+	} else {
+		sampleData = "(Sample data unavailable)"
 	}
 
 	tableNameToReturn := ds.DataTableName
@@ -488,7 +521,7 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 		}
 	}
 
-	return tableNameToReturn, schemaStr, sampleData, true
+	return tableNameToReturn, schemaStr, sampleData, columnValues, true
 }
 
 // executeSQL executes the generated SQL either locally or via an external connection.
@@ -572,10 +605,10 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 	}
 
 	// Extract real schema + sample data → anti-hallucination grounding
-	tableName, schemaStr, sampleData, _ := h.extractDatasetContext(req.DatasetID)
+	tableName, schemaStr, sampleData, columnValues, _ := h.extractDatasetContext(req.DatasetID)
 
 	// Build expert prompt: Data Engineer + Data Scientist + Data Storytelling skills + language
-	expertPrompt := BuildReportPrompt(schemaStr, tableName, sampleData, req.Prompt, req.Language)
+	expertPrompt := BuildReportPrompt(schemaStr, tableName, sampleData, columnValues, req.Prompt, req.Language)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -627,12 +660,12 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	tableName, schemaStr, sampleData, ok := h.extractDatasetContext(req.DatasetID)
+	tableName, schemaStr, sampleData, columnValues, ok := h.extractDatasetContext(req.DatasetID)
 	if !ok {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
-	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, req.Question)
+	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, columnValues, req.Question)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")

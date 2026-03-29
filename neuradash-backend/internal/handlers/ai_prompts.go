@@ -108,7 +108,7 @@ func languageInstruction(lang string) string {
 // the expert data storytelling framework.
 // lang: "id" (Bahasa Indonesia), "en" (English), "ms" (Melayu), "zh" (中文), "ja" (日本語)
 // ─────────────────────────────────────────────────────────────────────────────
-func BuildReportPrompt(schema, tableName string, sampleData string, userPrompt string, lang ...string) string {
+func BuildReportPrompt(schema, tableName string, sampleData string, columnValues string, userPrompt string, lang ...string) string {
 	language := "id" // default: Bahasa Indonesia
 	if len(lang) > 0 && lang[0] != "" {
 		language = lang[0]
@@ -132,6 +132,9 @@ Columns & Types:
 
 ### Sample Data Preview
 ` + sampleData + `
+
+### Column Values (Examples of real categorical data)
+` + columnValues + `
 
 ### Analysis Request
 ` + base + `
@@ -186,7 +189,7 @@ If data is insufficient for a claim, explicitly say "insufficient data to determ
 // BuildAskDataPrompt constructs the full prompt for NL→SQL (Ask Data).
 // It prioritizes SQL accuracy and schema fidelity.
 // ─────────────────────────────────────────────────────────────────────────────
-func BuildAskDataPrompt(tableName, schema, sampleData, question string) string {
+func BuildAskDataPrompt(tableName, schema, sampleData, columnValues, question string) string {
 	return SystemPromptDataAnalyst + `
 
 ---
@@ -200,6 +203,9 @@ Available Columns (use ONLY these):
 
 ### Sample Data (first few rows — use for type inference)
 ` + sampleData + `
+
+### Unique Column Values (HANYA gunakan nilai ini untuk filter WHERE pada kolom terkait)
+` + columnValues + `
 
 ### User Question
 "` + question + `"
