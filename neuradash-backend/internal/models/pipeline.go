@@ -19,6 +19,7 @@ type ETLPipeline struct {
 	LastRunAt       *time.Time      `json:"lastRunAt"`
 	InputRows       *int            `json:"inputRows"`
 	OutputRows      *int            `json:"outputRows"`
+	ProcessedRows   int             `json:"processedRows" gorm:"default:0"`
 	Error           string          `json:"error" gorm:"type:text"`
 	UpsertKey       string          `json:"upsertKey" gorm:"type:text"`
 	CreatedAt       time.Time       `json:"createdAt"`

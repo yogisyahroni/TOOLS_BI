@@ -114,20 +114,9 @@ func main() {
 		log.Info().Msg("Performance indexes ensured")
 	}
 
-	// BUGFIX: Reset orphaned 'running' pipelines and runs caused by unexpected server crashes (e.g. OOM kills)
-	if err := db.Model(&models.ETLPipeline{}).Where("status = ?", "running").Updates(map[string]interface{}{
-		"status": "error",
-		"error":  "Pipeline execution interrupted by server restart.",
-	}).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to reset orphaned ETL pipelines")
-	}
-	if err := db.Model(&models.PipelineRun{}).Where("status = ?", "running").Updates(map[string]interface{}{
-		"status": "error",
-		"error":  "Execution interrupted by server restart.",
-	}).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to reset orphaned PipelineRun records")
-	}
-	log.Info().Msg("Orphaned pipeline states checked and reset")
+	// BUGFIX: Check for orphaned 'running' pipelines and runs. 
+	// Instead of marking as ERROR, we'll let ETLHandler attempt recovery after its initialisation.
+	log.Debug().Msg("Checking for orphaned pipelines during startup...")
 
 	// --- Redis ---
 	rdb := initRedis(cfg)
@@ -211,6 +200,10 @@ func main() {
 	chartH.SetService(chartSvc)
 	exportH := handlers.NewExportHandler(db)
 	etlH := handlers.NewETLHandler(db, hub, etlStorageSvc)
+	
+	// Phase 38: Self-Healing ETL Recovery
+	// Finds and restarts pipelines that were interrupted by server restart/cold-start.
+	etlH.ResumeOrphanedPipelines()
 	schemaH := handlers.NewSchemaHandler(db)
 	// P1 BUG fixes: new handlers for backend-persisted bookmark/annotation/template/relationship
 	bookmarkH := handlers.NewBookmarkHandler(db)

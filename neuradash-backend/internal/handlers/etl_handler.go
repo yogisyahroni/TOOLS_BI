@@ -32,6 +32,108 @@ func NewETLHandler(db *gorm.DB, hub *realtime.Hub, storageSvc *services.ETLStora
 	return &ETLHandler{db: db, hub: hub, storageSvc: storageSvc}
 }
 
+// processPipelineInBackground is a shared routine for executing ETL pipelines.
+// It handles context timeouts, result persistence, and real-time notifications.
+func (h *ETLHandler) processPipelineInBackground(pipeline *models.ETLPipeline, run *models.PipelineRun) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errMsg := fmt.Sprintf("PANIC in ETL pipeline: %v", r)
+				fmt.Printf("[ETL] %s\n", errMsg)
+				h.db.Model(pipeline).Updates(map[string]interface{}{
+					"status": "error",
+					"error":  errMsg,
+				})
+				if run != nil {
+					h.db.Model(run).Updates(map[string]interface{}{
+						"status": "error",
+						"error":  errMsg,
+					})
+				}
+			}
+		}()
+
+		fmt.Printf("[ETL] Processing pipeline %s (ID: %s, Offset: %d)\n", pipeline.Name, pipeline.ID, pipeline.ProcessedRows)
+		
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		result := h.executePipelineInternal(ctx, pipeline)
+		now := time.Now()
+
+		h.db.Transaction(func(tx *gorm.DB) error {
+			// Update Pipeline Record
+			pipelineUpdates := map[string]interface{}{
+				"status":            result.status,
+				"last_run_at":       &now,
+				"output_table_name": pipeline.OutputTableName,
+				"error":             result.errMsg,
+				"output_rows":       int(result.outputRows),
+				"input_rows":        int(result.inputRows),
+				"processed_rows":    0, // Clear checkpoint on completion/error
+			}
+			if err := tx.Model(pipeline).Updates(pipelineUpdates).Error; err != nil {
+				return err
+			}
+
+			// Update Run Record if exists
+			if run != nil {
+				runUpdates := map[string]interface{}{
+					"status":       result.status,
+					"error":        result.errMsg,
+					"completed_at": &now,
+					"output_rows":  int(result.outputRows),
+					"input_rows":   int(result.inputRows),
+				}
+				if err := tx.Model(run).Updates(runUpdates).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+
+		// Notify user via WebSocket
+		h.hub.SendToUser(pipeline.UserID, realtime.Event{
+			Type: realtime.EventETLComplete,
+			Payload: fiber.Map{
+				"pipelineId": pipeline.ID,
+				"status":     result.status,
+				"inputRows":  result.inputRows,
+				"outputRows": result.outputRows,
+				"tableName":  pipeline.OutputTableName,
+				"error":      result.errMsg,
+			},
+		})
+	}()
+}
+
+// ResumeOrphanedPipelines finds pipelines that were 'running' when the server stopped
+// and restarts them in the background.
+func (h *ETLHandler) ResumeOrphanedPipelines() {
+	var pipelines []models.ETLPipeline
+	if err := h.db.Where("status = ?", "running").Find(&pipelines).Error; err != nil {
+		fmt.Printf("[ETL] Recovery: Failed to fetch orphaned pipelines: %v\n", err)
+		return
+	}
+
+	if len(pipelines) == 0 {
+		return
+	}
+
+	fmt.Printf("[ETL] Recovery: Found %d orphaned pipelines. Attempting auto-resume...\n", len(pipelines))
+
+	for i := range pipelines {
+		p := &pipelines[i]
+		// Find associated running run
+		var run models.PipelineRun
+		if err := h.db.Where("pipeline_id = ? AND status = ?", p.ID, "running").Order("started_at desc").First(&run).Error; err != nil {
+			fmt.Printf("[ETL] Warning: No running record found for orphaned pipeline %s\n", p.ID)
+		}
+		
+		h.processPipelineInBackground(p, &run)
+	}
+}
+
 // ListPipelines returns all ETL pipelines for the user.
 // GET /api/v1/pipelines
 func (h *ETLHandler) ListPipelines(c *fiber.Ctx) error {
@@ -167,9 +269,10 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 	}
 
 	// Persist the status and output table name IMMEDIATELY
-	if err := h.db.Model(&pipeline).Select("Status", "OutputTableName", "Error").Updates(models.ETLPipeline{
+	if err := h.db.Model(&pipeline).Select("Status", "OutputTableName", "Error", "ProcessedRows").Updates(models.ETLPipeline{
 		Status:          "running",
 		OutputTableName: pipeline.OutputTableName,
+		ProcessedRows:   0, // Reset for fresh manual runs
 	}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update pipeline status"})
 	}
@@ -186,93 +289,7 @@ func (h *ETLHandler) RunPipeline(c *fiber.Ctx) error {
 	}
 
 	// Async execution
-	go func() {
-		// Panic recovery is CRITICAL for long-running goroutines
-		defer func() {
-			if r := recover(); r != nil {
-				errMsg := fmt.Sprintf("PANIC in ETL pipeline: %v", r)
-				fmt.Printf("[ETL] %s\n", errMsg)
-				h.db.Model(&pipeline).Updates(map[string]interface{}{
-					"status": "error",
-					"error":  errMsg,
-				})
-				h.db.Model(&run).Updates(map[string]interface{}{
-					"status": "error",
-					"error":  errMsg,
-				})
-			}
-		}()
-
-		fmt.Printf("[ETL] Starting pipeline %s (%s)\n", pipeline.Name, pipeline.ID)
-		
-		// Create a timeout context to prevent "Infinite Running" (SUB-ROUTINE BETA protocol)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
-
-		// Run the pipeline execution logic
-		// NOTE: We do NOT wrap the entire transformation in a transaction because it can be 
-		// long-running and cause deadlocks or performance regressions. 
-		// Each ETL run creates its own fresh table, ensuring isolation.
-		result := h.executePipelineInternal(ctx, &pipeline)
-		now := time.Now()
-
-		fmt.Printf("[ETL] Pipeline %s finished with status: %s, rows: %d\n", pipeline.Name, result.status, result.outputRows)
-
-		// Persist the status updates in a small transaction (SUB-ROUTINE BETA protocol)
-		err := h.db.Transaction(func(tx *gorm.DB) error {
-			// 1. Update the Run record
-			runUpdates := map[string]interface{}{
-				"status":       result.status,
-				"error":        result.errMsg,
-				"completed_at": &now,
-			}
-			if result.outputRows >= 0 {
-				runUpdates["output_rows"] = int(result.outputRows)
-			}
-			if result.inputRows >= 0 {
-				runUpdates["input_rows"] = int(result.inputRows)
-			}
-			if err := tx.Model(&run).Updates(runUpdates).Error; err != nil {
-				return err
-			}
-
-			// 2. Update the Pipeline record
-			pipelineUpdates := map[string]interface{}{
-				"status":            result.status,
-				"last_run_at":       &now,
-				"output_table_name": pipeline.OutputTableName,
-				"error":             result.errMsg,
-			}
-			if result.outputRows >= 0 {
-				pipelineUpdates["output_rows"] = int(result.outputRows)
-			}
-			if result.inputRows >= 0 {
-				pipelineUpdates["input_rows"] = int(result.inputRows)
-			}
-			if err := tx.Model(&pipeline).Updates(pipelineUpdates).Error; err != nil {
-				return err
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			fmt.Printf("[ETL] Failed to persist results in transaction: %v\n", err)
-		}
-
-		// Notify user via WebSocket
-		h.hub.SendToUser(userID, realtime.Event{
-			Type: realtime.EventETLComplete,
-			Payload: fiber.Map{
-				"pipelineId": pipeline.ID,
-				"status":     result.status,
-				"inputRows":  result.inputRows,
-				"outputRows": result.outputRows,
-				"tableName":  pipeline.OutputTableName,
-				"error":      result.errMsg,
-			},
-		})
-	}()
+	h.processPipelineInBackground(&pipeline, &run)
 
 	return c.JSON(fiber.Map{
 		"runId":     run.ID,
@@ -353,9 +370,9 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		previousNodeID = baseNodes[i].ID
 	}
 
-	isTableCreated := false
+	isTableCreated := p.ProcessedRows > 0
 	totalInputRows := 0
-	totalOutputRows := 0
+	totalOutputRows := p.ProcessedRows
 
 	// SUB-ROUTINE BETA: Prepare target table ONCE before starting the chunked loop.
 	// We fetch a 1-row sample to determine the schema if it's the first run.
@@ -403,7 +420,7 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 	}
 
-	for offset := 0; ; offset += chunkLimit {
+	for offset := p.ProcessedRows; ; offset += chunkLimit {
 		var chunkRows []map[string]interface{}
 		
 		if isExternal {
@@ -502,6 +519,10 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 				"percent":       -1,
 			},
 		})
+
+		// SUB-ROUTINE BETA: Checkpoint Persistence.
+		// Saves progress in real-time to allow auto-resume on server restart.
+		h.db.Model(p).Update("processed_rows", totalOutputRows)
 
 		runtime.GC()
 

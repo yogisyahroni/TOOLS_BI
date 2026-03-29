@@ -2,16 +2,16 @@
 
 ## Stack
 
-| Layer        | Technology |
-|---|---|
-| Language     | Go 1.22 |
-| Framework    | Fiber v2 |
-| Database     | PostgreSQL 16 (GORM) |
-| Cache        | Redis 7 |
-| File Storage | MinIO (S3-compatible) |
+| Layer        | Technology                           |
+|--------------|--------------------------------------|
+| Language     | Go 1.22                              |
+| Framework    | Fiber v2                             |
+| Database     | PostgreSQL 16 (GORM)                 |
+| Cache        | Redis 7                              |
+| File Storage | MinIO (S3-compatible)                |
 | Auth         | JWT (access 15 min / refresh 7 days) |
-| Realtime     | WebSocket Hub |
-| Scheduler    | robfig/cron v3 |
+| Realtime     | WebSocket Hub                        |
+| Scheduler    | robfig/cron v3                       |
 
 ---
 
@@ -45,17 +45,17 @@ cp datalens-backend/.env.example datalens-backend/.env
 
 Key variables:
 
-| Variable | Default | Description |
-|---|---|---|
-| `DATABASE_URL` | `postgresql://postgres:1234@localhost:5432/datalens` | PostgreSQL connection string |
-| `REDIS_ADDR` | `localhost:6379` | Redis address |
-| `JWT_SECRET` | *(set a strong secret)* | JWT signing key |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Frontend origin |
-| `MINIO_ENDPOINT` | `localhost:9000` | MinIO endpoint |
-| `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
-| `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
-| `AI_OPENAI_KEY` | *(optional)* | OpenAI API key for Ask Data |
-| `SERVER_PORT` | `8080` | API port |
+| Variable               | Default                                              | Description                        |
+|------------------------|------------------------------------------------------|------------------------------------|
+| `DATABASE_URL`         | `postgresql://postgres:1234@localhost:5432/datalens` | PostgreSQL connection string       |
+| `REDIS_ADDR`           | `localhost:6379`                                     | Redis address                      |
+| `JWT_SECRET`           | *(set a strong secret)*                              | JWT signing key                    |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173`                              | Frontend origin                    |
+| `MINIO_ENDPOINT`       | `localhost:9000`                                     | MinIO endpoint                     |
+| `MINIO_ACCESS_KEY`     | `minioadmin`                                         | MinIO access key                   |
+| `MINIO_SECRET_KEY`     | `minioadmin`                                         | MinIO secret key                   |
+| `AI_OPENAI_KEY`        | *(optional)*                                         | OpenAI API key for Ask Data        |
+| `SERVER_PORT`          | `8080`                                               | API port                           |
 
 ### 4. Run backend
 
@@ -82,23 +82,23 @@ Frontend starts at `http://localhost:5173`.
 
 Base path: `/api/v1`
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/auth/register` | Register |
-| POST | `/auth/login` | Login (returns JWT) |
-| POST | `/auth/refresh` | Refresh token |
-| GET  | `/datasets` | List datasets |
-| POST | `/datasets/upload` | Upload CSV/Excel |
-| GET  | `/dashboards` | List dashboards |
-| POST | `/dashboards` | Create dashboard |
-| GET  | `/connections` | List DB connections |
-| POST | `/connections` | Add external DB |
-| POST | `/connections/:id/test` | Test connectivity |
-| POST | `/connections/:id/sync` | Introspect schema |
-| POST | `/connections/:id/query` | Run SQL (read-only) |
-| GET  | `/import/supported` | Supported file formats |
-| POST | `/import/parse` | Preview file import |
-| POST | `/import/confirm` | Confirm import (save) |
+| Method | Path                       | Description                          |
+|--------|----------------------------|--------------------------------------|
+| POST   | `/auth/register`           | Register                             |
+| POST   | `/auth/login`              | Login (returns JWT)                  |
+| POST   | `/auth/refresh`            | Refresh token                        |
+| GET    | `/datasets`                | List datasets                        |
+| POST   | `/datasets/upload`         | Upload CSV/Excel                     |
+| GET    | `/dashboards`              | List dashboards                      |
+| POST   | `/dashboards`              | Create dashboard                     |
+| GET    | `/connections`             | List DB connections                  |
+| POST   | `/connections`             | Add external DB                      |
+| POST   | `/connections/:id/test`    | Test connectivity                    |
+| POST   | `/connections/:id/sync`    | Introspect schema                    |
+| POST   | `/connections/:id/query`   | Run SQL (read-only)                  |
+| GET    | `/import/supported`        | Supported file formats               |
+| POST   | `/import/parse`            | Preview file import                  |
+| POST   | `/import/confirm`          | Confirm import (save)                |
 
 Full Swagger/OpenAPI documentation: *coming in Phase 17*.
 
@@ -106,24 +106,35 @@ Full Swagger/OpenAPI documentation: *coming in Phase 17*.
 
 ## Supported External Databases (Phase 11)
 
-| Database | Notes |
-|---|---|
-| PostgreSQL | Supabase, Neon, Railway, AWS RDS, Cloud SQL, CockroachDB |
-| MySQL | MySQL 8, MariaDB, PlanetScale |
-| SQL Server | Azure SQL, MSSQL 2019+ |
-| SQLite | File path via `host` field |
-| ClickHouse | ClickHouse Cloud, self-hosted |
+| Database   | Notes                                                        |
+|------------|--------------------------------------------------------------|
+| PostgreSQL | Supabase, Neon, Railway, AWS RDS, Cloud SQL, CockroachDB     |
+| MySQL      | MySQL 8, MariaDB, PlanetScale                                |
+| SQL Server | Azure SQL, MSSQL 2019+                                       |
+| SQLite     | File path via `host` field                                   |
+| ClickHouse | ClickHouse Cloud, self-hosted                                |
+| DuckDB     | Local `.duckdb` or `.db` files                               |
+
+---
+
+## ETL Resilience: Checkpoint & Auto-Resume
+
+NeuraDash's ETL engine is built for reliability in distributed or "serverless" (Render/Heroku-style) environments:
+
+- **Incremental Checkpointing**: Progress is persisted to the database after every successful batch processing.
+- **Auto-Resume on Startup**: If the server restarts due to a cold-start, OOM, or manual deployment, any interrupted `running` pipelines will automatically resume from the last successful checkpoint.
+- **Idempotent Upserts**: Ensures data consistency even if a batch is partially re-processed during recovery.
 
 ---
 
 ## Supported Import Formats (Phase 10)
 
-| Format | Extension | What is extracted |
-|---|---|---|
-| Power BI | `.pbix` | Pages, visual types, data sources |
-| Tableau Workbook | `.twb` | Worksheets, dashboards, data sources |
-| Tableau Packaged | `.twbx` | Same as `.twb` (ZIP-wrapped) |
-| PowerPoint | `.pptx` | Slides as pages, charts, text |
+| Format           | Extension | What is extracted                        |
+|------------------|-----------|------------------------------------------|
+| Power BI         | `.pbix`   | Pages, visual types, data sources        |
+| Tableau Workbook | `.twb`    | Worksheets, dashboards, data sources     |
+| Tableau Packaged | `.twbx`   | Same as `.twb` (ZIP-wrapped)             |
+| PowerPoint       | `.pptx`   | Slides as pages, charts, text            |
 
 Max file size: **100 MB**.
 
