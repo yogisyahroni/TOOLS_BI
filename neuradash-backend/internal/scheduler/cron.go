@@ -65,8 +65,8 @@ func NewScheduler(db *gorm.DB, hub *realtime.Hub, timezone string) *Scheduler {
 	handler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	logger := slog.New(handler).With("module", "scheduler")
 
-	// Custom logger for robfig/cron to use our slog instance
-	c := cron.New(cron.WithSeconds())
+	// Standard cron parser (5 fields) for compatibility with Linux style.
+	c := cron.New()
 	
 	if timezone == "" {
 		timezone = "UTC"

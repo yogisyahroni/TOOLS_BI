@@ -464,10 +464,13 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 					samples = res.Rows
 				}
 				
-				// Distinct Values
+				// Distinct Values (UVI) with strict 2s timeout for large datasets (1M+ rows)
 				for _, colName := range stringCols {
+					dCtx, dCancel := context.WithTimeout(ctx, 2*time.Second)
 					dQuery := fmt.Sprintf(`SELECT DISTINCT "%s" FROM %s WHERE "%s" IS NOT NULL LIMIT 5`, colName, fullTableName, colName)
-					dRes, errD := dbConn.Query(ctx, dQuery, 5)
+					dRes, errD := dbConn.Query(dCtx, dQuery, 5)
+					dCancel()
+
 					if errD == nil && len(dRes.Rows) > 0 {
 						var vals []string
 						for _, r := range dRes.Rows {
@@ -486,11 +489,17 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 		// Internal Samples
 		h.db.Raw(sampleQuery).Find(&samples)
 
-		// Internal Distinct Values
+		// Internal Distinct Values (UVI) with strict 2s timeout
 		for _, colName := range stringCols {
 			var distinctVals []interface{}
 			dQuery := fmt.Sprintf(`SELECT DISTINCT "%s" FROM %s WHERE "%s" IS NOT NULL LIMIT 5`, colName, fullTableName, colName)
-			if err := h.db.Raw(dQuery).Scan(&distinctVals).Error; err == nil && len(distinctVals) > 0 {
+			
+			// Use context with timeout for GORM query
+			dCtx, dCancel := context.WithTimeout(context.Background(), 2*time.Second)
+			err := h.db.WithContext(dCtx).Raw(dQuery).Scan(&distinctVals).Error
+			dCancel()
+
+			if err == nil && len(distinctVals) > 0 {
 				var vals []string
 				for _, v := range distinctVals {
 					vals = append(vals, fmt.Sprintf("'%v'", v))
