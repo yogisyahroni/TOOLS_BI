@@ -247,7 +247,17 @@ func main() {
 	app.Use(apiCB.Middleware())
 
 	// --- Health Check (Phase 31: extended with Redis + Circuit Breaker state) ---
+	// Liveness probe: minimal response for Render/Vercel
 	app.Get("/health", func(c *fiber.Ctx) error {
+		// Non-blocking quick check
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status": "ok", 
+			"env": cfg.Server.Env,
+		})
+	})
+
+	// Detailed health for internal monitoring
+	app.Get("/health/full", func(c *fiber.Ctx) error {
 		// DB liveness probe
 		sqlDB, dbErr := db.DB()
 		dbOK := dbErr == nil
@@ -617,11 +627,20 @@ func main() {
 		cleanPort = "8080"
 	case "9000":
 		cleanPort = "9000"
+	case "10000": // Render Priority
+		cleanPort = "10000"
 	default:
 		// Fallback to validated string if not in common list
 		portRegex := `^[0-9]{2,5}$`
 		if match := regexp.MustCompile(portRegex).FindString(port); match != "" {
 			cleanPort = match
+		}
+	}
+
+	// Final absolute priority for Render/Cloud environments
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		if _, err := strconv.Atoi(envPort); err == nil {
+			cleanPort = envPort
 		}
 	}
 
