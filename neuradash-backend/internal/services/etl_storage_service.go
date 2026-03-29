@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -28,6 +29,18 @@ func NewETLStorageService(localDB *gorm.DB, supabaseDB *gorm.DB) *ETLStorageServ
 func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName string, rows []map[string]interface{}, upsertKey string) error {
 	if len(rows) == 0 {
 		return nil
+	}
+
+	// SUB-ROUTINE BETA: Data Sanitization.
+	// Convert all time.Time objects to RFC3339 strings.
+	// This ensures compatibility with both TEXT and TIMESTAMPTZ columns in Postgres
+	// and fixes the "cannot find encode plan" error in dynamic table inserts.
+	for i := range rows {
+		for k, v := range rows[i] {
+			if t, ok := v.(time.Time); ok {
+				rows[i][k] = t.Format(time.RFC3339)
+			}
+		}
 	}
 
 	// 1. Ensure table exists in local DB
@@ -146,6 +159,8 @@ func (s *ETLStorageService) mapToPostgresType(v interface{}) string {
 		return "BOOLEAN"
 	case string:
 		return "TEXT"
+	case time.Time:
+		return "TIMESTAMPTZ"
 	default:
 		return "TEXT"
 	}
