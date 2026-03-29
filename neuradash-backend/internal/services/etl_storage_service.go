@@ -38,11 +38,19 @@ func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName stri
 	// 2. Insert into local DB in batches of 1000
 	db := s.localDB.WithContext(ctx).Table(tableName)
 	if upsertKey != "" {
-		// Use ON CONFLICT (upsertKey) DO UPDATE SET ...
-		// We update ALL columns except the key itself.
+		// SUB-ROUTINE BETA: Explicit column calculation to avoid "model value required" error.
+		// GORM's UpdateAll: true requires a struct model to detect all columns. 
+		// For dynamic tables, we must specify them manually.
+		updateCols := make([]string, 0, len(rows[0]))
+		for k := range rows[0] {
+			if k != upsertKey {
+				updateCols = append(updateCols, k)
+			}
+		}
+
 		db = db.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: upsertKey}},
-			UpdateAll: true,
+			DoUpdates: clause.AssignmentColumns(updateCols),
 		})
 	}
 	
@@ -58,9 +66,16 @@ func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName stri
 		
 		sDB := s.supabaseDB.WithContext(ctx).Table(tableName)
 		if upsertKey != "" {
+			updateCols := make([]string, 0, len(rows[0]))
+			for k := range rows[0] {
+				if k != upsertKey {
+					updateCols = append(updateCols, k)
+				}
+			}
+
 			sDB = sDB.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: upsertKey}},
-				UpdateAll: true,
+				DoUpdates: clause.AssignmentColumns(updateCols),
 			})
 		}
 
