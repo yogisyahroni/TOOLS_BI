@@ -169,7 +169,7 @@ func main() {
 	chartRepo := repository.NewChartRepository(db)
 	dataAlertRepo := repository.NewDataAlertRepository(db)
 
-	datasetSvc := services.NewDatasetService(datasetRepo, rdb)
+	datasetSvc := services.NewDatasetService(datasetRepo, rdb, db)
 	dashboardSvc := services.NewDashboardService(dashboardRepo)
 	chartSvc := services.NewChartService(chartRepo)
 	dataAlertSvc := services.NewDataAlertService(dataAlertRepo)
@@ -335,6 +335,7 @@ func main() {
 	datasets.Put("/:id/refresh-config", datasetH.UpdateRefreshConfig)
 	datasets.Post("/:id/refresh", datasetH.RefreshDataset)
 	datasets.Post("/ai-generate", datasetH.AIGenerateDataset)
+	datasets.Get("/:id/aggregate", datasetH.AggregateDataset)
 
 	// Dashboard routes
 	dashboards := api.Group("/dashboards")

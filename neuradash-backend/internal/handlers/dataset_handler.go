@@ -57,9 +57,21 @@ func (h *DatasetHandler) ListDatasets(c *fiber.Ctx) error {
 	}
 	offset := (page - 1) * limit
 
+	if h.svc != nil {
+		rows, total, err := h.svc.ListDatasets(c.Context(), userID, page, limit)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{
+			"data":  rows,
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		})
+	}
+
 	var datasets []models.Dataset
 	var total int64
-
 	q := h.db.Where("user_id = ? AND deleted_at IS NULL", userID)
 	q.Model(&models.Dataset{}).Count(&total)
 	if err := q.Offset(offset).Limit(limit).Order("created_at desc").Find(&datasets).Error; err != nil {
@@ -215,6 +227,14 @@ func (h *DatasetHandler) UploadDataset(c *fiber.Ctx) error {
 func (h *DatasetHandler) GetDataset(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	id := c.Params("id")
+
+	if h.svc != nil {
+		ds, err := h.svc.GetDataset(c.Context(), id, userID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(ds)
+	}
 
 	var ds models.Dataset
 	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, userID).First(&ds).Error; err != nil {
@@ -496,6 +516,13 @@ func (h *DatasetHandler) DeleteDataset(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	id := c.Params("id")
 
+	if h.svc != nil {
+		if err := h.svc.DeleteDataset(c.Context(), id, userID); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.Status(fiber.StatusNoContent).Send(nil)
+	}
+
 	var ds models.Dataset
 	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, userID).First(&ds).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
@@ -532,16 +559,23 @@ func (h *DatasetHandler) UpdateRefreshConfig(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	id := c.Params("id")
 
-	var ds models.Dataset
-	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, userID).First(&ds).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
-	}
-
 	var body struct {
-		RefreshConfig interface{} `json:"refreshConfig"`
+		RefreshConfig json.RawMessage `json:"refreshConfig"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	if h.svc != nil {
+		if err := h.svc.UpdateRefreshConfig(c.Context(), id, userID, body.RefreshConfig); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"message": "Refresh config updated"})
+	}
+
+	var ds models.Dataset
+	if err := h.db.Where("id = ? AND user_id = ? AND deleted_at IS NULL", id, userID).First(&ds).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
 	if err := h.db.Model(&ds).Update("refresh_config", body.RefreshConfig).Error; err != nil {
@@ -1228,6 +1262,125 @@ func (h *DatasetHandler) ExecuteRawQuery(c *fiber.Ctx) error {
 	cols, _ := rows.Columns()
 	var results []map[string]interface{}
 
+	for rows.Next() {
+		val := make(map[string]interface{})
+		if err := h.db.ScanRows(rows, &val); err == nil {
+			results = append(results, val)
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"columns":       cols,
+		"rows":          results,
+		"executionTime": time.Since(start).Milliseconds(),
+		"rowCount":      len(results),
+	})
+}
+
+// AggregateDataset performs Group-By and Aggregations on a dataset.
+// GET /api/v1/datasets/:id/aggregate?groupBy=col1,col2&measures=sum:col3,avg:col4
+func (h *DatasetHandler) AggregateDataset(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userID := middleware.GetUserID(c)
+
+	groupByStr := c.Query("groupBy")
+	measuresStr := c.Query("measures")
+
+	if groupByStr == "" && measuresStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "groupBy or measures is required"})
+	}
+
+	var ds models.Dataset
+	if err := h.db.Where("id = ? AND user_id = ?", id, userID).First(&ds).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
+	}
+
+	// 1. Parse and sanitize GroupBy columns
+	var groupCols []string
+	if groupByStr != "" {
+		for _, col := range strings.Split(groupByStr, ",") {
+			trimmed := strings.TrimSpace(col)
+			if trimmed != "" {
+				groupCols = append(groupCols, `"`+sanitizeIdentifier(trimmed)+`"`)
+			}
+		}
+	}
+
+	// 2. Parse and sanitize Measures (Aggregations)
+	// Format: function:column (e.g., sum:price, count:id)
+	var selectClauses []string
+	selectClauses = append(selectClauses, groupCols...)
+
+	if measuresStr != "" {
+		for _, m := range strings.Split(measuresStr, ",") {
+			parts := strings.Split(strings.TrimSpace(m), ":")
+			if len(parts) != 2 {
+				continue
+			}
+			fn := strings.ToUpper(parts[0])
+			col := parts[1]
+
+			// Validate allowed functions to prevent SQL injection
+			allowedFns := map[string]bool{"SUM": true, "AVG": true, "COUNT": true, "MIN": true, "MAX": true}
+			if !allowedFns[fn] {
+				continue
+			}
+
+			sanitizedCol := sanitizeIdentifier(col)
+			alias := fmt.Sprintf("%s_%s", strings.ToLower(fn), sanitizedCol)
+			selectClauses = append(selectClauses, fmt.Sprintf(`%s("%s") AS "%s"`, fn, sanitizedCol, alias))
+		}
+	}
+
+	if len(selectClauses) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid aggregation parameters"})
+	}
+
+	start := time.Now()
+	query := fmt.Sprintf(`SELECT %s FROM "%s"`, strings.Join(selectClauses, ", "), ds.DataTableName)
+	if len(groupCols) > 0 {
+		query += fmt.Sprintf(" GROUP BY %s", strings.Join(groupCols, ", "))
+	}
+
+	// External database query
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, userID).First(&conn).Error; err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "External connection not found"})
+		}
+		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		dbConn, err := connectors.Open(opts)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to connect to external DB"})
+		}
+		defer dbConn.Close()
+
+		res, err := dbConn.Query(ctx, query, 2000)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		return c.JSON(fiber.Map{
+			"columns":       res.Columns,
+			"rows":          res.Rows,
+			"executionTime": time.Since(start).Milliseconds(),
+			"rowCount":      len(res.Rows),
+		})
+	}
+
+	// Internal database query
+	rows, err := h.db.Raw(query).Rows()
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	defer rows.Close()
+
+	cols, _ := rows.Columns()
+	var results []map[string]interface{}
 	for rows.Next() {
 		val := make(map[string]interface{})
 		if err := h.db.ScanRows(rows, &val); err == nil {

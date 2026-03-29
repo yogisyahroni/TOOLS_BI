@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"time"
 
+	"neuradash/internal/connectors"
 	"neuradash/internal/models"
 	"neuradash/internal/repository"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -24,11 +26,12 @@ const datasetStatsTTL = 5 * time.Minute
 type DatasetService struct {
 	repo repository.DatasetRepository
 	rdb  *redis.Client // optional; nil = caching disabled
+	db   *gorm.DB      // for dynamic table operations (raw SQL)
 }
 
 // NewDatasetService constructs a DatasetService.
-func NewDatasetService(repo repository.DatasetRepository, rdb *redis.Client) *DatasetService {
-	return &DatasetService{repo: repo, rdb: rdb}
+func NewDatasetService(repo repository.DatasetRepository, rdb *redis.Client, db *gorm.DB) *DatasetService {
+	return &DatasetService{repo: repo, rdb: rdb, db: db}
 }
 
 // ListDatasets returns paginated datasets for a user.
@@ -50,17 +53,33 @@ func (s *DatasetService) GetDataset(ctx context.Context, id, userID string) (*mo
 
 // DeleteDataset soft-deletes a dataset and invalidates its cache entries.
 func (s *DatasetService) DeleteDataset(ctx context.Context, id, userID string) error {
+	ds, err := s.repo.GetByID(ctx, id, userID)
+	if err != nil {
+		return fmt.Errorf("dataset not found or access denied")
+	}
+
 	if err := s.repo.SoftDelete(ctx, id, userID); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("dataset not found or access denied")
-		}
 		return fmt.Errorf("failed to delete dataset: %w", err)
 	}
+
 	// Invalidate any Redis stats cache for this dataset
 	if s.rdb != nil {
-		cacheKey := fmt.Sprintf("dataset_stats:%s", id)
-		_ = s.rdb.Del(ctx, cacheKey).Err() // best-effort cache eviction
+		cacheKey := fmt.Sprintf("stats:%s", id) // standard key used by handlers
+		_ = s.rdb.Del(ctx, cacheKey).Err()
 	}
+
+	// Drop dynamic data table asynchronously
+	if !strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		go func() {
+			tableName := ds.DataTableName
+			if strings.HasPrefix(ds.StorageKey, "AI_VIEW::") {
+				_ = s.db.Exec(fmt.Sprintf(`DROP VIEW IF EXISTS %s`, tableName)).Error
+			} else {
+				_ = s.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, tableName)).Error
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -86,8 +105,111 @@ func (s *DatasetService) SetCachedStats(ctx context.Context, id string, stats in
 	if err != nil {
 		return
 	}
-	key := fmt.Sprintf("dataset_stats:%s", id)
+	key := fmt.Sprintf("stats:%s", id) // aligned with standard stats key
 	_ = s.rdb.Set(ctx, key, data, datasetStatsTTL).Err()
+}
+
+// UpdateRefreshConfig sets the refresh schedule for a dataset.
+func (s *DatasetService) UpdateRefreshConfig(ctx context.Context, id, userID string, config json.RawMessage) error {
+	ds, err := s.repo.GetByID(ctx, id, userID)
+	if err != nil {
+		return fmt.Errorf("dataset not found or access denied")
+	}
+	ds.RefreshConfig = config
+	ds.UpdatedAt = time.Now()
+	return s.repo.Update(ctx, ds)
+}
+
+// GetDatasetContext extracts schema and sample data for AI grounding.
+func (s *DatasetService) GetDatasetContext(ctx context.Context, id, userID string) (tableName, schemaStr, sampleData string, ok bool) {
+	ds, err := s.repo.GetByID(ctx, id, userID)
+	if err != nil {
+		return "", "", "", false
+	}
+
+	// Format schema as readable column list
+	var cols []models.ColumnDef
+	if json.Unmarshal(ds.Columns, &cols) == nil {
+		var sb strings.Builder
+		for _, col := range cols {
+			if col.Name != "" {
+				sb.WriteString(fmt.Sprintf("  - %s (%s)\n", col.Name, col.Type))
+			}
+		}
+		schemaStr = sb.String()
+	} else {
+		schemaStr = string(ds.Columns)
+	}
+
+	tableName = ds.DataTableName
+	// Fetch samples
+	var samples []map[string]interface{}
+	sampleQuery := fmt.Sprintf(`SELECT * FROM "%s" LIMIT 5`, tableName)
+
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", connID, userID).First(&conn).Error; err == nil {
+			opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+			dbConn, err := connectors.Open(opts)
+			if err == nil {
+				defer dbConn.Close()
+				res, errQuery := dbConn.Query(ctx, sampleQuery, 5)
+				if errQuery == nil {
+					samples = res.Rows
+				}
+			}
+		}
+	} else {
+		if err := s.db.WithContext(ctx).Raw(sampleQuery).Find(&samples).Error; err == nil {
+			if b, err := json.MarshalIndent(samples, "", "  "); err == nil {
+				sampleData = string(b)
+			}
+		}
+	}
+
+	if len(samples) > 0 && sampleData == "" {
+		if b, err := json.MarshalIndent(samples, "", "  "); err == nil {
+			sampleData = string(b)
+		}
+	}
+
+	return tableName, schemaStr, sampleData, true
+}
+
+// ExecuteDatasetSQL runs generated SQL against the dataset.
+func (s *DatasetService) ExecuteDatasetSQL(ctx context.Context, datasetID, userID, sqlQuery string) ([]map[string]interface{}, error) {
+	ds, err := s.repo.GetByID(ctx, datasetID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("dataset not found")
+	}
+
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+		var conn models.DBConnection
+		if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", connID, userID).First(&conn).Error; err != nil {
+			return nil, fmt.Errorf("external connection not found")
+		}
+
+		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
+		dbConn, err := connectors.Open(opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open external connection: %v", err)
+		}
+		defer dbConn.Close()
+
+		res, err := dbConn.Query(ctx, sqlQuery, 500)
+		if err != nil {
+			return nil, err
+		}
+		return res.Rows, nil
+	}
+
+	var results []map[string]interface{}
+	if err := s.db.WithContext(ctx).Raw(sqlQuery).Find(&results).Error; err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // ─── Dashboard Service ────────────────────────────────────────────────────────
