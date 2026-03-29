@@ -17,6 +17,7 @@ import (
 	"neuradash/internal/connectors"
 	"neuradash/internal/middleware"
 	"neuradash/internal/models"
+	"neuradash/internal/utils"
 	"neuradash/internal/services"
 	"neuradash/internal/storage"
 
@@ -735,7 +736,7 @@ func detectColumnTypes(headers []string, rows [][]string) []models.ColumnDef {
 			if _, err := strconv.ParseFloat(val, 64); err == nil {
 				numericCount++
 			}
-			if isDateLike(val) {
+			if utils.IsDateLike(val) {
 				dateCount++
 			}
 			if len(sampleVals) < 3 {
@@ -972,15 +973,6 @@ func (h *DatasetHandler) AIGenerateDataset(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(datasetRecord)
 }
 
-func isDateLike(s string) bool {
-	formats := []string{"2006-01-02", "01/02/2006", "02-01-2006", "2006/01/02"}
-	for _, f := range formats {
-		if _, err := time.Parse(f, s); err == nil {
-			return true
-		}
-	}
-	return false
-}
 
 func sanitizeTableName(id string) string {
 	return "ds_" + strings.ReplaceAll(id, "-", "_")

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"neuradash/internal/utils"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -136,6 +138,9 @@ func (s *ETLStorageService) mapToPostgresType(v interface{}) string {
 	case bool:
 		return "BOOLEAN"
 	case string:
+		if utils.IsDateLike(v.(string)) {
+			return "TIMESTAMPTZ"
+		}
 		return "TEXT"
 	case time.Time:
 		return "TIMESTAMPTZ"
