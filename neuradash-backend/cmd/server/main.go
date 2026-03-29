@@ -98,25 +98,30 @@ func main() {
 	}
 	// --- ETL Storage Service ---
 	etlStorageSvc := services.NewETLStorageService(db, supabaseDB)
-	log.Info().Msg("ETL Storage Service initialised")
+	log.Info().Msg("Phase 1/5: ETL Storage Service initialised")
 
-	// --- Auto-migrate all models ---
-	if err := autoMigrate(db); err != nil {
-		log.Fatal().Err(err).Msg("Failed to run database migrations")
-	}
-	log.Info().Msg("Database migrated")
+	// --- Phase 2/5: Strategic Background Migration ---
+	// For large datasets (1M+ rows), GORM AutoMigrate can take minutes.
+	// We run this in a goroutine so Fiber can bind to Port 10000 IMMEDIATELY.
+	// This prevents Render's "No open ports detected" timeout.
+	go func() {
+		log.Info().Msg("Background Phase: Starting Database Auto-migration...")
+		if err := autoMigrate(db); err != nil {
+			log.Error().Err(err).Msg("Critical: Background migration failed")
+			return
+		}
+		log.Info().Msg("Background Phase: Database migrated successfully")
 
-	// PERF-06: Create missing performance indexes after AutoMigrate.
-	// Uses CREATE INDEX IF NOT EXISTS — idempotent and safe to run every startup.
-	if err := migrations.AddPerformanceIndexes(db); err != nil {
-		log.Warn().Err(err).Msg("Performance index migration had warnings (non-fatal)")
-	} else {
-		log.Info().Msg("Performance indexes ensured")
-	}
+		log.Info().Msg("Background Phase: Ensuring performance indexes...")
+		if err := migrations.AddPerformanceIndexes(db); err != nil {
+			log.Warn().Err(err).Msg("Background Phase: Index warnings (non-fatal)")
+		} else {
+			log.Info().Msg("Background Phase: Performance indexes ensured")
+		}
+	}()
 
 	// BUGFIX: Check for orphaned 'running' pipelines and runs. 
-	// Instead of marking as ERROR, we'll let ETLHandler attempt recovery after its initialisation.
-	log.Debug().Msg("Checking for orphaned pipelines during startup...")
+	log.Debug().Msg("Phase 3/5: Preparing Redis & S3...")
 
 	// --- Redis ---
 	rdb := initRedis(cfg)
