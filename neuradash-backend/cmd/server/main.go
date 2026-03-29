@@ -100,25 +100,30 @@ func main() {
 	etlStorageSvc := services.NewETLStorageService(db, supabaseDB)
 	log.Info().Msg("Phase 1/5: ETL Storage Service initialised")
 
-	// --- Phase 2/5: Strategic Background Migration ---
-	// For large datasets (1M+ rows), GORM AutoMigrate can take minutes.
-	// We run this in a goroutine so Fiber can bind to Port 10000 IMMEDIATELY.
-	// This prevents Render's "No open ports detected" timeout.
-	go func() {
-		log.Info().Msg("Background Phase: Starting Database Auto-migration...")
-		if err := autoMigrate(db); err != nil {
-			log.Error().Err(err).Msg("Critical: Background migration failed")
-			return
-		}
-		log.Info().Msg("Background Phase: Database migrated successfully")
+	// --- Phase 2/5: Strategic Explicit Migration Management ---
+	// For BI tools with 1M+ rows, AutoMigrate is a bottleneck.
+	// We only run this if ENABLE_DB_MIGRATION is explicitly set to "true".
+	// Otherwise, we skip to ensure instant PORT binding and zero DB overhead.
+	enableMigration := os.Getenv("ENABLE_DB_MIGRATION") == "true"
+	if enableMigration {
+		go func() {
+			log.Info().Msg("Background Phase: ENABLE_DB_MIGRATION=true. Starting Database Auto-migration...")
+			if err := autoMigrate(db); err != nil {
+				log.Error().Err(err).Msg("Critical: Background migration failed")
+				return
+			}
+			log.Info().Msg("Background Phase: Database migrated successfully")
 
-		log.Info().Msg("Background Phase: Ensuring performance indexes...")
-		if err := migrations.AddPerformanceIndexes(db); err != nil {
-			log.Warn().Err(err).Msg("Background Phase: Index warnings (non-fatal)")
-		} else {
-			log.Info().Msg("Background Phase: Performance indexes ensured")
-		}
-	}()
+			log.Info().Msg("Background Phase: Ensuring performance indexes...")
+			if err := migrations.AddPerformanceIndexes(db); err != nil {
+				log.Warn().Err(err).Msg("Background Phase: Index warnings (non-fatal)")
+			} else {
+				log.Info().Msg("Background Phase: Performance indexes ensured")
+			}
+		}()
+	} else {
+		log.Info().Msg("Phase 2/5: Skipping Database Auto-migration (ENABLE_DB_MIGRATION=false)")
+	}
 
 	// BUGFIX: Check for orphaned 'running' pipelines and runs. 
 	log.Debug().Msg("Phase 3/5: Preparing Redis & S3...")
