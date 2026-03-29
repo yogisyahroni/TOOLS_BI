@@ -229,7 +229,7 @@ func (m *mockDataAlertRepo) ToggleEnabled(ctx context.Context, id, userID string
 // ─── DatasetService Tests ─────────────────────────────────────────────────────
 
 func TestDatasetService_GetDataset_NotFound(t *testing.T) {
-	svc := services.NewDatasetService(newMockDatasetRepo(), nil)
+	svc := services.NewDatasetService(newMockDatasetRepo(), nil, nil)
 	_, err := svc.GetDataset(context.Background(), "ghost-id", "user-1")
 	if err == nil {
 		t.Fatal("expected error for missing dataset, got nil")
@@ -237,7 +237,7 @@ func TestDatasetService_GetDataset_NotFound(t *testing.T) {
 }
 
 func TestDatasetService_ListDatasets_Empty(t *testing.T) {
-	svc := services.NewDatasetService(newMockDatasetRepo(), nil)
+	svc := services.NewDatasetService(newMockDatasetRepo(), nil, nil)
 	rows, total, err := svc.ListDatasets(context.Background(), "user-1", 1, 20)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -248,7 +248,7 @@ func TestDatasetService_ListDatasets_Empty(t *testing.T) {
 }
 
 func TestDatasetService_DeleteDataset_Missing(t *testing.T) {
-	svc := services.NewDatasetService(newMockDatasetRepo(), nil)
+	svc := services.NewDatasetService(newMockDatasetRepo(), nil, nil)
 	err := svc.DeleteDataset(context.Background(), "nope", "user-1")
 	if err == nil {
 		t.Fatal("expected error deleting non-existent dataset")

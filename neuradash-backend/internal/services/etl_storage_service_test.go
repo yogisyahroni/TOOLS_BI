@@ -15,24 +15,28 @@ func TestETLStorageService_PersistETLResult(t *testing.T) {
 	assert.NoError(t, err)
 
 	svc := NewETLStorageService(db, nil)
+	ctx := context.Background()
 
 	tableName := "test_etl_output"
 	rows := []map[string]interface{}{
 		{
-			"id":    1,
-			"name":  "Item 1",
-			"value": 10.5,
+			"id":        1,
+			"name":      "Item 1",
+			"value":     10.5,
 			"is_active": true,
 		},
 		{
-			"id":    2,
-			"name":  "Item 2",
-			"value": 20.0,
+			"id":        2,
+			"name":      "Item 2",
+			"value":     20.0,
 			"is_active": false,
 		},
 	}
 
-	ctx := context.Background()
+	// Must prepare table first
+	err = svc.PrepareTargetTable(ctx, tableName, rows[0], "")
+	assert.NoError(t, err)
+
 	err = svc.PersistETLResult(ctx, tableName, rows, "")
 	assert.NoError(t, err)
 
