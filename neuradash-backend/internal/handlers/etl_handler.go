@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"neuradash/internal/models"
 	"neuradash/internal/realtime"
 	"neuradash/internal/services"
+	"neuradash/internal/utils"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -332,10 +335,31 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 
 	sourceNodeID := "auto_source_node"
 	isChunkable := engine.IsPipelineChunkable(spec)
-	chunkLimit := 2000 // Very strict memory batch size to prevent OOM on 512MB RAM
-	if !isChunkable {
-		chunkLimit = 0 // Needs special treatment to avoid OOM
+	
+	// Dynamic Chunking Logic based on AVAILABLE RAM
+	chunkLimit := 2000 // Base minimal
+	sysRAM := utils.GetSystemAvailableMemory() // in MB (Available RAM)
+
+	if sysRAM > 4000 {
+		chunkLimit = 100000 // High RAM (8GB-16GB+)
+	} else if sysRAM > 2000 {
+		chunkLimit = 50000 // Medium RAM (4GB)
+	} else if sysRAM > 1000 {
+		chunkLimit = 10000 // Entry RAM (2GB)
 	}
+
+	// Manual override via .env if present
+	if envVal := os.Getenv("ETL_CHUNK_SIZE"); envVal != "" {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			chunkLimit = val
+		}
+	}
+
+	if !isChunkable {
+		chunkLimit = 0 // Special treatment to avoid OOM
+	}
+
+	fmt.Printf("[ETL] Pipeline %s started with dynamic chunk limit: %d (Available System RAM: %dMB)\n", p.ID, chunkLimit, sysRAM)
 
 	var dbConn connectors.DBConnector
 	isExternal := strings.HasPrefix(sourceDataset.StorageKey, "EXTERNAL_CONN::")
