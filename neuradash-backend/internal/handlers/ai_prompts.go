@@ -219,7 +219,7 @@ Available Columns (use ONLY these):
 3. INDEX AWARENESS (CRITICAL): PRIORITIZE columns that likely have indexes for WHERE filters (e.g., "id", "created_at", "updated_at", "org_id", "status").
 4. QUOTING: ALWAYS double-quote EVERY column/table name (e.g. "Column_Name"). This is MANDATORY for PostgreSQL.
 5. SYNONYM MAPPING: Jika istilah tidak ada di schema, cari kolom yang paling mendekati secara semantik.
-6. TYPE SAFETY & CASTING: Use explicit CAST (::timestamp) for date-like strings when performing arithmetic.
+6. TYPE SAFETY & CASTING: Use explicit CAST (::timestamp) for date-like strings. MANDATORY: If a column is TEXT but contains numbers, you MUST use explicit CAST (::integer or ::numeric) before comparing it with a number (e.g. "column"::integer > 10).
 7. NO SEMICOLON: DILARANG menggunakan titik koma (;) di akhir statement tunggal.
 8. NO COMMENTS: DILARANG menyertakan komentar ('--' atau '/* */') di dalam SQL.
 9. ANTI-SCAN GUARD (MANDATORY): ALWAYS add a "LIMIT 1000" at the end of every query unless it is an AGGREGATE query (COUNT, SUM, AVG). NEVER skip LIMIT for exploration.
