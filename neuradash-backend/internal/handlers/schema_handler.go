@@ -216,6 +216,10 @@ func (h *SchemaHandler) SyncSchema(c *fiber.Ctx) error {
 	// Insert fresh entries
 	syncedAt := time.Now()
 	for _, t := range tables {
+		// ENSURE Columns is never nil to prevent frontend 'map of null' error
+		if t.Columns == nil {
+			t.Columns = []connectors.ColumnMeta{}
+		}
 		colsJSON, _ := marshalColumns(t.Columns)
 		st := models.SchemaTable{
 			ID:           uuid.New().String(),
@@ -253,6 +257,7 @@ func (h *SchemaHandler) GetSchema(c *fiber.Ctx) error {
 	}
 
 	var tables []models.SchemaTable
+	// BUG FIX: Use 'table_name' (DB column) instead of 'TblName' (Struct field) or 'tableName' (JSON)
 	if err := h.db.Where("connection_id = ?", conn.ID).
 		Order("table_name asc").Find(&tables).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch schema"})
@@ -265,6 +270,13 @@ func (h *SchemaHandler) GetSchema(c *fiber.Ctx) error {
 			"synced": false,
 		})
 	}
+	for i := range tables {
+		// Ensure columns is never null for the frontend map operation
+		if len(tables[i].Columns) == 0 || string(tables[i].Columns) == "null" {
+			tables[i].Columns = json.RawMessage("[]")
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"data":         tables,
 		"connectionId": conn.ID,
