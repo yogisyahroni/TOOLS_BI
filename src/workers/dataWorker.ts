@@ -230,8 +230,13 @@ function handleEtl({ data, steps }: any) {
       }
       case 'deduplicate': {
         const { columns } = config;
+        const seen = new Set<string>();
+        
         if (!columns || !Array.isArray(columns) || columns.length === 0) {
-          const seen = new Set();
+          // SUB-ROUTINE BETA: Deduplicate by entire row. 
+          // JSON.stringify is slow but necessary for full-row comparison.
+          // Optimized by checking existence before stringifying (not possible naturally with Set)
+          // But we can avoid double work.
           result = result.filter(row => {
             const str = JSON.stringify(row);
             if (seen.has(str)) return false;
@@ -239,9 +244,13 @@ function handleEtl({ data, steps }: any) {
             return true;
           });
         } else {
-          const seen = new Set();
+          // SUB-ROUTINE ALPHA: Deduplicate by specific columns.
+          // Very fast because we only join the relevant column values.
           result = result.filter(row => {
-            const key = columns.map((c: string) => row[c]).join('|');
+            let key = '';
+            for (let i = 0; i < columns.length; i++) {
+              key += (row[columns[i]] ?? 'NULL') + '|';
+            }
             if (seen.has(key)) return false;
             seen.add(key);
             return true;

@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import {
   GitBranch, Plus, Play, Trash2, Filter, Shuffle, Layers,
   ArrowRight, CheckCircle, AlertCircle, Clock, Settings2,
-  ChevronDown, ChevronUp, Download, Save, GripVertical,
+  ChevronDown, ChevronUp, Download, Save, GripVertical, Loader2
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -543,7 +544,10 @@ export default function ETLPipelinePage() {
     if (!sourceDs) return;
 
     setIsDraftRunning(true);
+    setDraftPreview([]); // Clear old preview to show skeleton
     try {
+      // SUB-ROUTINE ALPHA: Performance over completeness for preview.
+      // Fetching 1,000,000 rows in a browser is insanity. Capping at 1,000.
       const response = await datasetApi.data(sourceDs.id, { limit: 1000 });
       const sourceData = response.data.data || [];
       const result = await runWorker<Record<string, any>[]>('EXECUTE_ETL', { data: sourceData, steps });
@@ -839,26 +843,54 @@ Always prioritize business value and data quality.`;
                     </div>
                   )}
 
-                  {Array.isArray(draftPreview) && draftPreview.length > 0 ? (
-                    <div className="overflow-x-auto border rounded-xl bg-background/50 backdrop-blur-sm">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-muted/50 border-b">
+                  {isDraftRunning ? (
+                    <div className="space-y-3 mt-4">
+                      <div className="flex items-center gap-2 text-xs text-primary animate-pulse mb-2">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>AI is simulating transformations on 1,000 sample rows...</span>
+                      </div>
+                      <Skeleton className="h-10 w-full rounded-lg" />
+                      <Skeleton className="h-32 w-full rounded-xl" />
+                    </div>
+                  ) : Array.isArray(draftPreview) && draftPreview.length > 0 ? (
+                    <div className="mt-4 animate-in fade-in duration-500">
+                      <div className="flex items-center gap-2 mb-2">
+                         <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                         <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                           Simulation Successful ({draftPreview.length} sample rows)
+                         </span>
+                      </div>
+                      <div className="overflow-x-auto border rounded-xl bg-background/50 backdrop-blur-sm shadow-inner group">
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead className="bg-muted/50 border-b sticky top-0">
                                 <tr>
                                     {Object.keys(draftPreview[0] ?? {}).map(k => (
-                                        <th key={k} className="p-3 font-medium text-muted-foreground whitespace-nowrap">{k}</th>
+                                        <th key={k} className="p-3 font-semibold text-muted-foreground whitespace-nowrap border-r last:border-r-0">{k}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {draftPreview.slice(0, 5).map((row, i) => (
-                                    <tr key={i} className="hover:bg-muted/30 transition-colors">
+                                {draftPreview.slice(0, 8).map((row, i) => (
+                                    <tr key={i} className="hover:bg-primary/5 transition-colors group/row">
                                         {Object.values(row ?? {}).map((v, j) => (
-                                            <td key={j} className="p-3 whitespace-nowrap">{String(v ?? '')}</td>
+                                            <td key={j} className="p-3 whitespace-nowrap border-r last:border-r-0 text-foreground/80 group-hover/row:text-foreground">{String(v ?? '')}</td>
                                         ))}
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
+                      </div>
+                      <p className="text-[9px] text-muted-foreground mt-2 text-right italic">
+                        Showing first 8 of {draftPreview.length} simulated rows.
+                      </p>
+                    </div>
+                  ) : draftSteps.length > 0 && !isDraftRunning ? (
+                    <div className="mt-4 p-8 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center text-center bg-muted/10">
+                       <AlertCircle className="w-8 h-8 text-muted-foreground/40 mb-2" />
+                       <p className="text-sm text-muted-foreground">No data matched your simulation criteria.</p>
+                       <Button variant="link" size="sm" onClick={() => runDraftLocal(selectedSource, draftSteps)} className="text-xs">
+                          Try recalibrating simulation
+                       </Button>
                     </div>
                   ) : null}
                 </div>
