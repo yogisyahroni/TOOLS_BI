@@ -256,9 +256,9 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 	}
 
 	page := c.QueryInt("page", 1)
-	limit := c.QueryInt("limit", 50)
-	if limit > 50000 {
-		limit = 50000
+	limit := c.QueryInt("limit", 100) // Default 100 for safety
+	if limit > 1000 {
+		limit = 1000 // MAX 1000 per request for query safety
 	}
 	offset := (page - 1) * limit
 
@@ -287,7 +287,8 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 		}
 		defer dbConn.Close()
 
-		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, ds.DataTableName)
+		// SECURITY: Never SELECT * on external without LIMIT
+		sqlQuery := fmt.Sprintf(`SELECT * FROM "%s"`, ds.DataTableName)
 		if sortCol != "" {
 			sqlQuery += fmt.Sprintf(` ORDER BY "%s" %s`, sortCol, sortDir)
 		}

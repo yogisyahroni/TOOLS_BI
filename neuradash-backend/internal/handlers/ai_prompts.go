@@ -216,14 +216,14 @@ Available Columns (use ONLY these):
 
 1. Output ONLY valid PostgreSQL SELECT SQL — no markdown, no explanations, no code fences.
 2. SCHEMA FIDELITY: Use ONLY column names that appear in the schema above. DILARANG KERAS (FORBIDDEN) mengarang nama kolom (hallucination).
-3. QUOTING: ALWAYS double-quote EVERY column/table name (e.g. "Column_Name", "Inbound_Dest_Time"). This is MANDATORY for PostgreSQL mixed-case sensitivity.
-4. SYNONYM MAPPING: Jika istilah (misal: "delay", "origin") tidak ada di schema, cari kolom yang paling mendekati (misal: "timestamp", "location").
-5. PERSISTENCE & TYPE SAFETY: PostgreSQL is strict about types. Jika melakukan operasi matematika (seperti pengurangan) pada kolom yang mungkin bertipe string (TEXT) namun berisi tanggal, Anda WAJIB menggunakan explicit CAST: ("Col_A"::timestamp - "Col_B"::timestamp).
-6. TIME MATH: Gunakan ("t2"::timestamp - "t1"::timestamp) atau EXTRACT(EPOCH FROM ("t2"::timestamp - "t1"::timestamp)) untuk mencari durasi/delay. Ini menghindari error "operator does not exist: text - text". Jika kolom terlihat seperti tanggal (mengandung kata 'Time', 'Date', 'At') tapi bertipe 'string', Anda HARUS melakukan casting ::timestamp.
-7. NO SEMICOLON: DILARANG menggunakan titik koma (;) jika hanya ada satu statement.
-8. NO COMMENTS: DILARANG menyertakan komentar ('--' atau '/* */') di dalam output SQL.
-9. SAFETY: Add a LIMIT 1000 for safety unless the question asks for aggregates.
-10. NULLS: Use COALESCE or IS NOT NULL to handle potential nulls in critical columns.
+3. INDEX AWARENESS (CRITICAL): PRIORITIZE columns that likely have indexes for WHERE filters (e.g., "id", "created_at", "updated_at", "org_id", "status").
+4. QUOTING: ALWAYS double-quote EVERY column/table name (e.g. "Column_Name"). This is MANDATORY for PostgreSQL.
+5. SYNONYM MAPPING: Jika istilah tidak ada di schema, cari kolom yang paling mendekati secara semantik.
+6. TYPE SAFETY & CASTING: Use explicit CAST (::timestamp) for date-like strings when performing arithmetic.
+7. NO SEMICOLON: DILARANG menggunakan titik koma (;) di akhir statement tunggal.
+8. NO COMMENTS: DILARANG menyertakan komentar ('--' atau '/* */') di dalam SQL.
+9. ANTI-SCAN GUARD (MANDATORY): ALWAYS add a "LIMIT 1000" at the end of every query unless it is an AGGREGATE query (COUNT, SUM, AVG). NEVER skip LIMIT for exploration.
+10. SELECTIVITY: Avoid "SELECT *" for large tables. Prefer selecting explicit columns that answer the question.
 11. LAST RESORT: Hanya jika pertanyaan benar-benar tidak bisa dijawab dengan kolom yang ada, output:
     SELECT 'Column not available in dataset: [explain what is missing]' AS error_message
 

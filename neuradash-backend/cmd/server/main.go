@@ -683,6 +683,30 @@ func main() {
 	log.Info().Msg("Server stopped cleanly")
 }
 
+// SlowQueryMiddleware intercepts GORM queries to log those exceeding 1000ms.
+type SlowQueryMiddleware struct{}
+
+func (m *SlowQueryMiddleware) Name() string { return "slow_query_logger" }
+func (m *SlowQueryMiddleware) Initialize(db *gorm.DB) error {
+	callback := db.Callback()
+	_ = callback.Query().Before("gorm:query").Register("slow_query:start", func(d *gorm.DB) {
+		d.InstanceSet("start_time", time.Now())
+	})
+	_ = callback.Query().After("gorm:query").Register("slow_query:end", func(d *gorm.DB) {
+		if start, ok := d.InstanceGet("start_time"); ok {
+			duration := time.Since(start.(time.Time))
+			if duration > 1*time.Second {
+				sql := d.Dialector.Explain(d.Statement.SQL.String(), d.Statement.Vars...)
+				log.Warn().
+					Str("duration", duration.String()).
+					Str("sql", sql).
+					Msg("⚠️ [SLOW QUERY PHENOMENA] Query took more than 1s. Consider adding indexes.")
+			}
+		}
+	})
+	return nil
+}
+
 // initDB creates a GORM PostgreSQL connection with retry logic.
 // Retries up to 10 times with 3s sleep to handle CI service container startup lag.
 func initDB(cfg *config.Config) (*gorm.DB, error) {
@@ -731,6 +755,9 @@ func initDB(cfg *config.Config) (*gorm.DB, error) {
 	// (Supabase pgBouncer default idle timeout is 5 min in transaction-mode pooling).
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(2 * time.Minute)
+
+	// Register Slow Query Watchdog
+	_ = db.Use(&SlowQueryMiddleware{})
 
 	return db, nil
 }
@@ -781,6 +808,9 @@ func initSupabaseDB(cfg *config.Config) (*gorm.DB, error) {
 	// Phase 36: 5 min lifetime avoids Supabase pgBouncer stale-connection evictions
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(2 * time.Minute)
+
+	// Register Slow Query Watchdog
+	_ = db.Use(&SlowQueryMiddleware{})
 
 	return db, nil
 }
