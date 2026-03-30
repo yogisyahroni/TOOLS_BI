@@ -113,16 +113,15 @@ export default function QueryEditor() {
 
     setIsCreatingViews(true);
     try {
-      const promises = recommendations.map(rec =>
-        api.post('/datasets/ai-generate', {
+      // Use a sequential loop instead of Promise.all to prevent Supabase connection pool errors
+      for (const rec of recommendations) {
+        await api.post('/datasets/ai-generate', {
           sourceDatasetId: selectedDataSet,
           name: rec.name,
           description: rec.description,
           query: rec.sql
-        })
-      );
-
-      await Promise.all(promises);
+        });
+      }
       toast({ title: 'Success', description: `Successfully created ${recommendations.length} new datasets.` });
       // Trigger a refetch of datasets
       window.location.reload(); // Simple way to refresh the sidebar and lists
