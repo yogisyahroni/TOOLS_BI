@@ -84,6 +84,7 @@ export default function QueryEditor() {
     URL.revokeObjectURL(url);
   };
   const [isCreatingViews, setIsCreatingViews] = useState(false);
+  const [creationProgress, setCreationProgress] = useState({ current: 0, total: 0 });
 
   const handleAIResponse = (response: string, jsonRecommendations?: DatasetRecommendation[]) => {
     if (jsonRecommendations && jsonRecommendations.length > 0) {
@@ -112,9 +113,13 @@ export default function QueryEditor() {
     }
 
     setIsCreatingViews(true);
+    setCreationProgress({ current: 0, total: recommendations.length });
     try {
       // Use a sequential loop instead of Promise.all to prevent Supabase connection pool errors
+      let count = 0;
       for (const rec of recommendations) {
+        count++;
+        setCreationProgress(prev => ({ ...prev, current: count }));
         await api.post('/datasets/ai-generate', {
           sourceDatasetId: selectedDataSet,
           name: rec.name,
@@ -378,6 +383,7 @@ The JSON schema:
               onAIResponse={handleAIResponse}
               onCreateViews={handleCreateViews}
               isCreatingViews={isCreatingViews}
+              creationProgress={creationProgress}
               contextType="sql"
               className="h-full"
             />

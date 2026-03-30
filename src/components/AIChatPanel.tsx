@@ -32,6 +32,7 @@ interface AIChatPanelProps {
   onCreateViews?: (recommendations: DatasetRecommendation[]) => void;
   className?: string;
   isCreatingViews?: boolean;
+  creationProgress?: { current: number; total: number };
   contextType?: 'sql' | 'chart' | 'report' | 'general';
 }
 
@@ -43,6 +44,7 @@ export function AIChatPanel({
   onCreateViews,
   className,
   isCreatingViews = false,
+  creationProgress = { current: 0, total: 0 },
   contextType = 'general',
 }: AIChatPanelProps) {
   const { data: aiConfig } = useAIConfig();
@@ -379,7 +381,7 @@ export function AIChatPanel({
                                   onClick={() => onCreateViews(selectedViews[msg.id] || [])}
                                 >
                                   {isCreatingViews ? (
-                                    <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Creating Views...</>
+                                    <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Creating View {creationProgress.current} of {creationProgress.total}...</>
                                   ) : (
                                     <><Plus className="w-3.5 h-3.5 mr-1.5" /> Create {selectedViews[msg.id]?.length || 0} Selected Views <ArrowRight className="w-3.5 h-3.5 ml-1.5" /></>
                                   )}
