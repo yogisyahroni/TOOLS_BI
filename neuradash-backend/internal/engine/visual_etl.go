@@ -94,10 +94,14 @@ func RunVisualPipeline(ctx context.Context, db *gorm.DB, spec PipelineSpec) (res
 		return nil, fmt.Errorf("pipeline DAG error: %w", err)
 	}
 
-	// Build a lookup map for nodes
+	// Build a lookup map for nodes and calculate consumer counts for memory pruning
 	nodeMap := map[string]NodeSpec{}
+	consumerCount := map[string]int{}
 	for _, n := range spec.Nodes {
 		nodeMap[n.ID] = n
+		for _, inID := range n.Inputs {
+			consumerCount[inID]++
+		}
 	}
 
 	result := &PipelineResult{
@@ -127,6 +131,19 @@ func RunVisualPipeline(ctx context.Context, db *gorm.DB, spec PipelineSpec) (res
 		}
 		result.NodeOutputs[id] = rows
 		lastID = id
+
+		// PRUNE MEMORY: If a node's output is no longer needed by any remaining node in the 'order', delete it.
+		// We decrement the consumer count for each input of the CURRENT node.
+		for _, inID := range node.Inputs {
+			consumerCount[inID]--
+			if consumerCount[inID] == 0 {
+				// No more nodes need this output. Free it.
+				// (But keep the final node result for PipelineResult.Rows)
+				if inID != lastID {
+					delete(result.NodeOutputs, inID)
+				}
+			}
+		}
 	}
 
 	if lastID != "" {

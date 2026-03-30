@@ -420,7 +420,16 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 		}
 	}
 
+	// Stats for optimized updates
+	batchCounter := 0
+	const metadataUpdateInterval = 50 // Only update preview every 50 batches to reduce DB pressure
+
 	for offset := p.ProcessedRows; ; offset += chunkLimit {
+		// Periodically clean up memory if we're doing many small chunks
+		if batchCounter%10 == 0 {
+			runtime.GC()
+		}
+
 		var chunkRows []map[string]interface{}
 		
 		if isExternal {
@@ -495,42 +504,45 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 			isTableCreated = true
 		}
 		
-		// ALWAYS update preview sample for UI in each chunk (up to 100 rows total)
-		sampleSize := 100
-		if len(result.Rows) < sampleSize {
-			sampleSize = len(result.Rows)
-		}
-		sampleRows := result.Rows[:sampleSize]
-		outputJSON, _ := json.Marshal(sampleRows)
-		if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
-			fmt.Printf("[ETL] Warning: Failed to save preview sample: %v\n", err)
+		// SUB-ROUTINE GAMMA: Throttled metadata updates.
+		// Doing a full JSON update on every chunk (for 4M rows at 2000 per chunk = 2000 updates) is slow.
+		if batchCounter%metadataUpdateInterval == 0 || batchCounter == 0 {
+			sampleSize := 100
+			if len(result.Rows) < sampleSize {
+				sampleSize = len(result.Rows)
+			}
+			sampleRows := result.Rows[:sampleSize]
+			outputJSON, _ := json.Marshal(sampleRows)
+			// Use Omit to only update output_data and processed_rows to avoid accidental full-row lock
+			h.db.Model(p).Select("output_data", "processed_rows").Updates(map[string]interface{}{
+				"output_data":    json.RawMessage(outputJSON),
+				"processed_rows": totalOutputRows + len(result.Rows),
+			})
 		}
 
 		totalOutputRows += len(result.Rows)
+		batchCounter++
 		
-		// PROGRESS BROADCAST: Inform frontend of current progress in the middle of the loop.
-		// SUB-ROUTINE GAMMA: Real-time feedback ensures the UI doesn't look "stuck".
-		h.hub.SendToUser(p.UserID, realtime.Event{
-			Type: "etl_progress",
-			Payload: map[string]interface{}{
-				"pipelineId":    p.ID,
-				"runId":         p.ID,
-				"status":        "running",
-				"processedRows": totalOutputRows,
-				"percent":       -1,
-			},
-		})
-
-		// SUB-ROUTINE BETA: Checkpoint Persistence.
-		// Saves progress in real-time to allow auto-resume on server restart.
-		h.db.Model(p).Update("processed_rows", totalOutputRows)
-
-		runtime.GC()
+		// PROGRESS BROADCAST: Inform frontend of current progress.
+		// We do this more frequently than DB updates because it's non-blocking (WebSocket).
+		if batchCounter%5 == 0 {
+			h.hub.SendToUser(p.UserID, realtime.Event{
+				Type: "etl_progress",
+				Payload: map[string]interface{}{
+					"pipelineId":    p.ID,
+					"runId":         p.ID,
+					"status":        "running",
+					"processedRows": totalOutputRows,
+					"percent":       -1,
+				},
+			})
+		}
 
 		if chunkLimit == 0 {
 			break 
 		}
 	}
+
 
 	if !isTableCreated {
 		return pipelineExecResult{status: "error", errMsg: "Pipeline execution resulted in 0 rows overall."}

@@ -133,7 +133,7 @@ func (s *ETLStorageService) mapToPostgresType(v interface{}) string {
 	if v == nil {
 		return "TEXT" // Default for unknown/null initial values
 	}
-	switch v.(type) {
+	switch val := v.(type) {
 	case int, int64:
 		return "BIGINT"
 	case float64:
@@ -141,11 +141,10 @@ func (s *ETLStorageService) mapToPostgresType(v interface{}) string {
 	case bool:
 		return "BOOLEAN"
 	case string:
-		str := v.(string)
-		if str == "" {
+		if val == "" {
 			return "TEXT"
 		}
-		if utils.IsDateLike(str) {
+		if utils.IsDateLike(val) {
 			return "TIMESTAMPTZ"
 		}
 		return "TEXT"
