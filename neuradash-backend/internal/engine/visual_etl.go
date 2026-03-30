@@ -81,7 +81,14 @@ func IsPipelineChunkable(spec PipelineSpec) bool {
 
 // RunVisualPipeline executes a visual ETL pipeline and returns the result.
 // The result of the last node in topological order is the final output.
-func RunVisualPipeline(ctx context.Context, db *gorm.DB, spec PipelineSpec) (*PipelineResult, error) {
+func RunVisualPipeline(ctx context.Context, db *gorm.DB, spec PipelineSpec) (res *PipelineResult, err error) {
+	// SUB-ROUTINE ALPHA: Panic Recovery Protocol
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("ETL ENGINE PANIC: %v", r)
+		}
+	}()
+
 	order, err := topoSort(spec.Nodes)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline DAG error: %w", err)
@@ -764,8 +771,8 @@ func cfgStrSlice(cfg map[string]interface{}, key string) []string {
 }
 
 func firstInput(inputs [][]map[string]interface{}) []map[string]interface{} {
-	if len(inputs) == 0 {
-		return nil
+	if len(inputs) == 0 || inputs[0] == nil {
+		return make([]map[string]interface{}, 0)
 	}
 	return inputs[0]
 }

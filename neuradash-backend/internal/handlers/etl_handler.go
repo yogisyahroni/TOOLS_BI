@@ -493,16 +493,17 @@ func (h *ETLHandler) executePipelineInternal(ctx context.Context, p *models.ETLP
 
 		if !isTableCreated {
 			isTableCreated = true
-			// Save preview sample for UI
-			sampleSize := 100
-			if len(result.Rows) < sampleSize {
-				sampleSize = len(result.Rows)
-			}
-			sampleRows := result.Rows[:sampleSize]
-			outputJSON, _ := json.Marshal(sampleRows)
-			if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
-				fmt.Printf("[ETL] Warning: Failed to save preview sample: %v\n", err)
-			}
+		}
+		
+		// ALWAYS update preview sample for UI in each chunk (up to 100 rows total)
+		sampleSize := 100
+		if len(result.Rows) < sampleSize {
+			sampleSize = len(result.Rows)
+		}
+		sampleRows := result.Rows[:sampleSize]
+		outputJSON, _ := json.Marshal(sampleRows)
+		if err := h.db.Model(p).Update("output_data", json.RawMessage(outputJSON)).Error; err != nil {
+			fmt.Printf("[ETL] Warning: Failed to save preview sample: %v\n", err)
 		}
 
 		totalOutputRows += len(result.Rows)
@@ -698,23 +699,32 @@ func (h *ETLHandler) GetPipelinePreview(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Pipeline status is '%s'. It must be 'completed' to get preview.", pipeline.Status)})
 	}
 
-	// 1. Fetch data from the output_data column
+	// 1. Try to fetch from the output_data column first (cache)
 	var data []map[string]interface{}
-	if err := json.Unmarshal(pipeline.OutputData, &data); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to parse stored output data"})
+	if len(pipeline.OutputData) > 0 && string(pipeline.OutputData) != "[]" && string(pipeline.OutputData) != "null" {
+		json.Unmarshal(pipeline.OutputData, &data)
 	}
 
-	// 2. Infer columns from the data (since we're using JSONB now)
+	// 2. FALLBACK: Fetch from physical table if cache is empty but status is completed
+	if len(data) == 0 && pipeline.Status == "completed" && pipeline.OutputTableName != "" {
+		if err := h.db.Table(engine.QuoteIdentifier(pipeline.OutputTableName)).Limit(100).Find(&data).Error; err != nil {
+			fmt.Printf("[ETL] Preview Fallback Failed: %v\n", err)
+		}
+	}
+
+	// 3. Infer columns from the data
 	cols := []models.ColumnDef{}
 	if len(data) > 0 {
 		firstRow := data[0]
 		for name, val := range firstRow {
 			colType := "string"
-			switch val.(type) {
-			case int, int64, float64:
-				colType = "number"
-			case bool:
-				colType = "boolean"
+			if val != nil {
+				switch val.(type) {
+				case int, int64, float64:
+					colType = "number"
+				case bool:
+					colType = "boolean"
+				}
 			}
 			cols = append(cols, models.ColumnDef{
 				Name:     name,

@@ -130,6 +130,9 @@ func (s *ETLStorageService) PersistETLResult(ctx context.Context, tableName stri
 
 
 func (s *ETLStorageService) mapToPostgresType(v interface{}) string {
+	if v == nil {
+		return "TEXT" // Default for unknown/null initial values
+	}
 	switch v.(type) {
 	case int, int64:
 		return "BIGINT"
@@ -138,7 +141,11 @@ func (s *ETLStorageService) mapToPostgresType(v interface{}) string {
 	case bool:
 		return "BOOLEAN"
 	case string:
-		if utils.IsDateLike(v.(string)) {
+		str := v.(string)
+		if str == "" {
+			return "TEXT"
+		}
+		if utils.IsDateLike(str) {
 			return "TIMESTAMPTZ"
 		}
 		return "TEXT"
