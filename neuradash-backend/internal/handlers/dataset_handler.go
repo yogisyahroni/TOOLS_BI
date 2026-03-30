@@ -15,6 +15,7 @@ import (
 	"unicode"
 
 	"neuradash/internal/connectors"
+	"neuradash/internal/engine"
 	"neuradash/internal/middleware"
 	"neuradash/internal/models"
 	"neuradash/internal/utils"
@@ -288,16 +289,16 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 		defer dbConn.Close()
 
 		// SECURITY: Never SELECT * on external without LIMIT
-		sqlQuery := fmt.Sprintf(`SELECT * FROM "%s"`, ds.DataTableName)
+		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, QuoteIdentifier(ds.DataTableName))
 		if sortCol != "" {
-			sqlQuery += fmt.Sprintf(` ORDER BY "%s" %s`, sortCol, sortDir)
+			sqlQuery += fmt.Sprintf(` ORDER BY %s %s`, QuoteIdentifier(sortCol), sortDir)
 		}
 		// PostgreSQL offset/limit syntax
 		sqlQuery += fmt.Sprintf(` LIMIT %d OFFSET %d`, limit, offset)
 
 		res, err := dbConn.Query(ctx, sqlQuery, limit)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query external dataset"})
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query external dataset: " + err.Error()})
 		}
 
 		return c.JSON(fiber.Map{
@@ -318,7 +319,7 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 		for _, cf := range calcFields {
 			formula := strings.ReplaceAll(cf.Formula, ";", "")
 			formula = strings.ReplaceAll(formula, "--", "")
-			selects = append(selects, fmt.Sprintf(`(%s) AS "%s"`, formula, sanitizeIdentifier(cf.Name)))
+			selects = append(selects, fmt.Sprintf(`(%s) AS %s`, formula, QuoteIdentifier(cf.Name)))
 		}
 		query = query.Select(strings.Join(selects, ", "))
 	}
@@ -337,13 +338,13 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 	startDate := c.Query("startDate")
 	endDate := c.Query("endDate")
 	if dateCol != "" {
-		safeDateCol := sanitizeIdentifier(dateCol)
+		safeDateCol := QuoteIdentifier(dateCol)
 		if startDate != "" && endDate != "" {
-			query = query.Where(fmt.Sprintf(`"%s" >= ? AND "%s" <= ?`, safeDateCol, safeDateCol), startDate, endDate)
+			query = query.Where(fmt.Sprintf(`%s >= ? AND %s <= ?`, safeDateCol, safeDateCol), startDate, endDate)
 		} else if startDate != "" {
-			query = query.Where(fmt.Sprintf(`"%s" >= ?`, safeDateCol), startDate)
+			query = query.Where(fmt.Sprintf(`%s >= ?`, safeDateCol), startDate)
 		} else if endDate != "" {
-			query = query.Where(fmt.Sprintf(`"%s" <= ?`, safeDateCol), endDate)
+			query = query.Where(fmt.Sprintf(`%s <= ?`, safeDateCol), endDate)
 		}
 	}
 
@@ -353,7 +354,7 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 
 	// Apply sort
 	if sortCol != "" {
-		query = query.Order(fmt.Sprintf(`"%s" %s`, sanitizeIdentifier(sortCol), sortDir))
+		query = query.Order(fmt.Sprintf(`%s %s`, QuoteIdentifier(sortCol), sortDir))
 	}
 
 	// Fetch rows
@@ -1395,4 +1396,36 @@ func (h *DatasetHandler) AggregateDataset(c *fiber.Ctx) error {
 		"executionTime": time.Since(start).Milliseconds(),
 		"rowCount":      len(results),
 	})
+}
+
+// SimulateETL runs a transient transformation on provided data for preview.
+// POST /api/v1/datasets/simulate
+func (h *DatasetHandler) SimulateETL(c *fiber.Ctx) error {
+	var body struct {
+		Nodes []engine.NodeSpec `json:"nodes"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	spec := engine.PipelineSpec{Nodes: body.Nodes}
+	ctx, cancel := context.WithTimeout(c.Context(), 60*time.Second)
+	defer cancel()
+
+	result, err := engine.RunVisualPipeline(ctx, h.db, spec)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"rows":        result.Rows,
+		"nodeOutputs": result.NodeOutputs,
+		"errors":      result.Errors,
+		"order":       result.Order,
+	})
+}
+
+// QuoteIdentifier wraps a string in double quotes for SQL identifiers.
+func QuoteIdentifier(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }

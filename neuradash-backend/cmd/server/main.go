@@ -356,6 +356,7 @@ func main() {
 	datasets.Post("/:id/refresh", datasetH.RefreshDataset)
 	datasets.Post("/ai-generate", datasetH.AIGenerateDataset)
 	datasets.Get("/:id/aggregate", datasetH.AggregateDataset)
+	datasets.Post("/simulate", datasetH.SimulateETL)
 
 	// Dashboard routes
 	dashboards := api.Group("/dashboards")

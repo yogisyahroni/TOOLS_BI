@@ -127,16 +127,34 @@ func (b *binOp) eval(ctx FormulaContext) (interface{}, error) {
 		}
 		return lf / rf, nil
 	case ">":
+		if !lok || !rok {
+			return boolToFloat(fmt.Sprintf("%v", lv) > fmt.Sprintf("%v", rv)), nil
+		}
 		return boolToFloat(lf > rf), nil
 	case "<":
+		if !lok || !rok {
+			return boolToFloat(fmt.Sprintf("%v", lv) < fmt.Sprintf("%v", rv)), nil
+		}
 		return boolToFloat(lf < rf), nil
 	case ">=":
+		if !lok || !rok {
+			return boolToFloat(fmt.Sprintf("%v", lv) >= fmt.Sprintf("%v", rv)), nil
+		}
 		return boolToFloat(lf >= rf), nil
 	case "<=":
+		if !lok || !rok {
+			return boolToFloat(fmt.Sprintf("%v", lv) <= fmt.Sprintf("%v", rv)), nil
+		}
 		return boolToFloat(lf <= rf), nil
 	case "=", "==":
+		if !lok || !rok {
+			return boolToFloat(fmt.Sprintf("%v", lv) == fmt.Sprintf("%v", rv)), nil
+		}
 		return boolToFloat(lf == rf), nil
 	case "<>", "!=":
+		if !lok || !rok {
+			return boolToFloat(fmt.Sprintf("%v", lv) != fmt.Sprintf("%v", rv)), nil
+		}
 		return boolToFloat(lf != rf), nil
 	}
 	return nil, fmt.Errorf("unknown operator %q", b.op)
@@ -795,6 +813,9 @@ func (p *parser) parseArgList() ([]exprNode, error) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func toFloat(v interface{}) (float64, bool) {
+	if v == nil {
+		return 0, false
+	}
 	switch val := v.(type) {
 	case float64:
 		return val, true
@@ -806,9 +827,29 @@ func toFloat(v interface{}) (float64, bool) {
 		return float64(val), true
 	case int32:
 		return float64(val), true
+	case int16:
+		return float64(val), true
+	case int8:
+		return float64(val), true
+	case uint:
+		return float64(val), true
+	case uint64:
+		return float64(val), true
+	case uint32:
+		return float64(val), true
+	case uint16:
+		return float64(val), true
+	case uint8:
+		return float64(val), true
 	case string:
-		f, err := strconv.ParseFloat(val, 64)
+		// Attempt to parse string as float
+		f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
 		return f, err == nil
+	case bool:
+		if val {
+			return 1.0, true
+		}
+		return 0.0, true
 	}
 	return 0, false
 }
@@ -887,6 +928,12 @@ func applyOp(op string, a, b float64) bool {
 		return a == b
 	case "<>", "!=":
 		return a != b
+	case "contains":
+		// 'contains' is used by frontend and AI, usually for strings.
+		// If we are here, we have floats, so we'll do string comparison.
+		sa := fmt.Sprintf("%v", a)
+		sb := fmt.Sprintf("%v", b)
+		return strings.Contains(sa, sb)
 	}
 	return false
 }
