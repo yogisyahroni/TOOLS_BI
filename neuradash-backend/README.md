@@ -124,6 +124,7 @@ NeuraDash's ETL engine is built for reliability in distributed or "serverless" (
 - **Incremental Checkpointing**: Progress is persisted to the database after every successful batch processing.
 - **Auto-Resume on Startup**: If the server restarts due to a cold-start, OOM, or manual deployment, any interrupted `running` pipelines will automatically resume from the last successful checkpoint.
 - **Idempotent Upserts**: Ensures data consistency even if a batch is partially re-processed during recovery.
+- **Dynamic Resource-Aware Chunking**: Automatically adjusts the ETL processing speed based on the server's **Available RAM** in real-time. This prevents Out-Of-Memory (OOM) crashes on constrained environments (like Render Free Tier) while maximizing throughput on high-spec servers.
 
 ---
 
