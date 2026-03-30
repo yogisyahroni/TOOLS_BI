@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
   <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go" />
-  
+
   <h1>Neuradash : Enterprise AI Analytics & BI Platform</h1>
   <p>A comprehensive, high-performance Business Intelligence (BI) and Data Engineering platform empowering organizations to bridge the gap between raw data silos and strategic decision-making.</p>
 </div>
@@ -58,7 +58,7 @@ We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with
 ### 📂 Supported External Databases & Formats
 
 | Category | Supported Items |
-|----------|----------------|
+| :--- | :--- |
 | **Databases** | PostgreSQL (Supabase, Neon, AWS RDS), MySQL, SQL Server (Azure), SQLite, ClickHouse, DuckDB |
 | **BI Formats** | Power BI (`.pbix`), Tableau (`.twb`, `.twbx`), PowerPoint (`.pptx`) |
 | **Files** | CSV, Excel, JSON (Max 100 MB) |
@@ -72,18 +72,15 @@ Neuradash utilizes a decoupled **Clean Architecture**, supporting stateless fron
 ```mermaid
 graph TD
     User((User)) -->|Browser| FE[React + Vite Frontend]
-    FE -->|Data / Auth / Realtime SSE| Supabase[(Supabase Backend)]
-    FE -->|AI Inference & NL2SQL| API[Go/Node Engine]
+    FE -->|API / WebSocket| BE[Go + Fiber Backend Engine]
+    BE -->|SQL / Auth| DB[(PostgreSQL / Supabase)]
+    BE -->|Realtime| Redis[(Redis Cache)]
+    BE -->|NL2SQL / AI| LLM[LLM / OpenAI]
     
-    subgraph "Data Storage & Processing"
-        API -->|Context Grounding| LLM[LLM / OpenAI]
-        LLM -->|SQL| Supabase
-        Supabase -->|Sync| ExtDB[(External Database Replicas)]
-    end
-    
-    subgraph "Analytics & Background Workflows"
-        ExtData[(Raw Assets: CSV / JSON)] -->|Load| ETL[ETL Pipeline Engine]
-        ETL -->|Transform| Warehouse[(Clean Data Warehouse)]
+    subgraph "Data Processing Center"
+        ETL[Pipeline Engine] -->|Checkpoint| BE
+        BE -->|Async Sync| ExtDB[(External DB Replicas)]
+        BE -->|Assets| S3[(MinIO / S3 Storage)]
     end
 ```
 
@@ -115,7 +112,7 @@ This project is built using 2024-standard modern web primitives:
 ## 🛣️ API Overview (v1)
 
 | Method | Path | Description |
-|--------|------|-------------|
+| :--- | :--- | :--- |
 | POST | `/auth/login` | Secure JWT Authentication |
 | POST | `/datasets/upload` | Multipart file upload (CSV/Excel) |
 | POST | `/import/confirm` | Finalize ETL configuration |
@@ -128,17 +125,19 @@ This project is built using 2024-standard modern web primitives:
 
 ```text
 .
-├── src/
-│   ├── components/        # Isolated, reusable UI components and generic templates
-│   ├── context/           # React Context (AuthContext for session management)
-│   ├── hooks/             # Utility hooks (window dimension tracking, debouncing)
-│   ├── lib/               # Utilities (Tailwind `cn` merger, standard helper logic)
-│   ├── pages/             # 40+ Top-Level Features (AskData, Dashboard, ChartBuilder, GeoVisualization, etc.)
-│   ├── App.tsx            # Main router configuration linking all features
-│   └── main.tsx           # Entry point
-├── tailwind.config.ts     # Global styling variables and custom animations
-├── package.json           # Dependencies and scripts
-└── README.md              # You are here!
+├── src/                   # Frontend: React 18 Components & Pages
+│   ├── components/        # Reusable UI (Shadcn, Charts, Pivot Table)
+│   ├── pages/             # 40+ Features (AskData, ETL, Dashboard, Map)
+│   └── lib/               # Supabase Client & Shared Logic
+├── neuradash-backend/      # Backend: Go 1.22 + Fiber Enterprise Engine
+│   ├── internal/          # Business logic (ETL Engine, NL2SQL, Parsers)
+│   ├── migrations/        # PostgreSQL schema versioning
+│   └── docker-compose.yml # Containerized DB, Redis, MinIO
+├── rules.md               # Core System Governance Rules
+├── TECHNICAL_SPECS.md     # Deep architecture breakdown
+├── PERFORMANCE_TEST.md    # Benchmarking results & resilience logs
+├── package.json           # Frontend configuration
+└── README.md              # Global project documentation
 ```
 
 ---
@@ -167,25 +166,17 @@ This project is built using 2024-standard modern web primitives:
    ```
 
 3. **Configure the Environment:**
-   Create `.env` files in both root (frontend) and `neuradash-backend/` (backend).
-   - **Backend Setup**: `cp neuradash-backend/.env.example neuradash-backend/.env`
-   - **Key Variables**: `DATABASE_URL`, `REDIS_ADDR`, `MINIO_ENDPOINT`.
+   - **Backend**: `cp neuradash-backend/.env.example neuradash-backend/.env` (Fill `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`).
+   - **Frontend**: Create `.env` in root with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 4. **Boot Infrastructure (Docker):**
    ```bash
    docker-compose up -d
    ```
 
-5. **Run Backend (Go):**
-   ```bash
-   cd neuradash-backend/
-   go run ./cmd/server/
-   ```
-
-6. **Run Frontend (React):**
-   ```bash
-   npm run dev
-   ```
+5. **Spin up Neuradash:**
+   - **Backend**: `cd neuradash-backend && go run ./cmd/server/`
+   - **Frontend**: `npm install && npm run dev`
 
 ### 🧪 Quality Assurance
 
@@ -197,7 +188,7 @@ go test ./internal/engine/... ./internal/parser/... -v
 go test ./... -v
 ```
 
-7. **Build for Production / Deployment:**
+5. **Build for Production / Deployment:**
 
    ```bash
    npm run build
@@ -210,7 +201,7 @@ go test ./... -v
 *This project exemplifies capabilities in complex full-stack architectures, high-performance data engineering, scalable UI ecosystems, and native AI integration.*
 
 - **Ultimate Goal**: Create a self-service reality empowering non-technical stakeholders to get 10x faster speed-to-insight without writing SQL.
-- **Production Checklist**: 
+- **Production Checklist**:
   - [ ] Set `JWT_SECRET` (64-byte random string).
   - [ ] Set `SERVER_ENV=production`.
   - [ ] Configure PostgreSQL SSL (`sslmode=require`).
