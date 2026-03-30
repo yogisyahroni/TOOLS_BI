@@ -433,7 +433,7 @@ export default function ConnectionsPage() {
                             <div className="flex items-center justify-center h-full">
                                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                             </div>
-                        ) : schema && schema.length > 0 ? (
+                        ) : (schema && Array.isArray(schema) && schema.length > 0) ? (
                             <ScrollArea className="h-full pr-4">
                                 <div className="space-y-4">
                                     {schema.map((table) => (
@@ -466,7 +466,7 @@ export default function ConnectionsPage() {
                                                 </div>
                                             </div>
                                             <div className="text-xs text-muted-foreground space-y-1">
-                                                {table.columns.map(col => (
+                                                {(table.columns ?? []).map(col => (
                                                     <p key={col.name} className="flex items-center gap-2">
                                                         <span className="font-mono text-foreground">{col.name}</span>
                                                         <span className="text-[10px] uppercase px-1 py-0.5 rounded-sm bg-muted">{col.type}</span>
