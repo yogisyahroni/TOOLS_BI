@@ -690,7 +690,7 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 		return out, nil
 
 	// ── data_cleansing ────────────────────────────────────────────────────────
-	case "data_cleansing", "datacleansing":
+	case "data_cleansing", "datacleansing", "data cleansing", "data cleaning":
 		rows := firstInput(inputs)
 		col := cfgStr(cfg, "column")
 		action := strings.ToLower(cfgStr(cfg, "action")) // drop_null, fill_null

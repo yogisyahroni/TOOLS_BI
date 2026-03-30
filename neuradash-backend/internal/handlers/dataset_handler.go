@@ -1425,7 +1425,18 @@ func (h *DatasetHandler) SimulateETL(c *fiber.Ctx) error {
 	})
 }
 
-// QuoteIdentifier wraps a string in double quotes for SQL identifiers.
+// QuoteIdentifier handles quoting for SQL identifiers, potentially schema-qualified.
+// e.g. "public.table" -> "public"."table"
 func QuoteIdentifier(s string) string {
-	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+	if s == "" {
+		return ""
+	}
+	parts := strings.Split(s, ".")
+	for i, p := range parts {
+		// Only quote if not already quoted
+		if !strings.HasPrefix(p, "\"") {
+			parts[i] = fmt.Sprintf("\"%s\"", p)
+		}
+	}
+	return strings.Join(parts, ".")
 }
