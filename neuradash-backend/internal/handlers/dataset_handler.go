@@ -1408,6 +1408,40 @@ func (h *DatasetHandler) SimulateETL(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
+	// 1. Process nodes to handle external sources as inline data
+	for i := range body.Nodes {
+		node := &body.Nodes[i]
+		if node.Type == "source" && node.Config["table"] != nil {
+			tableName := fmt.Sprintf("%v", node.Config["table"])
+			if tableName != "" {
+				// Check if this table is an external dataset
+				var ds models.Dataset
+				if err := h.db.Where("data_table_name = ?", tableName).First(&ds).Error; err == nil {
+					isExternal := strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+					if isExternal {
+						connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
+						var extConn models.DBConnection
+						if err := h.db.Where("id = ?", connID).First(&extConn).Error; err == nil {
+							opts := connectors.FromDBConnection(&extConn, extConn.PasswordEncrypted)
+							dbConn, err := connectors.Open(opts)
+							if err == nil {
+								defer dbConn.Close()
+								// Fetch 100 sample rows
+								sampleQuery := fmt.Sprintf(`SELECT * FROM %s LIMIT 100`, QuoteIdentifier(ds.DataTableName))
+								res, errQuery := dbConn.Query(c.Context(), sampleQuery, 100)
+								if errQuery == nil && len(res.Rows) > 0 {
+									// Inject as inline data
+									node.Config["data"] = res.Rows
+									delete(node.Config, "table")
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	spec := engine.PipelineSpec{Nodes: body.Nodes}
 	ctx, cancel := context.WithTimeout(c.Context(), 60*time.Second)
 	defer cancel()

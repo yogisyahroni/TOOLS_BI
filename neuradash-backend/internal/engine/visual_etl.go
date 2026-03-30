@@ -693,29 +693,82 @@ func runNode(ctx context.Context, db *gorm.DB, node NodeSpec, inputs [][]map[str
 	case "data_cleansing", "datacleansing", "data cleansing", "data cleaning":
 		rows := firstInput(inputs)
 		col := cfgStr(cfg, "column")
-		action := strings.ToLower(cfgStr(cfg, "action")) // drop_null, fill_null
-		fillValue := cfg["fillValue"]
-		
+		action := strings.ToLower(cfgStr(cfg, "action"))
+		fillVal := fmt.Sprintf("%v", cfg["fill_value"])
+		if cfg["fill_value"] == nil {
+			fillVal = fmt.Sprintf("%v", cfg["fillValue"])
+		}
+
 		var out []map[string]interface{}
-		for _, row := range rows {
-			val := row[col]
-			isNull := val == nil || fmt.Sprintf("%v", val) == "" || fmt.Sprintf("%v", val) == "null"
-			
-			if action == "drop_null" {
-				if isNull {
-					continue // skip row
+		// Support for 'replacement' config (AI generated)
+		var replacements map[string][]string
+		if r, ok := cfg["replacement"].(map[string]interface{}); ok {
+			replacements = make(map[string][]string)
+			for k, v := range r {
+				if list, ok := v.([]interface{}); ok {
+					var strList []string
+					for _, item := range list {
+						strList = append(strList, fmt.Sprintf("%v", item))
+					}
+					replacements[k] = strList
 				}
-				out = append(out, copyRow(row))
-			} else if action == "fill_null" {
-				newRow := copyRow(row)
-				if isNull {
-					newRow[col] = fillValue
-				}
-				out = append(out, newRow)
-			} else {
-				// unknown action, preserve row
-				out = append(out, copyRow(row))
 			}
+		}
+
+		for _, row := range rows {
+			newRow := copyRow(row)
+
+			// Helper to cleanse a value
+			cleanseFunc := func(val interface{}) interface{} {
+				sVal := fmt.Sprintf("%v", val)
+				// 1. Check replacements
+				if replacements != nil {
+					for _, nulls := range replacements["null"] {
+						if sVal == nulls || (val == nil && nulls == "null") {
+							return nil
+						}
+					}
+					for _, empties := range replacements["empty_string"] {
+						if sVal == empties {
+							return ""
+						}
+					}
+				}
+
+				// 2. Original actions
+				isNull := val == nil || sVal == "" || sVal == "null" || sVal == "<nil>"
+				if action == "drop_null" && isNull {
+					return "__DELETE__"
+				}
+				if action == "fill_null" && isNull {
+					return fillVal
+				}
+				return val
+			}
+
+			if col != "" {
+				// Specific column cleansing
+				res := cleanseFunc(newRow[col])
+				if res == "__DELETE__" {
+					continue
+				}
+				newRow[col] = res
+			} else {
+				// Global cleansing (all columns)
+				deleted := false
+				for k, v := range newRow {
+					res := cleanseFunc(v)
+					if res == "__DELETE__" {
+						deleted = true
+						break
+					}
+					newRow[k] = res
+				}
+				if deleted {
+					continue
+				}
+			}
+			out = append(out, newRow)
 		}
 		if out == nil {
 			out = make([]map[string]interface{}, 0)
