@@ -1,4 +1,5 @@
 //go:build !windows && !linux
+
 package utils
 
 // GetSystemAvailableMemory returns a safe default for unknown operating systems.
