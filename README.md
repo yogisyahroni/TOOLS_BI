@@ -27,6 +27,7 @@ We've evolved far beyond a simple dashboarding tool. DataLens is equipped with o
 
 ### 🛠️ Data Engineering & Modeling
 - **Visual ETL & Pipeline Builder**: A node-based, drag-and-drop interface for Extracting, Transforming, and Loading (ETL) your data.
+- **Dynamic Resource-Aware Chunking (✨)**: The backend automatically monitors available system RAM in real-time and adjusts processing speeds/batch sizes dynamically. This ensures 100% uptime even on resource-constrained servers (like Render Free Tier) by preventing OOM crashes during massive data imports.
 - **Smart Schema & DB Diagram (ERD)**: Automated database profiling to visualize table relationships, foreign keys, and constraints perfectly.
 - **Data Modeling & calculated Fields**: Add custom business logic, derived metrics, and dynamic calculated columns.
 - **Data Profiling**: Deep insights instantly into your datasets (null distributions, min/max metrics, categorical breakdowns).
