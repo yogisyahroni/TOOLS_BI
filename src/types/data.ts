@@ -150,10 +150,35 @@ export interface DataAlert {
 }
 
 // Data Story
+
+/**
+ * SlideWidget — unit chart atau konten dalam satu slide AI Story.
+ * Digunakan oleh AI Story Generator untuk menyimpan chart per-section template.
+ */
+export interface SlideWidget {
+  id: string;
+  type: WidgetType;
+  title: string;
+  chartId?: string;      // Reference ke SavedChart yang sudah disimpan di Chart Builder
+  datasetId?: string;    // Dataset sumber data
+  xAxis?: string;        // Kolom X / Category
+  yAxis?: string;        // Kolom Y / Value
+  groupBy?: string;      // Kolom grouping
+  limit?: number;        // Batasan jumlah data
+  sortOrder?: 'asc' | 'desc' | 'none';
+  insight?: string;      // Narasi AI untuk widget ini
+  width: 'full' | 'half' | 'third'; // Lebar kolom dalam grid slide
+  height?: 'sm' | 'md' | 'lg';
+  htmlContent?: string;  // Untuk type 'text' atau 'kpi_cards'
+  fallbackText?: string; // Fallback jika AI tidak bisa buat chart
+}
+
 export interface StorySlide {
   id: string;
   title: string;
+  subtitle?: string;
   widgets: Widget[];
+  slideWidgets?: SlideWidget[]; // AI Story Generator widgets (charts + narasi)
   layout?: any[]; // Menyimpan konfigurasi layout grid untuk react-grid-layout
 }
 
@@ -162,7 +187,7 @@ export interface DataStory {
   userId: string;
   datasetId?: string;
   title: string;
-  content: string; // Legacy text content
+  content: string; // Legacy text content — JSON.stringify(Slide[]) atau plain markdown
   slides?: StorySlide[]; // Structured slides for Layout-Aware reports
   insights: string[];
   charts: any[]; // Legacy charts
