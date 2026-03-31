@@ -220,7 +220,15 @@ export default function AIReports() {
     { limit: 5000 }
   );
 
-  const datasetColumns = useMemo(() => rawDatasetRes?.columns || [], [rawDatasetRes]);
+  // Kolom dari metadata dataset (sama seperti ChartBuilder)
+  const datasetMeta = useMemo(
+    () => datasets.find((d: any) => d.id === selectedDatasetId),
+    [datasets, selectedDatasetId]
+  );
+  const datasetColumns = useMemo(
+    () => datasetMeta?.columns || [],
+    [datasetMeta]
+  );
   const dataSample = useMemo(() => (rawDatasetRes?.data || []).slice(0, 10), [rawDatasetRes]);
 
   // All templates (builtin + user)
@@ -494,7 +502,13 @@ export default function AIReports() {
                   {isLoadingData ? (
                     <><Loader2 className="w-3 h-3 animate-spin" /> Memuat kolom dataset...</>
                   ) : (
-                    <><CheckCircle2 className="w-3 h-3 text-green-500" /> {datasetColumns.length} kolom terdeteksi ({datasetColumns.filter((c: any) => c.type === 'number' || c.type === 'float' || c.type === 'integer').length} numerik, {datasetColumns.filter((c: any) => c.type === 'string' || c.type === 'text').length} teks)</>
+                    <><CheckCircle2 className="w-3 h-3 text-green-500" /> {datasetColumns.length} kolom terdeteksi ({datasetColumns.filter((c: any) => {
+                        const t = (c.type || '').toLowerCase();
+                        return ['number','numeric','int','float','decimal','double'].some(k => t.includes(k));
+                      }).length} numerik, {datasetColumns.filter((c: any) => {
+                        const t = (c.type || '').toLowerCase();
+                        return ['string','text','varchar','char','name'].some(k => t.includes(k));
+                      }).length} teks)</>
                   )}
                 </div>
               )}
