@@ -126,7 +126,10 @@ export async function planPageSections(
     })
     .join('\n');
 
-  const prompt = `You are a data analyst AI. Map dataset columns to report template sections.
+  // Chart sections that MUST have axis (never stat/text)
+  const mustHaveAxisTypes: WidgetType[] = ['bar', 'line', 'pie', 'area', 'horizontal_bar', 'pivot_table', 'treemap', 'funnel'];
+
+  const prompt = `You are a data analyst AI. Map dataset columns to data visualization sections.
 
 DATASET COLUMNS:
 ${colDesc}
@@ -137,36 +140,43 @@ ${sampleStr}
 PAGE: "${page.title}" ${page.subtitle ? `— ${page.subtitle}` : ''}
 USER FOCUS: ${userPrompt || 'general analysis'}
 
-SECTIONS TO FILL (each needs xAxis and yAxis mapped to real dataset columns):
+SECTIONS TO MAP:
 ${sectionsDesc}
 
-RULES:
-- xAxis: must be a column name from the dataset (category, date, or text column)
-- yAxis: must be a column name from the dataset (numeric column preferred)
-- groupBy: optional column for grouping/stacking
-- For kpi_cards (stat type): set xAxis="" yAxis="" — will show aggregated stats
-- For pivot_table: set xAxis as the row column, yAxis as the value column
-- For horizontal_bar: xAxis is the value (number), yAxis is the category (text/string)
-- If the column doesn't clearly match, set fallbackToText=true and provide a fallbackText explanation
-- Write insight in Indonesian (1-2 sentences describing what this chart shows)
-- Title should be professional and specific to the data
+STRICT RULES:
+1. ALWAYS map real column names to xAxis and yAxis — never leave them empty for chart types (bar, line, pie, area, horizontal_bar, pivot_table, funnel, treemap)
+2. xAxis = category/text/date column (dimension). yAxis = numeric column (metric).
+3. For kpi_cards (stat type): xAxis="", yAxis="" (show aggregated metrics automatically)
+4. For horizontal_bar: xAxis = numeric column (the bar length), yAxis = text/category column (the label)
+5. For pie/donut: xAxis = category column (labels), yAxis = numeric column (slice values)
+6. fallbackToText=true ONLY if no suitable columns exist at all — this must be rare (< 10% of charts)
+7. When in doubt, ALWAYS assign the best-fit columns rather than using fallbackToText
+8. Write insight in Indonesian — 1-2 sentences describing what this chart reveals
+9. Title must be specific and professional (e.g. "Total Order per Kota" not "Bar Chart")
+10. IMPORTANT: Use EXACT column names from the dataset — do not invent column names
 
-Respond ONLY with a valid JSON array (no explanation text, no markdown):
+Respond ONLY with a valid JSON array — no explanation, no markdown:
 [
   {
     "sectionId": "...",
     "chartType": "bar|line|pie|area|horizontal_bar|pivot_table|stat|text",
-    "xAxis": "column_name_or_empty",
-    "yAxis": "column_name_or_empty",
+    "xAxis": "exact_column_name",
+    "yAxis": "exact_column_name",
     "groupBy": "column_name_or_null",
-    "limit": null_or_number,
-    "sortOrder": "asc|desc|none",
-    "title": "Specific professional chart title",
-    "insight": "Narasi singkat dalam bahasa Indonesia tentang apa yang ditampilkan chart ini.",
+    "limit": 10,
+    "sortOrder": "desc",
+    "title": "Specific Professional Title",
+    "insight": "Singkat 1-2 kalimat dalam Bahasa Indonesia.",
     "fallbackToText": false,
     "fallbackText": null
   }
 ]`;
+
+  // Will be used in post-processing below
+  const firstTextCol = textCols[0]?.name || columns[0]?.name || '';
+  const firstNumCol = numericCols[0]?.name || columns.find(c => c.type !== 'string')?.name || columns[columns.length - 1]?.name || '';
+  const firstDateCol = dateCols[0]?.name || '';
+  void mustHaveAxisTypes;
 
   const response = await callAI([
     {
@@ -204,30 +214,53 @@ Respond ONLY with a valid JSON array (no explanation text, no markdown):
     }
   }
 
-  // Merge AI plans dengan metadata section asli
+  // Merge AI plans dengan metadata section asli + auto-fill axis jika AI kosong
   const mergedChartPlans: AIChartPlan[] = chartableSections.map((section) => {
     const aiPlan = aiPlans.find((p) => p.sectionId === section.id) || {};
-    const defaultChartType = SECTION_TO_CHART_TYPE[section.type] || 'bar';
+    const resolvedChartType = (aiPlan.chartType as WidgetType) || SECTION_TO_CHART_TYPE[section.type] || 'bar';
+    const isStat = resolvedChartType === 'stat' || section.type === 'kpi_cards';
+
+    // Auto-fill xAxis/yAxis if AI returned empty for non-stat chart types
+    // This is the safety net: AI should ideally always fill these, but if not, use best-guess
+    let resolvedX = (aiPlan.xAxis as string) || '';
+    let resolvedY = (aiPlan.yAxis as string) || '';
+
+    if (!isStat && !aiPlan.fallbackToText) {
+      if (!resolvedX) {
+        // For trend charts prefer date, otherwise use text column
+        resolvedX = resolvedChartType === 'line' || resolvedChartType === 'area'
+          ? (firstDateCol || firstTextCol)
+          : firstTextCol;
+      }
+      if (!resolvedY) {
+        resolvedY = firstNumCol;
+      }
+      // If we auto-filled and still have valid columns, it's NOT a fallback
+      // Only mark fallback if there's truly no columns at all
+    }
+
+    const isActuallyFallback = aiPlan.fallbackToText === true &&
+      !(resolvedX && resolvedY && !isStat);
 
     return {
       sectionId: section.id,
       sectionType: section.type,
       sectionTitle: section.title,
-      chartType: (aiPlan.chartType as WidgetType) || defaultChartType,
-      xAxis: aiPlan.xAxis || '',
-      yAxis: aiPlan.yAxis || '',
-      groupBy: aiPlan.groupBy || section.config?.groupBy || undefined,
+      chartType: resolvedChartType,
+      xAxis: isStat ? '' : resolvedX,
+      yAxis: isStat ? '' : resolvedY,
+      groupBy: (aiPlan.groupBy as string) || section.config?.groupBy || undefined,
       limit:
         typeof aiPlan.limit === 'number'
           ? aiPlan.limit
           : section.config?.limit || undefined,
-      sortOrder: aiPlan.sortOrder || section.config?.sort || 'desc',
-      title: aiPlan.title || section.title,
-      insight: aiPlan.insight || '',
+      sortOrder: (aiPlan.sortOrder as 'asc' | 'desc' | 'none') || section.config?.sort || 'desc',
+      title: (aiPlan.title as string) || section.title,
+      insight: (aiPlan.insight as string) || '',
       width: (section.width as 'full' | 'half' | 'third') || 'half',
       height: section.height,
-      fallbackToText: aiPlan.fallbackToText === true,
-      fallbackText: aiPlan.fallbackText || undefined,
+      fallbackToText: isActuallyFallback,
+      fallbackText: (aiPlan.fallbackText as string) || undefined,
     };
   });
 

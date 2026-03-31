@@ -175,11 +175,18 @@ function PlanCard({ plan, index }: { plan: AIPagePlan; index: number }) {
                   <p className="text-[10px] text-yellow-600 dark:text-yellow-400 mt-0.5 flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> Tidak dapat dipetakan
                   </p>
+                ) : section.chartType === 'stat' || section.sectionType === 'kpi_cards' ? (
+                  <p className="text-[10px] text-blue-500/80 mt-0.5 flex items-center gap-1">
+                    <Target className="w-3 h-3" /> Agregat otomatis (total, avg, count)
+                  </p>
                 ) : (
-                  <div className="flex gap-1 mt-0.5 flex-wrap">
-                    <span className="text-[10px] text-muted-foreground">{section.xAxis}</span>
+                  <div className="flex gap-1 mt-0.5 flex-wrap items-center">
+                    <span className="text-[10px] bg-muted/60 px-1.5 py-0.5 rounded text-foreground/70 font-mono">{section.xAxis || '—'}</span>
                     <span className="text-[10px] text-muted-foreground">→</span>
-                    <span className="text-[10px] text-primary">{section.yAxis}</span>
+                    <span className="text-[10px] bg-primary/10 px-1.5 py-0.5 rounded text-primary font-mono">{section.yAxis || '—'}</span>
+                    {section.groupBy && (
+                      <span className="text-[10px] text-muted-foreground/60">· group: {section.groupBy}</span>
+                    )}
                   </div>
                 )}
                 {section.insight && (
