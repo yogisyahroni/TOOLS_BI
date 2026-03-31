@@ -274,8 +274,9 @@ export default function StoryPresentation() {
   const [publicError, setPublicError] = useState<string | null>(null);
 
   // Authenticated hooks
-  const { data: stories = [], isLoading: privateLoading } = useStories();
-  const { data: savedCharts = [] } = useCharts();
+  // Authenticated hooks - only enabled if not in public view mode
+  const { data: stories = [], isLoading: privateLoading } = useStories({ enabled: !token });
+  const { data: savedCharts = [] } = useCharts({ enabled: !token });
   
   const { toast } = useToast();
   const { toPDF, targetRef } = usePDF({ filename: 'Presentation.pdf' });

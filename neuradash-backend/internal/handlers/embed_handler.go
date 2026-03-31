@@ -151,11 +151,14 @@ func (h *EmbedHandler) ViewEmbed(c *fiber.Ctx) error {
 // GET /api/v1/embed/view/:token/data/:datasetId
 func (h *EmbedHandler) FetchEmbedData(c *fiber.Ctx) error {
 	tokenID := c.Params("token")
+	if tokenID == "" {
+		tokenID = c.Query("token")
+	}
 	datasetID := c.Params("datasetId")
 
 	var token models.EmbedToken
 	if err := h.db.Where("id = ? AND revoked = false", tokenID).First(&token).Error; err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "token not found or revoked"})
+		return c.Status(401).JSON(fiber.Map{"error": "invalid or revoked token"})
 	}
 
 	if token.ExpiresAt != nil && time.Now().After(*token.ExpiresAt) {

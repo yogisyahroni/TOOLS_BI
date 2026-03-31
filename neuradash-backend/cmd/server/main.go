@@ -331,6 +331,7 @@ func main() {
 	// Public embed endpoints (no auth)
 	v1.Get("/embed/view/:token", embedH.ViewEmbed)
 	v1.Get("/embed/view/:token/data/:datasetId", embedH.FetchEmbedData)
+	v1.Get("/embed/data/:datasetId", embedH.FetchEmbedData) // Fallback for ?token=...
 	v1.Get("/embed/:token", dashboardH.GetDashboard)
 
 	// PERF-08: Strict rate limiter for expensive endpoints (5 req/min per IP).
