@@ -310,8 +310,17 @@ export default function ChartBuilder() {
     }
     try {
       await createChartMut.mutateAsync({
-        title: chartTitle, type: chartType as any,
-        datasetId: selectedDataSet, xAxis, yAxis, groupBy: groupBy || undefined,
+        title: chartTitle, 
+        type: chartType as any,
+        datasetId: selectedDataSet, 
+        xAxis, 
+        yAxis, 
+        groupBy: groupBy || undefined,
+        dataLimit: parseInt(dataLimit, 10),
+        sortOrder,
+        dateCol: dateCol !== 'all' ? dateCol : undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
       });
       toast({ title: 'Chart Saved', description: `"${chartTitle}" has been saved` });
     } catch {
@@ -349,6 +358,11 @@ export default function ChartBuilder() {
     setYAxis(chart.yAxis);
     setChartTitle(chart.title);
     setGroupBy(chart.groupBy || '');
+    setDataLimit(String(chart.dataLimit ?? '50'));
+    setSortOrder((chart.sortOrder as any) || 'default');
+    setDateCol(chart.dateCol || 'all');
+    setStartDate(chart.startDate || '');
+    setEndDate(chart.endDate || '');
   };
 
   const renderChart = () => {

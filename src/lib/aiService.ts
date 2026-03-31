@@ -152,3 +152,52 @@ Make it comprehensive, data-driven, and actionable. Return ONLY valid JSON.`,
     { role: 'user', content: userRequest },
   ]);
 }
+
+export async function generateLayoutReport(
+  datasetName: string,
+  columns: { name: string; type: string }[],
+  sampleData: Record<string, any>[],
+  stats: Record<string, any>,
+  templateName: string,
+  templateStructure: any,
+  userRequest: string
+): Promise<AIResponse> {
+  return callAI([
+    {
+      role: 'system',
+      content: `You are a Layout-Aware Business Intelligence Architect. 
+Your goal is to populate a specific dashboard/report template with data-driven charts and insights.
+
+Dataset: "${datasetName}"
+Columns: ${columns.map(c => `${c.name} (${c.type})`).join(', ')}
+Template: "${templateName}"
+Structure: ${JSON.stringify(templateStructure)}
+
+### INSTRUCTIONS:
+1.  **Analyze**: Look at each section in the template structure.
+2.  **Architect**: Decide which SQL aggregation and chart type best fits each template section (e.g., if section is 'bar_chart', suggest a Bar chart with proper X/Y axes).
+3.  **Persist**: You must return a LIST of chart configurations that will be saved to the Chart Builder.
+4.  **Story**: Return a structured Slide-based story.
+
+### OUTPUT FORMAT (Valid JSON ONLY):
+{
+  "reportTitle": "Dynamic Report Title",
+  "recommendedCharts": [
+    {
+      "sectionId": "original_template_section_id",
+      "title": "Clear Chart Title",
+      "type": "bar|line|pie|area|scatter|radar|funnel",  
+      "xAxis": "column_name",
+      "yAxis": "column_name or aggregated_expression",
+      "groupBy": "optional_column"
+    }
+  ],
+  "insights": ["Main finding 1", "Main finding 2"],
+  "narration": "A professional executive summary for the first slide."
+}
+
+Ensure xAxis and yAxis match the provided columns. Translate all titles and insights into Bahasa Indonesia.`,
+    },
+    { role: 'user', content: `Request: ${userRequest}\nFocus: Match the template layout exactly.` },
+  ]);
+}

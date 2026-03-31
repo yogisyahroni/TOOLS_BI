@@ -542,7 +542,12 @@ export interface SavedChart {
     type: string;
     xAxis: string;
     yAxis: string;
-    groupBy: string;
+    groupBy?: string;
+    dataLimit?: number;
+    sortOrder?: string;
+    dateCol?: string;
+    startDate?: string;
+    endDate?: string;
     annotations?: unknown[];
     createdAt: string;
 }
@@ -554,6 +559,11 @@ export interface SavedChartCreate {
     xAxis?: string;
     yAxis?: string;
     groupBy?: string;
+    dataLimit?: number;
+    sortOrder?: string;
+    dateCol?: string;
+    startDate?: string;
+    endDate?: string;
 }
 
 // ETL Pipeline types

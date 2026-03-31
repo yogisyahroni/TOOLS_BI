@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, FileText, Lightbulb, TrendingUp, Target,
   Send, Loader2, AlertTriangle, Shield, Download, Layout,
-  CheckCircle2, Database, Cpu, Zap, Circle, BookOpen
+  CheckCircle2, Database, Cpu, Zap, Circle, BookOpen, ChevronDown
 } from 'lucide-react';
 import { usePrivacySettings } from '@/hooks/usePrivacySettings';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,15 @@ function generateId() {
 // Stream progress stage definition
 // ─────────────────────────────────────────────────────────────────────────────
 type Stage = 'idle' | 'thinking' | 'generating' | 'executing' | 'done' | 'error';
+import { Bot, User, Settings2, Plus, ArrowRight } from 'lucide-react';
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  thought?: string;
+}
 
 interface ProgressStep {
   id: Stage;
@@ -47,15 +56,49 @@ const STAGES: ProgressStep[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 // StreamingText — renders text with a blinking cursor as tokens arrive
 // ─────────────────────────────────────────────────────────────────────────────
-function StreamingText({ text, isDone }: { text: string; isDone: boolean }) {
+function StreamingText({ text, thought, isDone }: { text: string; thought?: string; isDone: boolean }) {
   return (
-    <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-headings:mb-4 prose-headings:mt-8 first:prose-headings:mt-0">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {text}
-      </ReactMarkdown>
-      {!isDone && (
-        <span className="inline-block w-2 h-5 bg-primary ml-1 animate-pulse align-middle" />
+    <div className="space-y-4">
+      {thought && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full"
+        >
+          <details className="group border border-border/50 bg-muted/20 rounded-md overflow-hidden" open={!isDone}>
+            <summary className="flex cursor-pointer items-center justify-between p-3 text-xs font-medium text-muted-foreground hover:bg-muted/30 transition-colors">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded flex items-center justify-center bg-primary/10">
+                  <Cpu className="w-3 h-3 text-primary/70 animate-pulse" />
+                </div>
+                <span>AI Reasoning Process</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {!isDone && <Loader2 className="w-3 h-3 animate-spin opacity-50" />}
+                <span className="text-[10px] opacity-60 group-open:hidden transition-opacity">
+                  Click to expand
+                </span>
+                <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
+              </div>
+            </summary>
+            <div className="p-4 pt-0 border-t border-border/30 bg-muted/5">
+              <div className="mt-3 font-mono text-[11px] leading-relaxed text-muted-foreground/90 whitespace-pre-wrap selection:bg-primary/20">
+                {thought}
+                {!isDone && <span className="inline-block w-1.5 h-3 bg-primary/40 ml-1 animate-pulse" />}
+              </div>
+            </div>
+          </details>
+        </motion.div>
       )}
+
+      <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-headings:mb-4 prose-headings:mt-8 first:prose-headings:mt-0">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {text}
+        </ReactMarkdown>
+        {!isDone && text && (
+          <span className="inline-block w-2 h-5 bg-primary ml-1 animate-pulse align-middle" />
+        )}
+      </div>
     </div>
   );
 }
@@ -120,6 +163,7 @@ export default function AIReports() {
 
   // Streaming state
   const [streamingText, setStreamingText] = useState('');
+  const [streamingThought, setStreamingThought] = useState('');
   const [streamStage, setStreamStage] = useState<Stage>('idle');
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -188,6 +232,7 @@ export default function AIReports() {
 
     setIsStreaming(true);
     setStreamingText('');
+    setStreamingThought('');
     setStreamStage('thinking');
     setGeneratedReport(null);
 
@@ -246,30 +291,42 @@ Format tanggapan Anda sebagai laporan markdown komprehensif dalam Bahasa Indones
         for (const line of lines) {
           if (!line.trim()) continue;
 
-          // Kita hanya memproses baris data:
           if (line.startsWith('data: ')) {
             const data = line.replace('data: ', '');
             
             try {
+              if (data === '[DONE]') {
+                setStreamStage('done');
+                break;
+              }
+
               const parsed = JSON.parse(data);
               if (typeof parsed === 'object' && parsed !== null) {
-                if (parsed.stage) {
+                if (parsed.event === 'thought' && parsed.data) {
+                  let thoughtContent = '';
+                  try {
+                    const inner = JSON.parse(parsed.data);
+                    thoughtContent = inner.thought || parsed.data;
+                  } catch(e) {
+                    thoughtContent = parsed.data;
+                  }
+                  setStreamingThought(prev => prev + thoughtContent);
+                  setStreamStage('thinking');
+                } else if (parsed.event === 'message' && parsed.data) {
+                  fullContent += parsed.data;
+                  setStreamingText(fullContent);
+                  if (streamStage !== 'generating') setStreamStage('generating');
+                } else if (parsed.stage) {
                   setStreamStage(parsed.stage as Stage);
-                } else if (parsed.message && parsed.message.includes('complete')) {
-                  setStreamStage('done');
+                } else if (parsed.event === 'error') {
+                  const errObj = JSON.parse(parsed.data);
+                  throw new Error(errObj.error || 'Stream error');
                 }
-              } else if (typeof parsed === 'string') {
-                // Token event (parsed adalah string tanpa tanda kutip bocor)
-                fullContent += parsed;
-                setStreamingText(fullContent);
-                setStreamStage('generating');
-              } else {
-                fullContent += String(parsed);
-                setStreamingText(fullContent);
               }
-            } catch {
-              // Jika data tidak bisa di-parse JSON, tambahkan raw (kecuali [DONE])
+            } catch (e) {
+              // Fallback for non-JSON or malformed data lines
               if (data !== '[DONE]') {
+                // If it looks like raw message content
                 fullContent += data;
                 setStreamingText(fullContent);
                 setStreamStage('generating');
@@ -282,14 +339,30 @@ Format tanggapan Anda sebagai laporan markdown komprehensif dalam Bahasa Indones
       // Stream selesai, simpan laporan ke database
       if (fullContent.trim() && !abortRef.current?.signal.aborted) {
         setStreamStage('done');
+        
+        // Manual extraction fallback for summary fields from markdown if they are not structured
+        const extractList = (header: string) => {
+          const regex = new RegExp(`## ${header}[\\s\\S]*?(?=##|$)`, 'i');
+          const match = fullContent.match(regex);
+          if (!match) return [];
+          return match[0]
+            .split('\n')
+            .filter(line => line.trim().startsWith('-') || line.trim().match(/^\d+\./))
+            .map(line => line.replace(/^[-\d.\s]+/, '').trim())
+            .slice(0, 5);
+        };
+
+        const decisions = extractList('Temuan Utama');
+        const recommendations = extractList('Rekomendasi');
+
         const report: Report = {
           id: generateId(),
           userId: user?.id || '',
-          title: `${dataset.name} Analysis Report`,
+          title: fullContent.match(/^# (.*)/m)?.[1] || `${dataset.name} Analysis Report`,
           content: fullContent,
           story: '',
-          decisions: [],
-          recommendations: [],
+          decisions: decisions.length > 0 ? decisions : [],
+          recommendations: recommendations.length > 0 ? recommendations : [],
           chartConfigs: [],
           datasetId: selectedDataset,
           createdAt: new Date(),
@@ -526,8 +599,12 @@ Format tanggapan Anda sebagai laporan markdown komprehensif dalam Bahasa Indones
               ref={streamBoxRef}
               className="p-6 max-h-[520px] overflow-y-auto bg-background/50"
             >
-              {streamingText ? (
-                <StreamingText text={streamingText} isDone={!isStreaming} />
+              {(streamingText || streamingThought) ? (
+                <StreamingText 
+                  text={streamingText} 
+                  thought={streamingThought}
+                  isDone={!isStreaming} 
+                />
               ) : (
                 <div className="flex items-center gap-3 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />

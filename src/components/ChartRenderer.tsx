@@ -321,76 +321,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       );
     }
 
-    if (chartType === 'gauge') {
-      if (!dataset || !yAxis) return <EmptyChart msg="Pilih Dataset dan Y-Axis untuk melihat Gauge" />;
-      const sum = dataset.data.map((r: any) => Number(r[yAxis])).filter((n: any) => !isNaN(n)).reduce((a: number, b: number) => a + b, 0) || 0;
-      const gaugeMax = sum > 0 ? Math.pow(10, Math.ceil(Math.log10(sum))) : 100;
-      const option = {
-        backgroundColor: 'transparent',
-        tooltip: { formatter: '{a} <br/>{b} : {c}' },
-        series: [{
-          name: chartTitle || 'KPI',
-          type: 'gauge',
-          max: gaugeMax,
-          progress: { show: true, width: 18, itemStyle: { color: '#0ea5e9' } },
-          axisLine: { lineStyle: { width: 18, color: [[1, '#334155']] } },
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisLabel: { show: false },
-          detail: { valueAnimation: true, fontSize: 30, color: '#f8fafc', formatter: '{value}' },
-          data: [{ value: sum, name: yAxis }]
-        }]
-      };
-      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
-    }
 
-    if (chartType === 'sunburst') {
-      if (!dataset || !xAxis || !groupBy || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, Y-Axis, dan Group By untuk Sunburst" />;
-      const groups = new Map<string, Map<string, number>>();
-      dataset.data.forEach((row: any) => {
-        const parent = formatValue(row[xAxis] || 'Unknown');
-        const child = formatValue(row[groupBy] || 'Unknown');
-        const val = Number(row[yAxis]) || 0;
-        if (!groups.has(parent)) groups.set(parent, new Map());
-        const childMap = groups.get(parent)!;
-        childMap.set(child, (childMap.get(child) || 0) + val);
-      });
-      const sunburstData = Array.from(groups.entries()).map(([parentName, childMap]) => ({
-        name: parentName,
-        children: Array.from(childMap.entries()).map(([childName, val]) => ({ name: childName, value: val }))
-      }));
-      const option = {
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'item', backgroundColor: '#0f172a', borderColor: '#334155', textStyle: { color: '#f8fafc' }, borderRadius: 8 },
-        series: [{ type: 'sunburst', data: sunburstData, radius: [0, '90%'], itemStyle: { borderRadius: 4, borderWidth: 2, borderColor: '#0f172a' }, label: { show: false } }]
-      };
-      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
-    }
-
-    if (chartType === 'sankey') {
-      if (!dataset || !xAxis || !groupBy || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, Y-Axis, dan Group By untuk Sankey" />;
-      const nodesSet = new Set<string>();
-      const linksMap = new Map<string, number>();
-      dataset.data.forEach((row: any) => {
-        const source = formatValue(row[xAxis] || 'Unknown');
-        const target = formatValue(row[groupBy] || 'Unknown');
-        const val = Number(row[yAxis]) || 0;
-        nodesSet.add(source);
-        nodesSet.add(target);
-        const key = `${source}->${target}`;
-        linksMap.set(key, (linksMap.get(key) || 0) + val);
-      });
-      const sankeyData = {
-        nodes: Array.from(nodesSet).map(name => ({ name })),
-        links: Array.from(linksMap.entries()).map(([key, value]) => { const [source, target] = key.split('->'); return { source, target, value }; })
-      };
-      const option = {
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'item', backgroundColor: '#0f172a', borderColor: '#334155', textStyle: { color: '#f8fafc' }, borderRadius: 8 },
-        series: [{ type: 'sankey', data: sankeyData.nodes, links: sankeyData.links, emphasis: { focus: 'adjacency' }, nodeAlign: 'justify', lineStyle: { color: 'source', curveness: 0.5 }, itemStyle: { borderColor: '#0f172a', borderWidth: 1 } }]
-      };
-      return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} />;
-    }
 
     if (chartType === 'combo') {
       if (!dataset || !xAxis || !yAxis) return <EmptyChart msg="Pilih Dataset, X-Axis, dan Y-Axis (serta opsional Group By) untuk Combo Chart" />;

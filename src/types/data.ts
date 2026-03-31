@@ -110,6 +110,9 @@ export interface Widget {
     headers?: { key: string; value: string }[];
     bodyTemplate?: string;
   };
+
+  // AI Persistence
+  chartId?: string; // Reference to SavedChart ID
 }
 
 export interface DashboardConfig {
@@ -159,9 +162,10 @@ export interface DataStory {
   userId: string;
   datasetId?: string;
   title: string;
-  content: string; // Bisa berisi String Markdown lama (legacy) atau Stringified JSON dari StorySlide[]
+  content: string; // Legacy text content
+  slides?: StorySlide[]; // Structured slides for Layout-Aware reports
   insights: string[];
-  charts: any[];
+  charts: any[]; // Legacy charts
   createdAt: string | Date;
 }
 
