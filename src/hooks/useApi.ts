@@ -23,6 +23,7 @@ import {
     drillConfigApi,
     embedApi,
     settingsApi,
+    type DataStory,
     type DataQueryParams,
     type KPICreate,
     type AlertCreate,
@@ -189,10 +190,11 @@ export function useGenerateReport() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Data Stories
 // ─────────────────────────────────────────────────────────────────────────────
-export function useStories() {
-    return useQuery({
+export function useStories(options?: any) {
+    return useQuery<DataStory[]>({
         queryKey: ['stories'],
         queryFn: () => storyApi.list().then((r) => r.data.data || []),
+        ...options
     });
 }
 
@@ -317,13 +319,14 @@ export function useAskData() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Saved Charts
 // ─────────────────────────────────────────────────────────────────────────────
-import { chartApi, pipelineApi, connectionApi, type SavedChartCreate, type PipelineCreate, type ConnectionCreate } from '@/lib/api';
+import { chartApi, pipelineApi, connectionApi, type SavedChart, type SavedChartCreate, type PipelineCreate, type ConnectionCreate } from '@/lib/api';
 
-export function useCharts(datasetId?: string) {
-    return useQuery({
+export function useCharts(datasetId?: string, options?: any) {
+    return useQuery<SavedChart[]>({
         queryKey: ['charts', datasetId],
         queryFn: () => chartApi.list(datasetId).then((r) => r.data.data || []),
         staleTime: 1000 * 60,
+        ...options
     });
 }
 
