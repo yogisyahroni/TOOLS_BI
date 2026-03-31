@@ -512,6 +512,7 @@ export default function StoryPresentation() {
                 totalSlides={slides.length}
                 savedCharts={savedCharts}
                 token={token}
+                publicCharts={publicCharts}
               />
             )}
           </div>
