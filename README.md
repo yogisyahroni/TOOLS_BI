@@ -23,37 +23,37 @@ We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with
 - **Ask Data (NL2SQL)**: Chat with your data. A highly optimized AI inference engine converts natural language to optimized SQL queries and automatically renders the appropriate charts.
 - **Hybrid Prompt Refiner (✨)**: One-click "Polishing" of natural language inputs. Automatically transforms raw user queries into professional, unambiguous instructions tailored to SQL or Report contexts.
 - **Automated Follow-up Suggestions**: Predictive "Suggestion Pills" that appear after every AI response, guiding users toward deeper analysis or alternate visualization styles.
-- **AI Reports & Data Stories**: Automatically generates executive summaries and explanatory narratives from raw datasets or specific visualizations.
-- **Enterprise Data Assistant**: Context-aware AI assistant integrated directly into the SQL Query Editor and ETL pipelines to aid in complex logic formulation and debugging.
+- **AI Reports & Data Stories**: Otomatis menghasilkan ringkasan eksekutif dan narasi penjelasan dari dataset mentah. Kini mendukung **Mode Presentasi Interaktif** (Tableau-style) yang dapat dibagikan secara publik.
+- **Enterprise Data Assistant**: Asisten AI yang sadar konteks, terintegrasi langsung ke dalam Editor Query SQL dan pipeline ETL untuk membantu formulasi logika kompleks dan debugging.
 
 ### 🛠️ Data Engineering & Modeling
 
-- **Visual ETL & Pipeline Builder**: A node-based, drag-and-drop interface for Extracting, Transforming, and Loading (ETL) your data.
-- **Dynamic Resource-Aware Chunking (✨)**: The backend automatically monitors available system RAM in real-time and adjusts processing speeds/batch sizes dynamically. This ensures 100% uptime even on resource-constrained servers (like Render Free Tier) by preventing OOM crashes during massive data imports.
-- **Checkpoint & Auto-Resume**: Progress is persisted after every batch. If the server restarts (OOM/Cold-start), interrupted pipelines automatically resume from the last successful checkpoint.
-- **Smart Schema & DB Diagram (ERD)**: Automated database profiling to visualize table relationships, foreign keys, and constraints perfectly.
-- **Data Modeling & calculated Fields**: Add custom business logic, derived metrics, and dynamic calculated columns.
-- **Data Profiling**: Deep insights instantly into your datasets (null distributions, min/max metrics, categorical breakdowns).
-- **Data Refresh**: Set up automated synchronization schedules for keeping datasets in parity with live sources.
-- **External Connections**: Out-of-the-box support to plug into external PostgreSQL, MySQL, SQL Server, Snowflake, and BigQuery instances.
-- **Data Upload**: Native parsing and uploads of massive CSV, JSON, and Excel documents.
+- **Visual ETL & Pipeline Builder**: Antarmuka drop-and-drag berbasis node untuk Ekstraksi, Transformasi, dan Pemuatan (ETL) data Anda.
+- **Dynamic Resource-Aware Chunking (✨)**: Backend secara otomatis memantau RAM sistem secara real-time dan menyesuaikan kecepatan pemrosesan/ukuran batch secara dinamis. Ini menjamin waktu aktif 100% bahkan pada server dengan sumber daya terbatas (seperti Render Free Tier) dengan mencegah crash OOM selama impor data massal.
+- **Checkpoint & Auto-Resume**: Progres disimpan setelah setiap batch. Jika server restart, pipeline yang terhenti akan otomatis dilanjutkan dari titik pemeriksaan terakhir yang berhasil.
+- **Smart Schema & DB Diagram (ERD)**: Pembuatan profil database otomatis untuk memvisualisasikan hubungan tabel, kunci asing, dan batasan secara sempurna.
+- **Data Modeling & calculated Fields**: Tambahkan logika bisnis kustom, metrik turunan, dan kolom kalkulasi dinamis.
+- **Data Profiling**: Wawasan instan ke dalam dataset Anda (distribusi null, metrik min/max, pengelompokan kategorikal).
+- **Data Refresh**: Siapkan jadwal sinkronisasi otomatis untuk menjaga paritas dataset dengan sumber asli secara live.
+- **External Connections**: Dukungan langsung untuk terhubung ke instans eksternal PostgreSQL, MySQL, SQL Server, Snowflake, dan BigQuery.
+- **Data Upload**: Parsing dan unggahan asli dokumen CSV, JSON, dan Excel berukuran besar.
 
 ### 📊 Advanced Visualization & Dashboarding
 
-- **Chart & Dashboard Builder**: Responsive, grid-based drag-and-drop canvas supporting an expansive library of rich interactable elements.
-- **Geo-Visualization**: Interactive spatial mapping for regional performance. Powered by MapLibre and Deck.gl for millions of data points.
-- **Pivot Tables**: Advanced multi-dimensional tabular operations to slice and dice categorical data natively in the browser.
-- **KPI Scorecards**: Executive metric tracking, benchmarking, and real-time comparative analysis against targets.
-- **Interactive Drill-Downs & Cross-Filtering**: Effortlessly narrow down details. Clicking an element in one chart automatically filters every other chart on the dashboard.
-- **Conditional Formatting**: Excel-like cell formatting logic to highlight anomalies visually.
+- **Chart & Dashboard Builder**: Kanvas drag-and-drop berbasis grid yang responsif, mendukung perpustakaan elemen interaktif yang luas.
+- **Geo-Visualization**: Pemetaan spasial interaktif untuk kinerja regional. Didukung oleh MapLibre dan Deck.gl untuk jutaan titik data.
+- **Pivot Tables**: Operasi tabular multi-dimensi canggih untuk membedah data kategorikal secara asli di browser.
+- **KPI Scorecards**: Pelacakan metrik eksekutif, benchmarking, dan analisis komparatif real-time terhadap target.
+- **Interactive Drill-Downs & Cross-Filtering**: Mempersempit detail dengan mudah. Mengklik elemen di satu chart secara otomatis memfilter setiap chart lainnya di dashboard.
+- **Conditional Formatting**: Logika pemformatan sel seperti Excel untuk menyoroti anomali secara visual.
 
 ### 🔐 Enterprise Governance & Security
 
-- **Row-Level Security (RLS) & Data Privacy**: Highly granular access control policies to ensure multi-tenant safety and PII protection.
-- **Embed & Share (Iframe)**: Secure, signed URLs and mechanisms to embed specific charts or full dashboards into external company portals.
-- **Scheduled Reports**: Push automated dashboards as PDFs or images via Email or Webhooks.
-- **Annotations & Alerts**: Set up threshold-based alerts (e.g., "Alert me if revenue drops below $5k") and annotate specific chart peaks for team collaboration.
-- **Bookmarks & Report Templates**: Save specific states of filters/parameters, and reuse standardized report UI layouts instantly.
+- **Row-Level Security (RLS) & Data Privacy**: Kebijakan kontrol akses yang sangat granular untuk memastikan keamanan multi-tenant dan perlindungan PII.
+- **Embed & Share (Iframe & Story)**: Mekanisme URL bertanda tangan yang aman untuk menyematkan chart tertentu, dashboard penuh, atau **Presentasi Data Story** ke portal eksternal. Mendukung *metadata preloading* untuk visualisasi publik tanpa login.
+- **Scheduled Reports**: Kirim dashboard otomatis sebagai PDF atau gambar melalui Email atau Webhook.
+- **Annotations & Alerts**: Siapkan peringatan berbasis ambang batas dan anotasi pada puncak chart tertentu untuk kolaborasi tim.
+- **Bookmarks & Report Templates**: Simpan status filter/parameter tertentu, dan gunakan kembali tata letak UI laporan standar secara instan.
 
 ### 📂 Supported External Databases & Formats
 
