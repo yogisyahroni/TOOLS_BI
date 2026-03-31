@@ -42,8 +42,8 @@ const SECTION_TO_CHART_TYPE: Partial<Record<TemplateSection['type'], WidgetType>
   stacked_bar: 'bar',
   horizontal_bar: 'horizontal_bar',
   trend_line: 'line',
-  pivot_table: 'bar',   // Render as bar chart (grouped) — more reliable than pivot_table renderer
-  table: 'bar',
+  pivot_table: 'pivot_table',  // ChartRenderer now handles plain yAxis (no aggFunc: prefix needed)
+  table: 'pivot_table',
   kpi_cards: 'stat',
   text: 'text',
   filter_panel: 'text',
@@ -149,11 +149,12 @@ STRICT RULES:
 3. For kpi_cards (stat type): xAxis="", yAxis="" (show aggregated metrics automatically)
 4. For horizontal_bar: xAxis = numeric column (the bar length), yAxis = text/category column (the label)
 5. For pie/donut: xAxis = category column (labels), yAxis = numeric column (slice values)
-6. fallbackToText=true ONLY if no suitable columns exist at all — this must be rare (< 10% of charts)
-7. When in doubt, ALWAYS assign the best-fit columns rather than using fallbackToText
-8. Write insight in Indonesian — 1-2 sentences describing what this chart reveals
-9. Title must be specific and professional (e.g. "Total Order per Kota" not "Bar Chart")
-10. IMPORTANT: Use EXACT column names from the dataset — do not invent column names
+6. For pivot_table: xAxis = row category column (e.g. "City", "Status"), yAxis = numeric value column (PLAIN column name, e.g. "AWB" — NOT "sum:AWB"), groupBy = optional column for column breakdown
+7. fallbackToText=true ONLY if no suitable columns exist at all — this must be rare (< 10% of charts)
+8. When in doubt, ALWAYS assign the best-fit columns rather than using fallbackToText
+9. Write insight in Indonesian — 1-2 sentences describing what this chart reveals
+10. Title must be specific and professional (e.g. "Total Order per Kota" not "Bar Chart")
+11. IMPORTANT: Use EXACT column names from the dataset — do not invent column names
 
 Respond ONLY with a valid JSON array — no explanation, no markdown:
 [
