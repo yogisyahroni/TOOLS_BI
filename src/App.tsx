@@ -54,7 +54,8 @@ const EmbedViewer      = lazy(() => import("./pages/EmbedViewer"));
 // ─── Medium pages (15–25 KB) ──────────────────────────────────────────────────
 const DataExplorer      = lazy(() => import("./pages/DataExplorer"));
 const PivotTable        = lazy(() => import("./pages/PivotTable"));
-const DataStories       = lazy(() => import("./pages/DataStories"));
+const DataStories            = lazy(() => import("./pages/DataStories"));
+const StoryPresentation      = lazy(() => import("./pages/StoryPresentation"));
 const DataProfiling     = lazy(() => import("./pages/DataProfiling"));
 const CalculatedFields  = lazy(() => import("./pages/CalculatedFields"));
 const ReportTemplates   = lazy(() => import("./pages/ReportTemplates"));
@@ -153,6 +154,7 @@ const App = () => (
               {/* Public routes */}
               <Route path="/login"               element={<Login />} />
               <Route path="/register"            element={<Register />} />
+              <Route path="/stories/view/:storyId" element={<StoryPresentation />} />
               <Route path="/embed/view/:token"   element={<EmbedViewer />} />
               {/* Standalone 404 */}
               <Route path="/not-found"           element={<NotFound />} />

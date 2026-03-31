@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { BookOpen, Sparkles, Loader2, Trash2, Eye, Plus, Share2, Download, ChevronLeft, ChevronRight, PieChart, BarChart3, LineChart, AreaChart, ScatterChart as ScatterIcon, Radar, TrendingUp, Grid3X3, Flame, Box, LayoutGrid as LayoutGridIcon, Gauge, SunMedium, Network, Combine, Edit2, Zap, Type, Heading1, BarChart2, Info } from 'lucide-react';
+import { BookOpen, Sparkles, Loader2, Trash2, Eye, Plus, Share2, Download, ChevronLeft, ChevronRight, PieChart, BarChart3, LineChart, AreaChart, ScatterChart as ScatterIcon, Radar, TrendingUp, Grid3X3, Flame, Box, LayoutGrid as LayoutGridIcon, Gauge, SunMedium, Network, Combine, Edit2, Zap, Type, Heading1, BarChart2, Info, ExternalLink } from 'lucide-react';
 import { usePDF } from 'react-to-pdf';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -301,28 +301,33 @@ export default function DataStories() {
     [stories, openStoryId]
   );
 
-  // Auto-open modal jika storyId ada di URL (share link)
+  // Auto-open modal dari URL jika ada ?preview=id (hanya modal, bukan lihat presentasi)
   useEffect(() => {
-    const sId = searchParams.get('storyId');
+    const sId = searchParams.get('preview');
     if (sId && stories.length > 0) {
       const found = stories.find((s: DataStory) => s.id === sId);
       if (found) setOpenStoryId(sId);
     }
   }, [searchParams, stories]);
 
-  // FIX: Share — copy URL ke clipboard, with navigator.share fallback
+  // Share — share link langsung ke halaman presentasi full-screen
   const handleShare = (e: React.MouseEvent, storyId: string) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/stories?storyId=${storyId}`;
+    const url = `${window.location.origin}/stories/view/${storyId}`;
     if (navigator.share) {
       navigator.share({ title: 'Data Story', url }).catch(() => {
         navigator.clipboard.writeText(url);
-        toast({ title: 'Link disalin', description: 'Link story telah disalin ke clipboard.' });
+        toast({ title: 'Link presentasi disalin!', description: 'Bagikan ke client/divisi terkait.' });
       });
     } else {
       navigator.clipboard.writeText(url);
-      toast({ title: 'Link disalin!', description: url });
+      toast({ title: 'Link presentasi disalin!', description: url });
     }
+  };
+
+  // Buka presentasi full-screen di tab baru (Tableau Stories style)
+  const handleOpenPresentation = (storyId: string) => {
+    window.open(`/stories/view/${storyId}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleGenerateAI = async () => {
@@ -559,8 +564,14 @@ export default function DataStories() {
                     <Sparkles className="w-3 h-3 text-primary" />
                     {formatDistanceToNow(new Date(story.createdAt), { addSuffix: true })}
                   </div>
-                  {/* FIX: "Lihat Presentasi" kini membuka modal terpusat */}
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenStoryId(story.id)}>
+                  {/* "Lihat Presentasi" → new tab full screen (Tableau Stories style) */}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={() => handleOpenPresentation(story.id)}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
                     Lihat Presentasi
                   </Button>
                 </div>
