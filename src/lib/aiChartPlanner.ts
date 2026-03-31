@@ -42,8 +42,8 @@ const SECTION_TO_CHART_TYPE: Partial<Record<TemplateSection['type'], WidgetType>
   stacked_bar: 'bar',
   horizontal_bar: 'horizontal_bar',
   trend_line: 'line',
-  pivot_table: 'pivot_table',
-  table: 'pivot_table',
+  pivot_table: 'bar',   // Render as bar chart (grouped) — more reliable than pivot_table renderer
+  table: 'bar',
   kpi_cards: 'stat',
   text: 'text',
   filter_panel: 'text',
@@ -235,7 +235,6 @@ Respond ONLY with a valid JSON array — no explanation, no markdown:
       if (!resolvedY) {
         resolvedY = firstNumCol;
       }
-      // If we auto-filled and still have valid columns, it's NOT a fallback
       // Only mark fallback if there's truly no columns at all
     }
 

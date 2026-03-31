@@ -229,7 +229,17 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       
       const rowField = xAxis;
       const colField = groupBy;
-      const [aggFunc, valueField] = (yAxis || '').split(':');
+      
+      // Support both formats:
+      // - "sum:AWB" (from PivotTable page — explicit aggFunc:column)
+      // - "AWB"    (from AI Story Generator — plain column name, default to sum)
+      let aggFunc = 'sum';
+      let valueField = yAxis || '';
+      if ((yAxis || '').includes(':')) {
+        const parts = (yAxis || '').split(':');
+        aggFunc = parts[0];
+        valueField = parts[1];
+      }
       
       if (!rowField || !valueField) return <EmptyChart msg="Pivot Table requires Row and Value fields." />;
 
