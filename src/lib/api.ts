@@ -855,7 +855,7 @@ export interface EmbedToken {
     id: string;
     userId: string;
     resourceId: string;
-    resourceType: 'dashboard' | 'chart';
+    resourceType: 'dashboard' | 'chart' | 'story';
     showToolbar: boolean;
     width: number;
     height: number;
@@ -867,7 +867,7 @@ export interface EmbedToken {
 
 export interface EmbedTokenGenerate {
     resourceId: string;
-    resourceType: 'dashboard' | 'chart';
+    resourceType: 'dashboard' | 'chart' | 'story';
     showToolbar: boolean;
     width: number;
     height: number;

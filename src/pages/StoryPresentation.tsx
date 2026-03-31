@@ -16,19 +16,21 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import {
   ChevronLeft, ChevronRight, Download, Share2, ArrowLeft,
   BarChart3, LineChart, PieChart, AreaChart, LayoutGridIcon,
   BarChart2, TrendingUp, Grid3X3, Flame, Box, Gauge, SunMedium,
   Network, Combine, Edit2, Zap, Radar, ScatterChart as ScatterIcon,
   Loader2, Info, Play, Pause, BookOpen, ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import { usePDF } from 'react-to-pdf';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useStories, useCharts, useDatasetData } from '@/hooks/useApi';
-import type { DataStory } from '@/lib/api';
+import { API_BASE, type DataStory } from '@/lib/api';
 import { ChartRenderer } from '@/components/ChartRenderer';
 import type { SlideWidget } from '@/types/data';
 import type { Slide } from '@/components/SlideBuilder';
@@ -75,14 +77,43 @@ const parseStoryContent = (content: string): ExtendedSlide[] => {
 };
 
 // ─── Chart widget card ─────────────────────────────────────────────────────────
-function PresentationChartCard({ widget, savedCharts }: { widget: SlideWidget; savedCharts: any[] }) {
+function PresentationChartCard({ widget, savedCharts, token }: { widget: SlideWidget; savedCharts: any[]; token?: string }) {
   const savedChart = useMemo(() => {
     if (widget.chartId) return savedCharts.find((c: any) => String(c.id) === String(widget.chartId));
     return null;
   }, [widget.chartId, savedCharts]);
 
   const datasetId = widget.datasetId || savedChart?.datasetId || '';
-  const { data: rawData, isLoading } = useDatasetData(datasetId, { limit: 10000 });
+  
+  // Public data state
+  const [publicData, setPublicData] = useState<any>(null);
+  const [publicLoading, setPublicLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token || !datasetId) return;
+    const fetchPublicData = async () => {
+      try {
+        setPublicLoading(true);
+        const res = await axios.get(`${API_BASE}/embed/data/${datasetId}?token=${token}`);
+        setPublicData(res.data);
+      } catch (err) {
+        console.error('Error fetching public chart data:', err);
+      } finally {
+        setPublicLoading(false);
+      }
+    };
+    fetchPublicData();
+  }, [token, datasetId]);
+
+  // Private data hook
+  const { data: privateData, isLoading: privateLoading } = useDatasetData(
+    datasetId, 
+    { limit: 10000 }, 
+    { enabled: !token && !!datasetId }
+  );
+
+  const rawData = token ? publicData : privateData;
+  const isLoading = token ? publicLoading : privateLoading;
 
   const dataset = useMemo(() => ({ data: rawData?.data || [] }), [rawData]);
   const columns = useMemo(() => rawData?.columns || [], [rawData]);
@@ -117,21 +148,37 @@ function PresentationChartCard({ widget, savedCharts }: { widget: SlideWidget; s
   }
 
   const Icon = WIDGET_TYPES.find(wt => wt.id === chartType)?.icon || BarChart3;
-  const heightClass = widget.height === 'sm' ? 'h-40' : widget.height === 'lg' ? 'h-80' : 'h-60';
-  const colSpan = widget.width === 'full' ? 'col-span-2' : '';
+  const heightClass = widget.height === 'sm' ? 'h-48' : widget.height === 'lg' ? 'h-96' : 'h-72';
+  
+  const widthMap = {
+    'full': 'col-span-12',
+    'half': 'col-span-12 md:col-span-6',
+    'third': 'col-span-12 md:col-span-4',
+    'quarter': 'col-span-12 md:col-span-6 lg:col-span-3'
+  };
+  const colSpan = widthMap[widget.width] || 'col-span-12';
 
   return (
-    <div className={`rounded-xl border border-white/10 bg-[#0f172a]/60 backdrop-blur flex flex-col overflow-hidden shadow-lg ${colSpan}`}>
-      <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2 border-b border-white/10">
-        <div>
-          <h4 className="font-semibold text-sm text-white leading-tight">{widget.title}</h4>
+    <div className={`group relative rounded-2xl border border-white/5 bg-[#0f172a]/40 backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5 ${colSpan}`}>
+      {/* Decorative gradient corner */}
+      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      
+      <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h4 className="font-bold text-sm text-white/90 tracking-tight leading-tight group-hover:text-primary transition-colors">
+            {widget.title}
+          </h4>
           {widget.insight && (
-            <p className="text-xs text-white/50 mt-0.5 line-clamp-2">{widget.insight}</p>
+            <p className="text-[11px] text-white/40 font-medium leading-relaxed line-clamp-2 max-w-[90%] italic">
+              "{widget.insight}"
+            </p>
           )}
         </div>
-        <Icon className="w-4 h-4 shrink-0 text-cyan-400/70 mt-0.5" />
+        <div className="p-2 rounded-lg bg-white/5 border border-white/5 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all">
+          <Icon className="w-3.5 h-3.5 text-white/40 group-hover:text-primary transition-colors" />
+        </div>
       </div>
-      <div className={`${heightClass} p-2 relative`}>
+      <div className={`${heightClass} p-4 pt-1 relative`}>
         {isLoading ? (
           <div className="flex items-center justify-center w-full h-full">
             <Loader2 className="w-6 h-6 animate-spin text-cyan-400/50" />
@@ -165,11 +212,13 @@ function PresentationSlide({
   slideNumber,
   totalSlides,
   savedCharts,
+  token,
 }: {
   slide: ExtendedSlide;
   slideNumber: number;
   totalSlides: number;
   savedCharts: any[];
+  token?: string;
 }) {
   const hasAIWidgets = Array.isArray(slide.slideWidgets) && slide.slideWidgets.length > 0;
 
@@ -191,9 +240,9 @@ function PresentationSlide({
       {/* Slide body */}
       <div className="flex-1">
         {hasAIWidgets ? (
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             {slide.slideWidgets!.map((widget) => (
-              <PresentationChartCard key={widget.id} widget={widget} savedCharts={savedCharts} />
+              <PresentationChartCard key={widget.id} widget={widget} savedCharts={savedCharts} token={token} />
             ))}
           </div>
         ) : (
@@ -211,8 +260,18 @@ function PresentationSlide({
 // ─── Main Presentation Page ────────────────────────────────────────────────────
 export default function StoryPresentation() {
   const { storyId } = useParams<{ storyId: string }>();
-  const { data: stories = [], isLoading } = useStories();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const token = searchParams.get('token') || undefined;
+
+  const [publicStory, setPublicStory] = useState<DataStory | null>(null);
+  const [publicLoading, setPublicLoading] = useState(false);
+  const [publicError, setPublicError] = useState<string | null>(null);
+
+  // Authenticated hooks
+  const { data: stories = [], isLoading: privateLoading } = useStories();
   const { data: savedCharts = [] } = useCharts();
+  
   const { toast } = useToast();
   const { toPDF, targetRef } = usePDF({ filename: 'Presentation.pdf' });
 
@@ -220,10 +279,36 @@ export default function StoryPresentation() {
   const [autoPlay, setAutoPlay] = useState(false);
   const AUTO_PLAY_INTERVAL = 8000; // 8 detik per slide
 
+  // Public fetch effect
+  useEffect(() => {
+    if (!token) return;
+    const fetchPublicStory = async () => {
+      try {
+        setPublicLoading(true);
+        const res = await axios.get(`${API_BASE}/embed/view/${token}`);
+        if (res.data.resourceType === 'story' && res.data.resourceData) {
+          setPublicStory(res.data.resourceData);
+        } else {
+          setPublicError('Resource bukan tipe Story atau data tidak ditemukan.');
+        }
+      } catch (err: any) {
+        setPublicError(err.response?.data?.error || 'Gagal memuat story publik.');
+      } finally {
+        setPublicLoading(false);
+      }
+    };
+    fetchPublicStory();
+  }, [token]);
+
   const story = useMemo(
-    () => stories.find((s: DataStory) => s.id === storyId) || null,
-    [stories, storyId]
+    () => {
+      if (token) return publicStory;
+      return stories.find((s: DataStory) => s.id === storyId) || null;
+    },
+    [stories, storyId, token, publicStory]
   );
+
+  const isLoading = token ? publicLoading : privateLoading;
 
   const slides = useMemo(
     () => (story ? parseStoryContent(story.content) : []),
@@ -291,13 +376,19 @@ export default function StoryPresentation() {
       <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
         <div className="text-center text-white/60">
           <BookOpen className="w-16 h-16 mx-auto mb-4 text-white/20" />
-          <h2 className="text-xl font-semibold text-white mb-2">Presentasi tidak ditemukan</h2>
-          <p className="text-sm mb-6">Story ini mungkin telah dihapus atau link tidak valid.</p>
-          <Link to="/stories">
-            <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">
-              <ArrowLeft className="w-4 h-4 mr-2" /> Kembali ke Data Stories
-            </Button>
-          </Link>
+          <h2 className="text-xl font-semibold text-white mb-2">
+            {publicError || 'Presentasi tidak ditemukan'}
+          </h2>
+          <p className="text-sm mb-6">
+            {token ? 'Link mungkin tidak valid atau sudah kedaluwarsa.' : 'Story ini mungkin telah dihapus atau link tidak valid.'}
+          </p>
+          {!token && (
+            <Link to="/stories">
+              <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">
+                <ArrowLeft className="w-4 h-4 mr-2" /> Kembali ke Data Stories
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -308,12 +399,19 @@ export default function StoryPresentation() {
       {/* ── Top bar ── */}
       <header className="h-14 bg-[#0f172a]/90 backdrop-blur border-b border-white/10 flex items-center justify-between px-6 shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <Link to="/stories" className="text-white/40 hover:text-white transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
+          {!token && (
+            <Link to="/stories" className="text-white/40 hover:text-white transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+          )}
+          {token && (
+            <div className="text-cyan-400">
+               <ShieldCheck className="w-4 h-4" />
+            </div>
+          )}
           <div className="w-px h-4 bg-white/20" />
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
               <BookOpen className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="text-sm font-semibold text-white truncate max-w-[200px] md:max-w-[400px]">
@@ -345,27 +443,62 @@ export default function StoryPresentation() {
             <Download className="w-3.5 h-3.5" />
             <span className="hidden md:inline text-xs">Export PDF</span>
           </Button>
-          {/* Open in stories list */}
-          <Link to="/stories" target="_self">
-            <Button variant="outline" size="sm"
-              className="border-white/20 text-white/70 hover:bg-white/10 h-8 px-3 text-xs gap-1.5 hidden md:flex">
-              <ExternalLink className="w-3.5 h-3.5" /> Edit
-            </Button>
-          </Link>
+          {/* Open in stories list (Hidden in public mode) */}
+          {!token && (
+            <Link to="/stories" target="_self">
+              <Button variant="outline" size="sm"
+                className="border-white/20 text-white/70 hover:bg-white/10 h-8 px-3 text-xs gap-1.5 hidden md:flex">
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </Button>
+            </Link>
+          )}
         </div>
       </header>
 
+      {/* ── Tabs Navigation (Tableau Style) ── */}
+      {slides.length > 1 && (
+        <div className="bg-[#0f172a]/80 backdrop-blur border-b border-white/5 px-6 overflow-x-auto no-scrollbar scroll-smooth flex shrink-0">
+          <div className="flex gap-1 py-2">
+            {slides.map((s, idx) => {
+              const isActive = idx === currentSlide;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setCurrentSlide(idx)}
+                  className={`
+                    relative px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-300
+                    ${isActive 
+                      ? 'text-white bg-primary/20 border border-primary/30 shadow-[0_0_15px_rgba(45,212,191,0.1)]' 
+                      : 'text-white/40 border border-transparent hover:text-white/70 hover:bg-white/5'
+                    }
+                  `}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full transition-colors ${isActive ? 'bg-primary animate-pulse' : 'bg-white/20'}`} />
+                    {idx + 1}. {s.title}
+                  </span>
+                  {isActive && (
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Main slide area ── */}
-      <main className="flex-1 flex overflow-hidden min-h-0">
+      <main className="flex-1 flex overflow-hidden min-h-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950">
         {/* Slide content */}
-        <div className="flex-1 overflow-y-auto" ref={targetRef}>
-          <div className="min-h-full p-8 md:p-14 max-w-6xl mx-auto">
+        <div className="flex-1 overflow-y-auto custom-scrollbar" ref={targetRef}>
+          <div className="min-h-full p-6 md:p-10 lg:p-12 max-w-7xl mx-auto">
             {slides.length > 0 && (
               <PresentationSlide
                 slide={slides[currentSlide]}
                 slideNumber={currentSlide + 1}
                 totalSlides={slides.length}
                 savedCharts={savedCharts}
+                token={token}
               />
             )}
           </div>

@@ -20,7 +20,7 @@ export interface AIChartPlan {
   sortOrder?: 'asc' | 'desc' | 'none';
   title: string;
   insight: string;
-  width: 'full' | 'half' | 'third';
+  width: 'full' | 'half' | 'third' | 'quarter';
   height?: 'sm' | 'md' | 'lg';
   fallbackToText: boolean;
   fallbackText?: string;
@@ -161,6 +161,7 @@ Respond ONLY with a valid JSON array — no explanation, no markdown:
   {
     "sectionId": "...",
     "chartType": "bar|line|pie|area|horizontal_bar|pivot_table|stat|text",
+    "width": "full|half|third|quarter",
     "xAxis": "exact_column_name",
     "yAxis": "exact_column_name",
     "groupBy": "column_name_or_null",
@@ -257,7 +258,7 @@ Respond ONLY with a valid JSON array — no explanation, no markdown:
       sortOrder: (aiPlan.sortOrder as 'asc' | 'desc' | 'none') || section.config?.sort || 'desc',
       title: (aiPlan.title as string) || section.title,
       insight: (aiPlan.insight as string) || '',
-      width: (section.width as 'full' | 'half' | 'third') || 'half',
+      width: (section.width as 'full' | 'half' | 'third' | 'quarter') || 'half',
       height: section.height,
       fallbackToText: isActuallyFallback,
       fallbackText: (aiPlan.fallbackText as string) || undefined,

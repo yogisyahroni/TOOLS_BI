@@ -36,7 +36,8 @@ import {
     type FormatRuleCreate,
     type CalcFieldCreate,
     type Dashboard,
-    type Report
+    type Report,
+    type DataQueryResult
 } from '@/lib/api';
 
 
@@ -59,11 +60,12 @@ export function useDataset(id: string) {
     });
 }
 
-export function useDatasetData(id: string, params?: DataQueryParams) {
+export function useDatasetData(id: string, params?: DataQueryParams, options?: Partial<UseQueryOptions<DataQueryResult, Error>>) {
     return useQuery({
         queryKey: ['datasets', id, 'data', params],
         queryFn: () => datasetApi.data(id, params).then((r) => r.data),
         enabled: !!id,
+        ...options
     });
 }
 

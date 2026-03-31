@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { motion } from 'framer-motion';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { BookOpen, Sparkles, Loader2, Trash2, Eye, Plus, Share2, Download, ChevronLeft, ChevronRight, PieChart, BarChart3, LineChart, AreaChart, ScatterChart as ScatterIcon, Radar, TrendingUp, Grid3X3, Flame, Box, LayoutGrid as LayoutGridIcon, Gauge, SunMedium, Network, Combine, Edit2, Zap, Type, Heading1, BarChart2, Info, ExternalLink } from 'lucide-react';
 import { usePDF } from 'react-to-pdf';
 import { Button } from '@/components/ui/button';
@@ -111,8 +111,13 @@ function SlideChartCard({ widget, savedCharts }: { widget: SlideWidget; savedCha
     );
   }
 
-  const colSpan = widget.width === 'full' ? 'col-span-2' : '';
-
+  const widthMap = {
+    'full': 'col-span-12',
+    'half': 'col-span-12 md:col-span-6',
+    'third': 'col-span-12 md:col-span-4',
+    'quarter': 'col-span-12 md:col-span-6 lg:col-span-3'
+  };
+  const colSpan = widthMap[widget.width as keyof typeof widthMap] || 'col-span-12';
   // FIX: stat chart type does NOT require xAxis (it aggregates yAxis only)
   const isStatChart = chartType === 'stat';
   const hasRequiredData = datasetId && yAxis && (isStatChart || xAxis);
@@ -132,15 +137,17 @@ function SlideChartCard({ widget, savedCharts }: { widget: SlideWidget; savedCha
         })()}
       </div>
 
-      <div className={`${heightClass} p-2 relative`}>
+      <div className={`${heightClass} p-4 pt-1 relative`}>
         {isLoading ? (
           <div className="flex items-center justify-center w-full h-full">
             <Loader2 className="w-6 h-6 animate-spin text-primary/50" />
           </div>
         ) : !hasRequiredData ? (
-          <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground/50 gap-2">
-            <Info className="w-5 h-5" />
-            <span className="text-xs">Data tidak tersedia</span>
+          <div className="flex flex-col items-center justify-center w-full h-full text-white/20 gap-3">
+            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+              <Info className="w-6 h-6" />
+            </div>
+            <span className="text-xs font-medium tracking-wide uppercase">Data Not Available</span>
           </div>
         ) : (
           <ChartRenderer
@@ -175,7 +182,7 @@ function SlideViewer({ slide, savedCharts }: { slide: ExtendedSlide; savedCharts
 
       <div className="p-6 flex-1">
         {hasAIWidgets ? (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
             {slide.slideWidgets!.map((widget) => (
               <SlideChartCard key={widget.id} widget={widget} savedCharts={savedCharts} />
             ))}
@@ -292,6 +299,7 @@ export default function DataStories() {
   const [isComposing, setIsComposing] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
   const [slides, setSlides] = useState<Slide[]>([{ id: crypto.randomUUID(), title: 'Slide 1', content: '' }]);
+  const navigate = useNavigate();
 
   // FIX: satu controlled state untuk modal presentasi
   const [openStoryId, setOpenStoryId] = useState<string | null>(null);
@@ -310,19 +318,10 @@ export default function DataStories() {
     }
   }, [searchParams, stories]);
 
-  // Share — share link langsung ke halaman presentasi full-screen
+  // Share — buka EmbedShare dengan pre-select story ini (token aman, bisa revoke)
   const handleShare = (e: React.MouseEvent, storyId: string) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/stories/view/${storyId}`;
-    if (navigator.share) {
-      navigator.share({ title: 'Data Story', url }).catch(() => {
-        navigator.clipboard.writeText(url);
-        toast({ title: 'Link presentasi disalin!', description: 'Bagikan ke client/divisi terkait.' });
-      });
-    } else {
-      navigator.clipboard.writeText(url);
-      toast({ title: 'Link presentasi disalin!', description: url });
-    }
+    navigate(`/embed-share?type=story&id=${storyId}`);
   };
 
   // Buka presentasi full-screen di tab baru (Tableau Stories style)

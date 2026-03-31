@@ -319,13 +319,37 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
       const sum = dataset.data.map((r: any) => Number(r[yAxis])).filter((n: any) => !isNaN(n)).reduce((a: number, b: number) => a + b, 0) || 0;
       const count = dataset.data.map((r: any) => Number(r[yAxis])).filter((n: any) => !isNaN(n)).length || 0;
       const avg = count > 0 ? sum / count : 0;
+      
+      const isLargeValue = sum > 999999;
+      
       return (
-        <div className="flex flex-col items-center justify-center h-full text-center">
-          <p className="text-5xl font-bold text-primary">{sum.toLocaleString()}</p>
-          <p className="text-base text-muted-foreground mt-2">Sum of {yAxis}</p>
-          <div className="flex gap-4 mt-4 text-sm text-muted-foreground">
-            <span>Count: {count.toLocaleString()}</span>
-            <span>Avg: {avg.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+        <div className="flex flex-col items-center justify-center h-full text-center p-4">
+          <div className="relative group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-accent/20 rounded-lg blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+            <p className={`${isLargeValue ? 'text-4xl' : 'text-5xl'} font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-white to-white/70 drop-shadow-sm`}>
+              {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(sum)}
+            </p>
+          </div>
+          
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/80 mt-1 cursor-default">
+            Total {yAxis}
+          </p>
+          
+          <div className="w-12 h-0.5 bg-primary/30 my-4 rounded-full" />
+          
+          <div className="grid grid-cols-2 gap-4 w-full max-w-[200px]">
+            <div className="text-center">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-0.5">Average</p>
+              <p className="text-sm font-medium text-foreground/90">
+                {avg.toLocaleString('id-ID', { maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="text-center border-l border-border/50">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-0.5">Records</p>
+              <p className="text-sm font-medium text-foreground/90">
+                {count.toLocaleString('id-ID')}
+              </p>
+            </div>
           </div>
         </div>
       );

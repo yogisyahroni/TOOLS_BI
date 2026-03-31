@@ -124,6 +124,7 @@ function ProtectedLayout() {
           <Route path="/scheduled-reports"element={<ScheduledReports />} />
           <Route path="/rls"              element={<RowLevelSecurity />} />
           <Route path="/embed"            element={<EmbedShare />} />
+          <Route path="/embed-share"      element={<EmbedShare />} />
           <Route path="/export"           element={<ExportPDF />} />
           <Route path="/data-refresh"     element={<DataRefresh />} />
           <Route path="/report-templates" element={<ReportTemplates />} />

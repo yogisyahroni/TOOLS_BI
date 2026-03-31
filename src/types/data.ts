@@ -167,7 +167,7 @@ export interface SlideWidget {
   limit?: number;        // Batasan jumlah data
   sortOrder?: 'asc' | 'desc' | 'none';
   insight?: string;      // Narasi AI untuk widget ini
-  width: 'full' | 'half' | 'third'; // Lebar kolom dalam grid slide
+  width: 'full' | 'half' | 'third' | 'quarter'; // Lebar kolom dalam grid slide
   height?: 'sm' | 'md' | 'lg';
   htmlContent?: string;  // Untuk type 'text' atau 'kpi_cards'
   fallbackText?: string; // Fallback jika AI tidak bisa buat chart
