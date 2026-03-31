@@ -214,38 +214,73 @@ export default function AIReports() {
   const [storyTitle, setStoryTitle] = useState('');
   const [analysisFocus, setAnalysisFocus] = useState('');
 
-  // Dataset data for AI planning
+  // Dataset data untuk sample + AI planning
   const { data: rawDatasetRes, isLoading: isLoadingData } = useDatasetData(
     selectedDatasetId,
-    { limit: 5000 }
+    { limit: 200 }  // 200 baris cukup untuk type inference
   );
 
-  // Kolom dari metadata dataset (sama seperti ChartBuilder)
+  // Kolom dari metadata dataset
   const datasetMeta = useMemo(
     () => datasets.find((d: any) => d.id === selectedDatasetId),
     [datasets, selectedDatasetId]
   );
 
-  // Normalisasi tipe SQL raw → DataColumn standard
-  // Backend bisa return 'int4', 'varchar', 'float8', dll — AI perlu tipe yang jelas
+  const dataSample = useMemo(() => (rawDatasetRes?.data || []).slice(0, 50), [rawDatasetRes]);
+
+  // Step 1: Normalisasi tipe SQL raw → DataColumn standard
   const normalizeColType = (raw: string): 'number' | 'string' | 'date' | 'boolean' => {
     const t = (raw || '').toLowerCase();
     if (['int','bigint','smallint','integer','numeric','decimal','float','real','double','money','serial'].some(k => t.includes(k))) return 'number';
     if (['date','time','timestamp','interval'].some(k => t.includes(k))) return 'date';
     if (['bool'].some(k => t.includes(k))) return 'boolean';
-    return 'string'; // varchar, text, char, name, uuid, json, dll
+    return 'string';
   };
 
+  // Step 2: Inferensi tipe dari sample data aktual
+  // CSV-imported datasets sering semua kolom disimpan sebagai 'text' di DB
+  // → Cek nilai aktual: jika 80%+ bisa jadi angka, anggap numeric
+  const inferTypeFromSample = (
+    colName: string,
+    sample: Record<string, unknown>[],
+    schemaType: 'number' | 'string' | 'date' | 'boolean'
+  ): 'number' | 'string' | 'date' | 'boolean' => {
+    if (schemaType !== 'string') return schemaType; // hanya override jika schema bilang 'string'
+    const vals = sample
+      .map(row => row[colName])
+      .filter(v => v !== null && v !== undefined && v !== '');
+    if (vals.length === 0) return schemaType;
+    const numericCount = vals.filter(v => {
+      const n = Number(v);
+      return !isNaN(n) && isFinite(n);
+    }).length;
+    if (numericCount / vals.length >= 0.8) return 'number';
+    // Cek date
+    const dateCount = vals.filter(v => {
+      const d = new Date(String(v));
+      return !isNaN(d.getTime()) && String(v).length > 4;
+    }).length;
+    if (dateCount / vals.length >= 0.8) return 'date';
+    return 'string';
+  };
+
+  // Gabung: schema normalisasi + sample inference
   const datasetColumns = useMemo(() => {
     const raw = datasetMeta?.columns || [];
-    return raw.map((c: any) => ({
-      name: c.name,
-      type: normalizeColType(c.type || ''),
-      nullable: c.nullable ?? true,
-    }));
-  }, [datasetMeta]);
+    return raw.map((c: any) => {
+      const schemaType = normalizeColType(c.type || '');
+      const inferredType = dataSample.length > 0
+        ? inferTypeFromSample(c.name, dataSample, schemaType)
+        : schemaType;
+      return {
+        name: c.name,
+        type: inferredType,
+        nullable: c.nullable ?? true,
+      };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datasetMeta, dataSample]);
 
-  const dataSample = useMemo(() => (rawDatasetRes?.data || []).slice(0, 10), [rawDatasetRes]);
 
   // All templates (builtin + user)
   const allTemplates: ReportTemplate[] = useMemo(() => [
