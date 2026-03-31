@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDistanceToNow } from 'date-fns';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useStories, useCreateStory, useDeleteStory, useDatasets, useGenerateReport, useCharts, useDatasetData } from '@/hooks/useApi';
@@ -113,6 +113,10 @@ function SlideChartCard({ widget, savedCharts }: { widget: SlideWidget; savedCha
 
   const colSpan = widget.width === 'full' ? 'col-span-2' : '';
 
+  // FIX: stat chart type does NOT require xAxis (it aggregates yAxis only)
+  const isStatChart = chartType === 'stat';
+  const hasRequiredData = datasetId && yAxis && (isStatChart || xAxis);
+
   return (
     <div className={`rounded-xl border border-border bg-card flex flex-col overflow-hidden shadow-sm ${colSpan}`}>
       <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2 border-b border-border/50">
@@ -133,7 +137,7 @@ function SlideChartCard({ widget, savedCharts }: { widget: SlideWidget; savedCha
           <div className="flex items-center justify-center w-full h-full">
             <Loader2 className="w-6 h-6 animate-spin text-primary/50" />
           </div>
-        ) : !datasetId || !xAxis || !yAxis ? (
+        ) : !hasRequiredData ? (
           <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground/50 gap-2">
             <Info className="w-5 h-5" />
             <span className="text-xs">Data tidak tersedia</span>
@@ -188,6 +192,90 @@ function SlideViewer({ slide, savedCharts }: { slide: ExtendedSlide; savedCharts
   );
 }
 
+// ─── PresentationModal: modal presentasi terpusat ─────────────────────────────
+function PresentationModal({
+  story,
+  open,
+  onClose,
+  savedCharts,
+}: {
+  story: DataStory | null;
+  open: boolean;
+  onClose: () => void;
+  savedCharts: any[];
+}) {
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const { toPDF, targetRef } = usePDF({ filename: `${story?.title || 'DataStory'}.pdf` });
+
+  useEffect(() => {
+    setCurrentSlideIndex(0);
+  }, [story?.id]);
+
+  if (!story) return null;
+
+  const slides = parseStoryContent(story.content);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-5xl w-[95vw] h-[90vh] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <DialogHeader className="flex flex-row items-center justify-between p-4 border-b border-border bg-card shrink-0">
+          <DialogTitle className="text-xl font-bold truncate pr-4">{story.title}</DialogTitle>
+          <div className="pr-6">
+            <Button variant="outline" size="sm" onClick={() => toPDF()} className="hidden md:flex whitespace-nowrap">
+              <Download className="w-4 h-4 mr-2" /> Export PDF
+            </Button>
+          </div>
+        </DialogHeader>
+
+        {/* Slide content — SCROLLABLE */}
+        <div className="flex-1 bg-muted/20 flex flex-col min-h-0" ref={targetRef}>
+          {/* FIX: overflow-y-auto pada inner div agar slide bisa di-scroll */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start gap-6 min-h-0">
+            {slides.length > 0 && (
+              <SlideViewer slide={slides[currentSlideIndex]} savedCharts={savedCharts} />
+            )}
+          </div>
+
+          {/* Navigation (only if multiple slides) */}
+          {slides.length > 1 && (
+            <div className="h-16 bg-card border-t border-border flex items-center justify-between px-6 shrink-0">
+              <Button
+                variant="outline"
+                onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
+                disabled={currentSlideIndex === 0}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Sebelumnya
+              </Button>
+              <div className="flex items-center gap-2 overflow-x-auto max-w-[50%]">
+                {slides.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentSlideIndex(idx)}
+                    className={`rounded-full transition-all ${
+                      idx === currentSlideIndex
+                        ? 'bg-primary w-4 h-2'
+                        : 'bg-primary/30 hover:bg-primary/50 w-2 h-2'
+                    }`}
+                    title={`Slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
+              <Button
+                variant="default"
+                onClick={() => setCurrentSlideIndex(Math.min(slides.length - 1, currentSlideIndex + 1))}
+                disabled={currentSlideIndex === slides.length - 1}
+              >
+                Berikutnya <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function DataStories() {
   const { data: stories = [], isLoading } = useStories();
@@ -198,35 +286,43 @@ export default function DataStories() {
   const generateMut = useGenerateReport();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { toPDF, targetRef } = usePDF({ filename: 'DataStory.pdf' });
 
   const [selectedDsId, setSelectedDsId] = useState('');
   const [storyFocus, setStoryFocus] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
   const [slides, setSlides] = useState<Slide[]>([{ id: crypto.randomUUID(), title: 'Slide 1', content: '' }]);
-  const [viewStory, setViewStory] = useState<DataStory | null>(null);
-  const [currentViewSlideIndex, setCurrentViewSlideIndex] = useState(0);
 
+  // FIX: satu controlled state untuk modal presentasi
+  const [openStoryId, setOpenStoryId] = useState<string | null>(null);
+
+  const openStory = useMemo(
+    () => stories.find((s: DataStory) => s.id === openStoryId) || null,
+    [stories, openStoryId]
+  );
+
+  // Auto-open modal jika storyId ada di URL (share link)
   useEffect(() => {
     const sId = searchParams.get('storyId');
     if (sId && stories.length > 0) {
-      const found = stories.find(s => s.id === sId);
-      if (found && (!viewStory || viewStory.id !== found.id)) {
-        setViewStory(found);
-      }
+      const found = stories.find((s: DataStory) => s.id === sId);
+      if (found) setOpenStoryId(sId);
     }
   }, [searchParams, stories]);
 
-  useEffect(() => {
-    if (viewStory) setCurrentViewSlideIndex(0);
-  }, [viewStory]);
-
+  // FIX: Share — copy URL ke clipboard, with navigator.share fallback
   const handleShare = (e: React.MouseEvent, storyId: string) => {
     e.stopPropagation();
     const url = `${window.location.origin}/stories?storyId=${storyId}`;
-    navigator.clipboard.writeText(url);
-    toast({ title: 'Link disalin', description: 'Link story telah disalin ke clipboard.' });
+    if (navigator.share) {
+      navigator.share({ title: 'Data Story', url }).catch(() => {
+        navigator.clipboard.writeText(url);
+        toast({ title: 'Link disalin', description: 'Link story telah disalin ke clipboard.' });
+      });
+    } else {
+      navigator.clipboard.writeText(url);
+      toast({ title: 'Link disalin!', description: url });
+    }
   };
 
   const handleGenerateAI = async () => {
@@ -352,10 +448,19 @@ export default function DataStories() {
     return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
-  const viewSlides = viewStory ? parseStoryContent(viewStory.content) : [];
-
   return (
     <div className="space-y-6">
+      {/* FIX: Modal presentasi terpusat — dikontrol oleh openStoryId */}
+      <PresentationModal
+        story={openStory}
+        open={openStoryId !== null}
+        onClose={() => {
+          setOpenStoryId(null);
+          setSearchParams({});
+        }}
+        savedCharts={savedCharts}
+      />
+
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
@@ -405,7 +510,7 @@ export default function DataStories() {
         </motion.div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {stories.map((story, i) => {
+          {stories.map((story: DataStory, i: number) => {
             const parsedSlides = parseStoryContent(story.content);
             const hasAICharts = parsedSlides.some(s => Array.isArray((s as ExtendedSlide).slideWidgets) && (s as ExtendedSlide).slideWidgets!.length > 0);
             const firstSlidePreview = parsedSlides[0]?.content?.replace(/<[^>]+>/g, '').substring(0, 150) || '';
@@ -427,47 +532,10 @@ export default function DataStories() {
                     </div>
                   </div>
                   <div className="flex gap-1 ml-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewStory(story)}>
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-5xl w-[95vw] h-[90vh] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
-                        <DialogHeader className="flex flex-row items-center justify-between p-4 border-b border-border bg-card shrink-0">
-                          <DialogTitle className="text-xl font-bold truncate pr-4">{viewStory?.title}</DialogTitle>
-                          <div className="pr-6">
-                            <Button variant="outline" size="sm" onClick={() => toPDF()} className="hidden md:flex whitespace-nowrap">
-                              <Download className="w-4 h-4 mr-2" /> Export PDF
-                            </Button>
-                          </div>
-                        </DialogHeader>
-                        <div className="flex-1 bg-muted/20 relative flex flex-col overflow-hidden" ref={targetRef}>
-                          <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start">
-                            {viewSlides.length > 0 && (
-                              <SlideViewer slide={viewSlides[currentViewSlideIndex]} savedCharts={savedCharts} />
-                            )}
-                          </div>
-                          {viewSlides.length > 1 && (
-                            <div className="h-16 bg-card border-t border-border flex items-center justify-between px-6 shrink-0">
-                              <Button variant="outline" onClick={() => setCurrentViewSlideIndex(Math.max(0, currentViewSlideIndex - 1))} disabled={currentViewSlideIndex === 0}>
-                                <ChevronLeft className="w-4 h-4 mr-1" /> Sebelumnya
-                              </Button>
-                              <div className="flex items-center gap-2 overflow-x-auto max-w-[50%]">
-                                {viewSlides.map((_, idx) => (
-                                  <button key={idx} onClick={() => setCurrentViewSlideIndex(idx)}
-                                    className={`w-2 h-2 rounded-full transition-all ${idx === currentViewSlideIndex ? 'bg-primary w-4' : 'bg-primary/30 hover:bg-primary/50'}`}
-                                    title={`Slide ${idx + 1}`} />
-                                ))}
-                              </div>
-                              <Button variant="default" onClick={() => setCurrentViewSlideIndex(Math.min(viewSlides.length - 1, currentViewSlideIndex + 1))} disabled={currentViewSlideIndex === viewSlides.length - 1}>
-                                Berikutnya <ChevronRight className="w-4 h-4 ml-1" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                    {/* FIX: Eye button kini trigger modal terpusat */}
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setOpenStoryId(story.id)}>
+                      <Eye className="w-4 h-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={(e) => handleShare(e, story.id)}>
                       <Share2 className="w-4 h-4" />
                     </Button>
@@ -491,7 +559,8 @@ export default function DataStories() {
                     <Sparkles className="w-3 h-3 text-primary" />
                     {formatDistanceToNow(new Date(story.createdAt), { addSuffix: true })}
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setViewStory(story)}>
+                  {/* FIX: "Lihat Presentasi" kini membuka modal terpusat */}
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenStoryId(story.id)}>
                     Lihat Presentasi
                   </Button>
                 </div>
