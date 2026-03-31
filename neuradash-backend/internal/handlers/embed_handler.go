@@ -123,6 +123,18 @@ func (h *EmbedHandler) ViewEmbed(c *fiber.Ctx) error {
 		if err := h.db.Where("id = ?", token.ResourceID).First(&chart).Error; err == nil {
 			resourceData = chart
 		}
+	} else if token.ResourceType == "story" {
+		var story models.DataStory
+		if err := h.db.Where("id = ?", token.ResourceID).First(&story).Error; err == nil {
+			// Preload charts for the story to ensure public view has metadata
+			var charts []models.SavedChart
+			h.db.Where("user_id = ?", story.UserID).Find(&charts)
+			
+			resourceData = fiber.Map{
+				"story":  story,
+				"charts": charts,
+			}
+		}
 	}
 
 	return c.JSON(fiber.Map{

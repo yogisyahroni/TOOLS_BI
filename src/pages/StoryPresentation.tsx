@@ -30,7 +30,7 @@ import { usePDF } from 'react-to-pdf';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useStories, useCharts, useDatasetData } from '@/hooks/useApi';
-import { API_BASE, type DataStory } from '@/lib/api';
+import { API_BASE, type DataStory, type SavedChart } from '@/lib/api';
 import { ChartRenderer } from '@/components/ChartRenderer';
 import type { SlideWidget } from '@/types/data';
 import type { Slide } from '@/components/SlideBuilder';
@@ -77,11 +77,13 @@ const parseStoryContent = (content: string): ExtendedSlide[] => {
 };
 
 // ─── Chart widget card ─────────────────────────────────────────────────────────
-function PresentationChartCard({ widget, savedCharts, token }: { widget: SlideWidget; savedCharts: any[]; token?: string }) {
+function PresentationChartCard({ widget, savedCharts, token, publicCharts }: { widget: SlideWidget; savedCharts: any[]; token?: string; publicCharts?: SavedChart[] }) {
+  const activeCharts = token ? (publicCharts || []) : savedCharts;
+
   const savedChart = useMemo(() => {
-    if (widget.chartId) return savedCharts.find((c: any) => String(c.id) === String(widget.chartId));
-    return null;
-  }, [widget.chartId, savedCharts]);
+    if (!widget.chartId) return null;
+    return activeCharts.find((c: SavedChart) => String(c.id) === String(widget.chartId)) || null;
+  }, [widget.chartId, activeCharts]);
 
   const datasetId = widget.datasetId || savedChart?.datasetId || '';
   
@@ -213,12 +215,14 @@ function PresentationSlide({
   totalSlides,
   savedCharts,
   token,
+  publicCharts,
 }: {
   slide: ExtendedSlide;
   slideNumber: number;
   totalSlides: number;
   savedCharts: any[];
   token?: string;
+  publicCharts?: SavedChart[];
 }) {
   const hasAIWidgets = Array.isArray(slide.slideWidgets) && slide.slideWidgets.length > 0;
 
@@ -242,7 +246,7 @@ function PresentationSlide({
         {hasAIWidgets ? (
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             {slide.slideWidgets!.map((widget) => (
-              <PresentationChartCard key={widget.id} widget={widget} savedCharts={savedCharts} token={token} />
+              <PresentationChartCard key={widget.id} widget={widget} savedCharts={savedCharts} token={token} publicCharts={publicCharts} />
             ))}
           </div>
         ) : (
@@ -265,6 +269,7 @@ export default function StoryPresentation() {
   const token = searchParams.get('token') || undefined;
 
   const [publicStory, setPublicStory] = useState<DataStory | null>(null);
+  const [publicCharts, setPublicCharts] = useState<SavedChart[]>([]);
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
@@ -287,7 +292,15 @@ export default function StoryPresentation() {
         setPublicLoading(true);
         const res = await axios.get(`${API_BASE}/embed/view/${token}`);
         if (res.data.resourceType === 'story' && res.data.resourceData) {
-          setPublicStory(res.data.resourceData);
+          if (res.data.resourceData.story) {
+            setPublicStory(res.data.resourceData.story);
+            if (res.data.resourceData.charts) {
+              setPublicCharts(res.data.resourceData.charts);
+            }
+          } else {
+            // Fallback if structure is old
+            setPublicStory(res.data.resourceData);
+          }
         } else {
           setPublicError('Resource bukan tipe Story atau data tidak ditemukan.');
         }
