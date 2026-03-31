@@ -97,10 +97,22 @@ export async function planPageSections(
     };
   }
 
-  // Buat deskripsi kolom untuk AI
-  const colDesc = columns
-    .map((c) => `  - ${c.name} (${c.type})`)
-    .join('\n');
+  // Buat deskripsi kolom untuk AI — pisah berdasarkan tipe yang sudah dinormalisasi
+  const numericCols = columns.filter(c => c.type === 'number');
+  const dateCols = columns.filter(c => c.type === 'date');
+  const textCols = columns.filter(c => c.type === 'string');
+
+  // Fallback: jika tidak ada numerik (tipe tidak dikenal), pakai semua kolom
+  const effectiveNumericCols = numericCols.length > 0 ? numericCols : columns;
+
+  const colDesc = [
+    numericCols.length > 0 ? `NUMERIC columns (use as yAxis/value): ${numericCols.map(c => c.name).join(', ')}` : `ALL columns (use any as yAxis): ${columns.map(c => c.name).join(', ')}`,
+    dateCols.length > 0 ? `DATE columns (use as xAxis for trends): ${dateCols.map(c => c.name).join(', ')}` : null,
+    textCols.length > 0 ? `TEXT/CATEGORY columns (use as xAxis/groupBy): ${textCols.map(c => c.name).join(', ')}` : null,
+    `\nAll columns with types:\n${columns.map(c => `  - ${c.name} (${c.type})`).join('\n')}`,
+  ].filter(Boolean).join('\n');
+
+  void effectiveNumericCols; // used for context above
 
   // Sample data (max 5 baris)
   const sampleStr = JSON.stringify(dataSample.slice(0, 5), null, 2);

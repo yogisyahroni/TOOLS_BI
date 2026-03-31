@@ -225,10 +225,26 @@ export default function AIReports() {
     () => datasets.find((d: any) => d.id === selectedDatasetId),
     [datasets, selectedDatasetId]
   );
-  const datasetColumns = useMemo(
-    () => datasetMeta?.columns || [],
-    [datasetMeta]
-  );
+
+  // Normalisasi tipe SQL raw → DataColumn standard
+  // Backend bisa return 'int4', 'varchar', 'float8', dll — AI perlu tipe yang jelas
+  const normalizeColType = (raw: string): 'number' | 'string' | 'date' | 'boolean' => {
+    const t = (raw || '').toLowerCase();
+    if (['int','bigint','smallint','integer','numeric','decimal','float','real','double','money','serial'].some(k => t.includes(k))) return 'number';
+    if (['date','time','timestamp','interval'].some(k => t.includes(k))) return 'date';
+    if (['bool'].some(k => t.includes(k))) return 'boolean';
+    return 'string'; // varchar, text, char, name, uuid, json, dll
+  };
+
+  const datasetColumns = useMemo(() => {
+    const raw = datasetMeta?.columns || [];
+    return raw.map((c: any) => ({
+      name: c.name,
+      type: normalizeColType(c.type || ''),
+      nullable: c.nullable ?? true,
+    }));
+  }, [datasetMeta]);
+
   const dataSample = useMemo(() => (rawDatasetRes?.data || []).slice(0, 10), [rawDatasetRes]);
 
   // All templates (builtin + user)
