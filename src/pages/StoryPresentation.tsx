@@ -324,7 +324,21 @@ export default function StoryPresentation() {
   const isLoading = token ? publicLoading : privateLoading;
 
   const slides = useMemo(
-    () => (story ? parseStoryContent(story.content) : []),
+    () => {
+      if (!story) return [];
+      // Prioritaskan slides terstruktur (dari field slides atau legacy charts)
+      const rawSlides = (story as any).slides || (story as any).charts;
+      if (rawSlides) {
+        try {
+          const parsed = typeof rawSlides === 'string' ? JSON.parse(rawSlides) : rawSlides;
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed as ExtendedSlide[];
+        } catch (e) {
+          console.error("Failed to parse story slides:", e);
+        }
+      }
+      // Fallback ke parsing content (legacy format)
+      return parseStoryContent(story.content);
+    },
     [story]
   );
 

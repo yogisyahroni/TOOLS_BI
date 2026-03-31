@@ -126,9 +126,9 @@ func (h *EmbedHandler) ViewEmbed(c *fiber.Ctx) error {
 	} else if token.ResourceType == "story" {
 		var story models.DataStory
 		if err := h.db.Where("id = ?", token.ResourceID).First(&story).Error; err == nil {
-			// Preload charts for the story to ensure public view has metadata
+			// Preload charts for the story owner (the one who created the token)
 			var charts []models.SavedChart
-			h.db.Where("user_id = ?", story.UserID).Find(&charts)
+			h.db.Where("user_id = ?", token.UserID).Find(&charts)
 			
 			resourceData = fiber.Map{
 				"story":  story,

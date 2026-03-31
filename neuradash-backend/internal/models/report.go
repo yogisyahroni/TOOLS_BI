@@ -30,7 +30,7 @@ type DataStory struct {
 	Title     string          `json:"title" gorm:"not null"`
 	Narrative string          `json:"content" gorm:"type:text;column:narrative"`
 	Insights  json.RawMessage `json:"insights" gorm:"type:jsonb;default:'[]'"`
-	Charts    json.RawMessage `json:"charts" gorm:"type:jsonb;default:'[]'"`
+	Slides    json.RawMessage `json:"slides" gorm:"type:jsonb;column:charts;default:'[]'"`
 	DeletedAt *time.Time      `json:"deletedAt,omitempty" gorm:"index"` // Phase 36: soft-delete
 	CreatedAt time.Time       `json:"createdAt"`
 }
