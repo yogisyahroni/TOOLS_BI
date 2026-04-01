@@ -161,25 +161,30 @@ function PresentationChartCard({ widget, savedCharts, token, publicCharts }: { w
   const colSpan = widthMap[widget.width] || 'col-span-12';
 
   return (
-    <div className={`group relative rounded-2xl border border-white/5 bg-[#0f172a]/40 backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5 ${colSpan}`}>
-      {/* Decorative gradient corner */}
-      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-      
-      <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h4 className="font-bold text-sm text-white/90 tracking-tight leading-tight group-hover:text-primary transition-colors">
-            {widget.title}
-          </h4>
-          {widget.insight && (
-            <p className="text-[11px] text-white/40 font-medium leading-relaxed line-clamp-2 max-w-[90%] italic">
-              "{widget.insight}"
-            </p>
-          )}
-        </div>
-        <div className="p-2 rounded-lg bg-white/5 border border-white/5 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all">
-          <Icon className="w-3.5 h-3.5 text-white/40 group-hover:text-primary transition-colors" />
+    <div className={`group relative rounded-xl border border-white/5 bg-[#0f172a]/60 backdrop-blur-md flex flex-col overflow-hidden transition-all duration-300 hover:border-primary/20 hover:shadow-xl ${colSpan}`}>
+      <div className="px-5 pt-5 pb-2 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 rounded-md bg-white/5 border border-white/5 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all shrink-0">
+            <Icon className="w-4 h-4 text-white/40 group-hover:text-primary transition-colors" />
+          </div>
+          <div className="space-y-0.5">
+            <h4 className="font-bold text-sm text-white/90 tracking-tight leading-loose group-hover:text-primary transition-colors">
+              {widget.title}
+            </h4>
+            <div className="flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded-full bg-white/5 border border-white/5 text-[9px] text-white/40 font-bold uppercase tracking-widest">{chartType.replace('_', ' ')}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-white/5 border border-white/5 text-[9px] text-white/40 font-bold uppercase tracking-widest">{widget.width}</span>
+            </div>
+          </div>
         </div>
       </div>
+      {widget.insight && (
+        <div className="px-5 pb-2">
+          <p className="text-[11px] text-white/40 font-medium leading-relaxed italic line-clamp-1 border-l-2 border-white/5 pl-3">
+            "{widget.insight}"
+          </p>
+        </div>
+      )}
       <div className={`${heightClass} p-4 pt-1 relative`}>
         {isLoading ? (
           <div className="flex items-center justify-center w-full h-full">
@@ -216,6 +221,9 @@ function PresentationSlide({
   savedCharts,
   token,
   publicCharts,
+  allSlides,
+  currentSlideIdx,
+  onSlideChange
 }: {
   slide: ExtendedSlide;
   slideNumber: number;
@@ -223,34 +231,84 @@ function PresentationSlide({
   savedCharts: any[];
   token?: string;
   publicCharts?: SavedChart[];
+  allSlides: ExtendedSlide[];
+  currentSlideIdx: number;
+  onSlideChange: (idx: number) => void;
 }) {
   const hasAIWidgets = Array.isArray(slide.slideWidgets) && slide.slideWidgets.length > 0;
 
   return (
-    <div className="w-full flex flex-col min-h-full">
-      {/* Slide header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-xs font-medium text-cyan-400/70 uppercase tracking-wider">
-            Slide {slideNumber} / {totalSlides}
-          </span>
+    <div className="w-full flex flex-col min-h-full gap-8">
+      {/* ── Dashboard Banner (Image 1 Style) ── */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-[#0f172a]/60 backdrop-blur-2xl px-8 py-10">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
+          <div className="space-y-4 max-w-4xl">
+            <div className="flex items-center gap-4">
+              <div className="w-1.5 h-10 bg-cyan-400 rounded-full" />
+              <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
+                {slide.title}
+              </h1>
+            </div>
+            <p className="text-white/50 text-base md:text-lg leading-relaxed max-w-3xl">
+              {slide.subtitle || slide.content?.slice(0, 150) + "..." || "Executive KPI overview with trend analysis, performance by region/PIC, SLA aging table."}
+            </p>
+          </div>
         </div>
-        <h2 className="text-3xl font-bold text-white tracking-tight leading-tight">{slide.title}</h2>
-        {slide.subtitle && (
-          <p className="text-sm text-white/50 mt-2">{slide.subtitle}</p>
+
+        {/* Tab Navigation (Pills inside Banner) */}
+        {allSlides.length > 1 && (
+          <div className="mt-8 flex flex-wrap gap-2 p-1.5 bg-black/40 rounded-xl border border-white/5 w-fit">
+            {allSlides.map((s, idx) => {
+              const isActive = idx === currentSlideIdx;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => onSlideChange(idx)}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${
+                    isActive 
+                      ? 'bg-white text-black shadow-lg shadow-white/10' 
+                      : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                  }`}
+                >
+                  {idx + 1}. {s.title}
+                </button>
+              );
+            })}
+          </div>
         )}
+
+        {/* Filters bar placeholder (Aesthetic only as per Image 1) */}
+        <div className="mt-8 flex flex-col gap-4">
+          <div className="h-px bg-gradient-to-r from-white/10 via-white/5 to-transparent" />
+          <div className="flex items-center gap-4 py-1">
+             <div className="flex items-center gap-1.5 text-white/30 text-[10px] font-bold uppercase tracking-widest mr-2">
+                <ChevronRight className="w-3 h-3" /> Filters:
+             </div>
+             <div className="flex flex-wrap gap-2">
+                {['PERIODE', 'REGIONAL', 'ORIGIN', 'ZONA', 'CUSTOMER NAME', 'STATUS'].map(f => (
+                  <button key={f} className="px-3 py-1 rounded-full border border-white/10 bg-black/20 text-[9px] font-bold text-white/50 hover:border-white/30 hover:text-white transition-all">
+                    {f}
+                  </button>
+                ))}
+             </div>
+          </div>
+        </div>
       </div>
 
       {/* Slide body */}
-      <div className="flex-1">
+      <div className="flex-1 px-1">
+        <div className="flex items-center gap-2 mb-6 text-white/30 text-[10px] font-bold uppercase tracking-[0.2em] border-b border-white/5 pb-2">
+          Overall KPI & Trend
+        </div>
+        
         {hasAIWidgets ? (
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pb-20">
             {slide.slideWidgets!.map((widget) => (
               <PresentationChartCard key={widget.id} widget={widget} savedCharts={savedCharts} token={token} publicCharts={publicCharts} />
             ))}
           </div>
         ) : (
-          <div className="prose prose-invert prose-lg max-w-none prose-headings:font-bold prose-headings:text-white prose-p:text-white/70 prose-strong:text-white">
+          <div className="prose prose-invert prose-lg max-w-none prose-headings:font-bold prose-headings:text-white prose-p:text-white/70 prose-strong:text-white overflow-hidden pb-20">
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
               {slide.content || ''}
             </ReactMarkdown>
@@ -483,43 +541,13 @@ export default function StoryPresentation() {
         </div>
       </header>
 
-      {/* ── Tabs Navigation (Tableau Style) ── */}
-      {slides.length > 1 && (
-        <div className="bg-[#0f172a]/80 backdrop-blur border-b border-white/5 px-6 overflow-x-auto no-scrollbar scroll-smooth flex shrink-0">
-          <div className="flex gap-1 py-2">
-            {slides.map((s, idx) => {
-              const isActive = idx === currentSlide;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setCurrentSlide(idx)}
-                  className={`
-                    relative px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-300
-                    ${isActive 
-                      ? 'text-white bg-primary/20 border border-primary/30 shadow-[0_0_15px_rgba(45,212,191,0.1)]' 
-                      : 'text-white/40 border border-transparent hover:text-white/70 hover:bg-white/5'
-                    }
-                  `}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full transition-colors ${isActive ? 'bg-primary animate-pulse' : 'bg-white/20'}`} />
-                    {idx + 1}. {s.title}
-                  </span>
-                  {isActive && (
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* ── Tabs Navigation (Moved to Slide Banner) ── */}
 
       {/* ── Main slide area ── */}
-      <main className="flex-1 flex overflow-hidden min-h-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950">
+      <main className="flex-1 flex overflow-hidden min-h-0 bg-slate-950">
         {/* Slide content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar" ref={targetRef}>
-          <div className="min-h-full p-6 md:p-10 lg:p-12 max-w-7xl mx-auto">
+          <div className="min-h-full p-4 md:p-8 lg:p-10 max-w-[1600px] mx-auto">
             {slides.length > 0 && (
               <PresentationSlide
                 slide={slides[currentSlide]}
@@ -528,72 +556,55 @@ export default function StoryPresentation() {
                 savedCharts={savedCharts}
                 token={token}
                 publicCharts={publicCharts}
+                allSlides={slides}
+                currentSlideIdx={currentSlide}
+                onSlideChange={setCurrentSlide}
               />
             )}
           </div>
         </div>
-
-        {/* ── Right thumbnail panel (if multiple slides) ── */}
-        {slides.length > 1 && (
-          <aside className="hidden lg:flex w-52 bg-[#0f172a]/70 border-l border-white/10 flex-col py-4 gap-2 overflow-y-auto shrink-0">
-            <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider px-4 mb-1">
-              Slide
-            </p>
-            {slides.map((s, idx) => (
-              <button
-                key={s.id}
-                onClick={() => setCurrentSlide(idx)}
-                className={`mx-3 rounded-lg border text-left transition-all px-3 py-2.5 ${
-                  idx === currentSlide
-                    ? 'border-cyan-500 bg-cyan-500/10 text-white'
-                    : 'border-white/10 bg-transparent text-white/40 hover:border-white/30 hover:text-white/70'
-                }`}
-              >
-                <p className="text-[10px] text-current/60 mb-0.5">{idx + 1}</p>
-                <p className="text-xs font-medium leading-tight line-clamp-2">{s.title}</p>
-              </button>
-            ))}
-          </aside>
-        )}
       </main>
 
       {/* ── Bottom navigation bar ── */}
-      <footer className="h-14 bg-[#0f172a]/90 backdrop-blur border-t border-white/10 flex items-center justify-between px-6 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setCurrentSlide(Math.max(0, currentSlide - 1))}
-          disabled={currentSlide === 0}
-          className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 gap-1.5"
-        >
-          <ChevronLeft className="w-4 h-4" /> Sebelumnya
-        </Button>
-
-        {/* Dot navigation */}
-        <div className="flex items-center gap-2 overflow-x-auto max-w-[40%]">
-          {slides.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentSlide(idx)}
-              className={`rounded-full transition-all shrink-0 ${
-                idx === currentSlide
-                  ? 'bg-cyan-400 w-5 h-2'
-                  : 'bg-white/20 hover:bg-white/40 w-2 h-2'
-              }`}
-              title={`Slide ${idx + 1}`}
-            />
-          ))}
+      <footer className="h-16 bg-[#0f172a]/95 backdrop-blur border-t border-white/10 flex items-center justify-between px-8 shrink-0">
+        <div className="flex items-center gap-4">
+           {/* Color swatches as per Template Image 1 */}
+           <div className="flex gap-2 mr-6 items-center">
+              <div className="w-4 h-4 rounded bg-[#334155]" />
+              <div className="w-4 h-4 rounded bg-[#fbbf24]" />
+              <div className="w-4 h-4 rounded bg-[#38bdf8]" />
+              <div className="w-4 h-4 rounded bg-[#f8fafc]" />
+           </div>
+           
+           <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentSlide(Math.max(0, currentSlide - 1))}
+            disabled={currentSlide === 0}
+            className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 gap-1.5"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <div className="text-white/40 text-xs font-mono">
+            {String(currentSlide + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentSlide(Math.min(slides.length - 1, currentSlide + 1))}
+            disabled={currentSlide === slides.length - 1}
+            className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 gap-1.5"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setCurrentSlide(Math.min(slides.length - 1, currentSlide + 1))}
-          disabled={currentSlide === slides.length - 1}
-          className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 gap-1.5"
-        >
-          Berikutnya <ChevronRight className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button className="bg-[#0f172a] border border-white/20 text-white hover:bg-white/5 h-10 px-6 rounded-xl font-bold flex items-center gap-2 group">
+            <LayoutGridIcon className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+            Use Template
+          </Button>
+        </div>
       </footer>
     </div>
   );

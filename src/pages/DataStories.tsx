@@ -123,28 +123,41 @@ function SlideChartCard({ widget, savedCharts }: { widget: SlideWidget; savedCha
   const hasRequiredData = datasetId && yAxis && (isStatChart || xAxis);
 
   return (
-    <div className={`rounded-xl border border-border bg-card flex flex-col overflow-hidden shadow-sm ${colSpan}`}>
-      <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2 border-b border-border/50">
-        <div>
-          <h4 className="font-semibold text-sm text-foreground leading-tight">{widget.title}</h4>
-          {widget.insight && (
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{widget.insight}</p>
-          )}
+    <div className={`group relative rounded-xl border border-border bg-card/60 backdrop-blur-md flex flex-col overflow-hidden transition-all duration-300 hover:border-primary/20 hover:shadow-xl ${colSpan}`}>
+      <div className="px-5 pt-5 pb-2 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 rounded-md bg-muted border border-border group-hover:bg-primary/10 group-hover:border-primary/20 transition-all shrink-0">
+            {(() => {
+              const Icon = WIDGET_TYPES.find(wt => wt.id === chartType)?.icon || BarChart3;
+              return <Icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />;
+            })()}
+          </div>
+          <div className="space-y-0.5">
+            <h4 className="font-bold text-sm text-foreground tracking-tight leading-loose group-hover:text-primary transition-colors">
+              {widget.title}
+            </h4>
+            <div className="flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded-full bg-muted border border-border text-[9px] text-muted-foreground font-bold uppercase tracking-widest">{chartType.replace('_', ' ')}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-muted border border-border text-[9px] text-muted-foreground font-bold uppercase tracking-widest">{widget.width}</span>
+            </div>
+          </div>
         </div>
-        {(() => {
-          const Icon = WIDGET_TYPES.find(wt => wt.id === chartType)?.icon || BarChart3;
-          return <Icon className="w-4 h-4 shrink-0 text-primary/60 mt-0.5" />;
-        })()}
       </div>
-
+      {widget.insight && (
+        <div className="px-5 pb-2">
+          <p className="text-[11px] text-muted-foreground font-medium leading-relaxed italic line-clamp-1 border-l-2 border-border pl-3">
+            "{widget.insight}"
+          </p>
+        </div>
+      )}
       <div className={`${heightClass} p-4 pt-1 relative`}>
         {isLoading ? (
           <div className="flex items-center justify-center w-full h-full">
             <Loader2 className="w-6 h-6 animate-spin text-primary/50" />
           </div>
         ) : !hasRequiredData ? (
-          <div className="flex flex-col items-center justify-center w-full h-full text-white/20 gap-3">
-            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground/20 gap-3">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
               <Info className="w-6 h-6" />
             </div>
             <span className="text-xs font-medium tracking-wide uppercase">Data Not Available</span>
@@ -172,23 +185,39 @@ function SlideViewer({ slide, savedCharts }: { slide: ExtendedSlide; savedCharts
   const hasAIWidgets = Array.isArray(slide.slideWidgets) && slide.slideWidgets.length > 0;
 
   return (
-    <div className="w-full max-w-[1200px] bg-card border border-border shadow-lg rounded-xl overflow-hidden min-h-[400px] flex flex-col transition-all">
-      <div className="border-b border-border bg-muted/10 px-6 py-4">
-        <h2 className="text-2xl font-bold text-foreground">{slide.title}</h2>
-        {slide.subtitle && (
-          <p className="text-sm text-muted-foreground mt-1">{slide.subtitle}</p>
-        )}
+    <div className="w-full flex flex-col gap-8">
+      {/* Dashboard Banner in Preview */}
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-muted/30 px-6 py-8">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 relative z-10">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-8 bg-primary rounded-full" />
+              <h2 className="text-2xl font-bold text-foreground tracking-tight">
+                {slide.title}
+              </h2>
+            </div>
+            {slide.subtitle && (
+              <p className="text-muted-foreground text-sm leading-relaxed max-w-2xl">
+                {slide.subtitle}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="p-6 flex-1">
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-4 text-muted-foreground/30 text-[10px] font-bold uppercase tracking-[0.2em] border-b border-border pb-2">
+          Overall KPI & Trend
+        </div>
+        
         {hasAIWidgets ? (
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 pb-10">
             {slide.slideWidgets!.map((widget) => (
               <SlideChartCard key={widget.id} widget={widget} savedCharts={savedCharts} />
             ))}
           </div>
         ) : (
-          <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-bold prose-img:rounded-xl">
+          <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-bold prose-img:rounded-xl pb-10">
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
               {slide.content || ''}
             </ReactMarkdown>
