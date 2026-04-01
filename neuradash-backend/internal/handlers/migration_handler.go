@@ -143,7 +143,7 @@ func (h *MigrationHandler) extractPowerBI(data []byte, size int64) (string, erro
 	var sb strings.Builder
 	for _, f := range reader.File {
 		// Look for the Report/Layout file inside the .pbix ZIP container
-		if strings.Contains(f.Name, "Report/Layout") {
+		if strings.Contains(strings.ToLower(f.Name), "report/layout") {
 			rc, err := f.Open()
 			if err != nil {
 				return "", err
@@ -171,8 +171,9 @@ func (h *MigrationHandler) extractPowerPoint(data []byte, size int64) (string, e
 	}
 	var sb strings.Builder
 	for _, f := range reader.File {
-		// Extract slides and theme colors
-		if strings.HasPrefix(f.Name, "ppt/slides/slide") || strings.HasPrefix(f.Name, "ppt/theme/") {
+		name := strings.ToLower(f.Name)
+		// Extract slides and theme colors (case-insensitive prefixes)
+		if strings.HasPrefix(name, "ppt/slides/slide") || strings.HasPrefix(name, "ppt/theme/") {
 			rc, err := f.Open()
 			if err != nil {
 				continue
@@ -195,7 +196,7 @@ func (h *MigrationHandler) extractTableauZip(data []byte, size int64) (string, e
 		return "", err
 	}
 	for _, f := range reader.File {
-		if strings.HasSuffix(f.Name, ".twb") {
+		if strings.HasSuffix(strings.ToLower(f.Name), ".twb") {
 			rc, err := f.Open()
 			if err != nil {
 				return "", err
