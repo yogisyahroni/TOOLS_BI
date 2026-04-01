@@ -23,7 +23,8 @@ We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with
 - **Ask Data (NL2SQL)**: Chat with your data. A highly optimized AI inference engine converts natural language to optimized SQL queries and automatically renders the appropriate charts.
 - **Hybrid Prompt Refiner (✨)**: One-click "Polishing" of natural language inputs. Automatically transforms raw user queries into professional, unambiguous instructions tailored to SQL or Report contexts.
 - **Automated Follow-up Suggestions**: Predictive "Suggestion Pills" that appear after every AI response, guiding users toward deeper analysis or alternate visualization styles.
-- **AI Reports & Data Stories**: Otomatis menghasilkan ringkasan eksekutif dan narasi penjelasan dari dataset mentah. Kini mendukung **Mode Presentasi Interaktif** (Tableau-style) yang dapat dibagikan secara publik.
+- **AI-Powered Reports & Data Stories**: Otomatis menghasilkan ringkasan eksekutif dan narasi penjelasan dari dataset mentah. Kini mendukung **Mode Presentasi Interaktif** (Tableau-style) yang dapat dibagikan secara publik.
+- **Async AI Report Migration (✨)**: Konversi asinkron file Power BI (`.pbix`), Tableau (`.twbx`), dan PowerPoint (`.pptx`) ke dalam template NeuraDash yang sepenuhnya fungsional. Proses ini berjalan di latar belakang (background) sehingga tidak menghambat produktivitas pengguna.
 - **Enterprise Data Assistant**: Asisten AI yang sadar konteks, terintegrasi langsung ke dalam Editor Query SQL dan pipeline ETL untuk membantu formulasi logika kompleks dan debugging.
 
 ### 🛠️ Data Engineering & Modeling
@@ -37,6 +38,7 @@ We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with
 - **Data Refresh**: Siapkan jadwal sinkronisasi otomatis untuk menjaga paritas dataset dengan sumber asli secara live.
 - **External Connections**: Dukungan langsung untuk terhubung ke instans eksternal PostgreSQL, MySQL, SQL Server, Snowflake, dan BigQuery.
 - **Data Upload**: Parsing dan unggahan asli dokumen CSV, JSON, dan Excel berukuran besar.
+- **AI Robustness: Structural Chunking & TPM Guard (✨)**: Mekanisme pertahanan untuk mencegah kegagalan migrasi dokumen besar. Sistem memproses halaman dokumen satu per satu secara berurutan dan dilengkapi dengan **TokenThrottler** yang secara otomatis mengatur kecepatan (throttling) untuk menghindari batas 'Too Many Requests' (429) dari penyedia AI.
 
 ### 📊 Advanced Visualization & Dashboarding
 
@@ -118,6 +120,8 @@ This project is built using 2024-standard modern web primitives:
 | POST | `/import/confirm` | Finalize ETL configuration |
 | POST | `/connections/sync` | Live DB Introspection |
 | POST | `/connections/query` | Secure Read-only SQL Execution |
+| GET  | `/templates` | Sync templates and migration status |
+| POST | `/templates/import` | Start async BI file migration |
 
 ---
 
