@@ -115,12 +115,6 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	reqBody := map[string]interface{}{
-		"model":      cfg.Model,
-		"messages":   req.Messages,
-		"max_tokens": cfg.MaxTokens,
-	}
-
 	baseURLStr := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURLStr == "" {
 		baseURLStr = providerBaseURL(cfg.Provider)
@@ -153,8 +147,6 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 	}
 
 	if matchedHost == "" {
-		// Fallback: If not in allow-list, use strict regex validation but CodeQL might still flag it.
-		// For high security, we'd block unknown hosts, but for flexibility we allow valid ones.
 		hostRegex := `^[a-zA-Z0-9.-]+(?::[0-9]+)?$`
 		if match := regexp.MustCompile(hostRegex).FindString(u.Host); match != "" {
 			matchedHost = match
@@ -170,6 +162,24 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 		Scheme: u.Scheme,
 		Host:   matchedHost,
 		Path:   strings.TrimSuffix(u.Path, "/"),
+	}
+
+	// Dynamic Tool Recovery Logic
+	useTools := true
+	var reqBody map[string]interface{}
+
+retryChat:
+	reqBody = map[string]interface{}{
+		"model":       cfg.Model,
+		"messages":    req.Messages,
+		"max_tokens":  cfg.MaxTokens,
+		"temperature": cfg.Temperature,
+		"top_p":       1,
+	}
+
+	if useTools {
+		reqBody["tools"] = []map[string]interface{}{sequentialThinkingToolDef()}
+		reqBody["tool_choice"] = "auto"
 	}
 
 	data, _ := json.Marshal(reqBody)
@@ -188,7 +198,6 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	// Reliability: Use timed client instead of default
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
@@ -198,11 +207,19 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return c.Status(resp.StatusCode).JSON(fiber.Map{"error": string(body)})
+		bodyStr := string(body)
+		// Detect if failure is due to unsupported tools
+		if useTools && (strings.Contains(strings.ToLower(bodyStr), "tool") || strings.Contains(strings.ToLower(bodyStr), "endpoint")) {
+			useTools = false
+			goto retryChat
+		}
+		return c.Status(resp.StatusCode).JSON(fiber.Map{"error": bodyStr})
 	}
 
 	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to decode AI response"})
+	}
 
 	// extract content just to be sure we return standard structure
 	content := ""
@@ -921,6 +938,7 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 	}
 
 	client := &http.Client{Timeout: 120 * time.Second}
+	useTools := true
 
 	for {
 		reqBody := map[string]interface{}{
@@ -929,9 +947,13 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 			"max_tokens":  cfg.MaxTokens,
 			"temperature": cfg.Temperature,
 			"stream":      true,
-			"tools":       []map[string]interface{}{sequentialThinkingToolDef()},
-			"tool_choice": "auto",
 		}
+
+		if useTools {
+			reqBody["tools"] = []map[string]interface{}{sequentialThinkingToolDef()}
+			reqBody["tool_choice"] = "auto"
+		}
+
 		data, _ := json.Marshal(reqBody)
 		path := "chat/completions"
 		if cfg.Provider == "anthropic" {
@@ -955,7 +977,14 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			return fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
+			bodyStr := string(body)
+
+			// Detect if failure is due to unsupported tools
+			if useTools && (strings.Contains(strings.ToLower(bodyStr), "tool") || strings.Contains(strings.ToLower(bodyStr), "endpoint")) {
+				useTools = false
+				continue // Retry WITHOUT tools
+			}
+			return fmt.Errorf("AI API error %d: %s", resp.StatusCode, bodyStr)
 		}
 
 		scanner := bufio.NewScanner(resp.Body)

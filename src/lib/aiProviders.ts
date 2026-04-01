@@ -230,7 +230,7 @@ export async function fetchOpenRouterModels(): Promise<ModelOption[]> {
     const res = await fetch('https://openrouter.ai/api/v1/models');
     if (!res.ok) return [];
     const data = await res.json();
-    
+
     return (data.data || [])
       .filter((m: any) => m.id && m.name)
       .map((m: any) => ({
