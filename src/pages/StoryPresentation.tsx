@@ -282,10 +282,9 @@ export default function StoryPresentation() {
   const { toPDF, targetRef } = usePDF({ filename: 'Presentation.pdf' });
 
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [autoPlay, setAutoPlay] = useState(false);
+  const [isPresenting, setIsPresenting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showUI, setShowUI] = useState(true);
-  const AUTO_PLAY_INTERVAL = 8000; // 8 detik per slide
 
   // Public fetch effect
   useEffect(() => {
@@ -394,14 +393,22 @@ export default function StoryPresentation() {
     [slides.length]
   );
 
-  // Auto-play
   useEffect(() => {
-    if (!autoPlay || slides.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrentSlide((p) => (p + 1) % slides.length);
-    }, AUTO_PLAY_INTERVAL);
-    return () => clearInterval(timer);
-  }, [autoPlay, slides.length]);
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [handleKey]);
+
+  const handleTogglePresentation = () => {
+    const nextState = !isPresenting;
+    setIsPresenting(nextState);
+
+    // Enter fullscreen when starting presentation
+    if (nextState && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error("Failed to enter fullscreen:", err);
+      });
+    }
+  };
 
   const handleShare = () => {
     const url = window.location.href;
@@ -416,19 +423,7 @@ export default function StoryPresentation() {
     }
   };
 
-  const handleToggleAutoPlay = () => {
-    const nextState = !autoPlay;
-    setAutoPlay(nextState);
-
-    // PPT behavior: Enter fullscreen if possible when starting
-    if (nextState && !document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.error("Failed to enter fullscreen:", err);
-      });
-    } else if (!nextState && document.fullscreenElement) {
-      // Optional: keep it fullscreen but just stop autoplay
-    }
-  };
+  // ── Loading / Not found ────────────────────────────────────────────────────
 
   // ── Loading / Not found ────────────────────────────────────────────────────
   if (isLoading) {
@@ -491,16 +486,16 @@ export default function StoryPresentation() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Auto play */}
+          {/* Presentation Mode */}
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleToggleAutoPlay}
-            className={`transition-all duration-300 h-8 px-3 text-xs gap-1.5 ${autoPlay ? 'bg-primary/20 text-primary border-primary/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+            onClick={handleTogglePresentation}
+            className={`transition-all duration-300 h-8 px-3 text-xs gap-1.5 ${isPresenting ? 'bg-primary/20 text-primary border-primary/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
           >
-            {autoPlay
+            {isPresenting
               ? <><Pause className="w-3.5 h-3.5" /> Stop</>
-              : <><Play className="w-3.5 h-3.5" /> Auto Play</>}
+              : <><Play className="w-3.5 h-3.5" /> Presentasi</>}
           </Button>
           {/* Share */}
           <Button variant="ghost" size="sm" onClick={handleShare}
@@ -559,7 +554,7 @@ export default function StoryPresentation() {
       <main className="flex-1 flex overflow-hidden min-h-0 pt-28 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950">
         {/* Slide content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar" ref={targetRef}>
-          <div className={`min-h-full p-6 md:p-10 lg:p-12 max-w-[1700px] mx-auto w-full transition-all duration-700 transform ${autoPlay ? 'scale-[1.01]' : 'scale-100'}`}>
+          <div className={`min-h-full p-6 md:p-10 lg:p-12 max-w-[1700px] mx-auto w-full transition-all duration-700 transform ${isPresenting ? 'scale-[1.01]' : 'scale-100'}`}>
             {slides.length > 0 && (
               <PresentationSlide
                 slide={slides[currentSlide]}
