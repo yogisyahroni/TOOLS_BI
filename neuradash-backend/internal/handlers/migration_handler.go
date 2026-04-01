@@ -167,6 +167,10 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 	}
 
 	newTemplate.IsDefault = false
+	if newTemplate.Category == "" {
+		newTemplate.Category = "custom"
+	}
+
 
 	if err := h.db.Create(&newTemplate).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save template to database"})
