@@ -231,7 +231,7 @@ func main() {
 	queryH := handlers.NewQueryHandler(db)
 	actionH := handlers.NewActionHandler(db)
 	commentH := handlers.NewCommentHandler(db, hub)
-	migrationH := handlers.NewMigrationHandler(db, cfg.AI)
+	migrationH := handlers.NewMigrationHandler(db, cfg.AI, cfg.Encryption.DBConnKey)
 	webhookH := handlers.NewWebhookHandler(db, rdb)
 	
 	webhookWorker := handlers.NewWebhookWorker(db, rdb)

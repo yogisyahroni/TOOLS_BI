@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"strings"
 
 	"neuradash/internal/config"
+	"neuradash/internal/crypto"
+	"neuradash/internal/middleware"
 	"neuradash/internal/models"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,13 +22,56 @@ import (
 
 // MigrationHandler handles extracting files and using AI to convert to DataLens templates
 type MigrationHandler struct {
-	db     *gorm.DB
-	aiConf config.AIConfig
+	db            *gorm.DB
+	aiConf        config.AIConfig
+	encryptionKey string
 }
 
 // NewMigrationHandler creates a new MigrationHandler
-func NewMigrationHandler(db *gorm.DB, aiConf config.AIConfig) *MigrationHandler {
-	return &MigrationHandler{db: db, aiConf: aiConf}
+func NewMigrationHandler(db *gorm.DB, aiConf config.AIConfig, encryptionKey string) *MigrationHandler {
+	return &MigrationHandler{db: db, aiConf: aiConf, encryptionKey: encryptionKey}
+}
+
+// resolveUserConfig loads and decrypts the user's AI config from the database.
+// Falls back to the server-level AI_API_KEY when no user config is found.
+func (h *MigrationHandler) resolveUserConfig(userID string) (resolvedConfig, error) {
+	var userCfg models.UserAIConfig
+	err := h.db.Where("user_id = ?", userID).First(&userCfg).Error
+
+	// If user has saved their own config, use it
+	if err == nil {
+		if userCfg.EncryptedAPIKey == "" {
+			return resolvedConfig{}, fmt.Errorf("AI not configured: no API key saved")
+		}
+		rawKey, decryptErr := crypto.Decrypt(userCfg.EncryptedAPIKey, h.encryptionKey)
+		if decryptErr != nil {
+			return resolvedConfig{}, fmt.Errorf("failed to decrypt API key: %w", decryptErr)
+		}
+		return resolvedConfig{
+			Provider:    userCfg.Provider,
+			APIKey:      rawKey,
+			Model:       userCfg.Model,
+			MaxTokens:   userCfg.MaxTokens,
+			Temperature: userCfg.Temperature,
+			BaseURL:     userCfg.BaseURL,
+		}, nil
+	}
+
+	// Record not found — fall back to server-level env config
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if h.aiConf.APIKey == "" {
+			return resolvedConfig{}, fmt.Errorf("AI not configured. Save your API key in Settings.")
+		}
+		return resolvedConfig{
+			Provider:  h.aiConf.Provider,
+			APIKey:    h.aiConf.APIKey,
+			Model:     h.aiConf.Model,
+			MaxTokens: h.aiConf.MaxTokens,
+			BaseURL:   h.aiConf.BaseURL,
+		}, nil
+	}
+
+	return resolvedConfig{}, fmt.Errorf("DB error loading AI config: %w", err)
 }
 
 // ImportBIFile extracts the uploaded BI file and uses AI to generate a DataLens ReportTemplate.
@@ -80,17 +126,12 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 	}
 
 	// Make AI Call to transform raw layout to DataLens Template
-	cfg := resolvedConfig{
-		Provider:  h.aiConf.Provider,
-		APIKey:    h.aiConf.APIKey,
-		Model:     h.aiConf.Model,
-		MaxTokens: 4096, // Increase max tokens for large json
-		BaseURL:   h.aiConf.BaseURL,
+	userID := middleware.GetUserID(c)
+	cfg, err := h.resolveUserConfig(userID)
+	if err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "AI not configured for migration: " + err.Error()})
 	}
-
-	if cfg.APIKey == "" {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Server AI_API_KEY is not configured for migration."})
-	}
+	cfg.MaxTokens = 4096 // Ensure enough tokens for translation
 
 	fmt.Printf("Generating AI Template for %s. Size: %d chars\n", file.Filename, len(rawLayout))
 
