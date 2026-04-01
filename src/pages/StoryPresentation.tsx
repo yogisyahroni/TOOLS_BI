@@ -283,6 +283,8 @@ export default function StoryPresentation() {
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [autoPlay, setAutoPlay] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showUI, setShowUI] = useState(true);
   const AUTO_PLAY_INTERVAL = 8000; // 8 detik per slide
 
   // Public fetch effect
@@ -343,24 +345,54 @@ export default function StoryPresentation() {
     [story]
   );
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // UI Auto-hide logic in Fullscreen
+  useEffect(() => {
+    if (!isFullscreen) {
+      setShowUI(true);
+      return;
+    }
+    let timeout: NodeJS.Timeout;
+    const handleMouseMove = () => {
+      setShowUI(true);
+      clearTimeout(timeout);
+      timeout = setTimeout(() => setShowUI(false), 3000);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    timeout = setTimeout(() => setShowUI(false), 3000);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      clearTimeout(timeout);
+    };
+  }, [isFullscreen]);
+
   // Keyboard navigation
   const handleKey = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
         e.preventDefault();
-        setCurrentSlide((p) => Math.min(slides.length - 1, p + 1));
+        setCurrentSlide((p) => (p + 1) % slides.length);
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
-        setCurrentSlide((p) => Math.max(0, p - 1));
+        setCurrentSlide((p) => (p - 1 + slides.length) % slides.length);
+      } else if (e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen();
+        } else {
+          document.exitFullscreen();
+        }
       }
     },
     [slides.length]
   );
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [handleKey]);
 
   // Auto-play
   useEffect(() => {
@@ -381,6 +413,20 @@ export default function StoryPresentation() {
     } else {
       navigator.clipboard.writeText(url);
       toast({ title: 'Link disalin!', description: url });
+    }
+  };
+
+  const handleToggleAutoPlay = () => {
+    const nextState = !autoPlay;
+    setAutoPlay(nextState);
+
+    // PPT behavior: Enter fullscreen if possible when starting
+    if (nextState && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error("Failed to enter fullscreen:", err);
+      });
+    } else if (!nextState && document.fullscreenElement) {
+      // Optional: keep it fullscreen but just stop autoplay
     }
   };
 
@@ -420,9 +466,9 @@ export default function StoryPresentation() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] flex flex-col" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className={`min-h-screen bg-[#0a0f1e] flex flex-col relative transition-all duration-500 ${isFullscreen && !showUI ? 'cursor-none' : ''}`} style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* ── Top bar ── */}
-      <header className="h-14 bg-[#0f172a]/90 backdrop-blur border-b border-white/10 flex items-center justify-between px-6 shrink-0 sticky top-0 z-50">
+      <header className={`h-14 bg-[#0f172a]/95 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-6 shrink-0 fixed top-0 left-0 right-0 z-50 transition-transform duration-500 ${!showUI ? '-translate-y-full' : 'translate-y-0'}`}>
         <div className="flex items-center gap-3">
           {!token && (
             <Link to="/stories" className="text-white/40 hover:text-white transition-colors">
@@ -449,8 +495,8 @@ export default function StoryPresentation() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setAutoPlay(!autoPlay)}
-            className="text-white/60 hover:text-white hover:bg-white/10 h-8 px-3 text-xs gap-1.5"
+            onClick={handleToggleAutoPlay}
+            className={`transition-all duration-300 h-8 px-3 text-xs gap-1.5 ${autoPlay ? 'bg-primary/20 text-primary border-primary/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
           >
             {autoPlay
               ? <><Pause className="w-3.5 h-3.5" /> Stop</>
@@ -482,8 +528,8 @@ export default function StoryPresentation() {
 
       {/* ── Tabs Navigation (Tableau Style) ── */}
       {slides.length > 1 && (
-        <div className="bg-[#0f172a]/80 backdrop-blur border-b border-white/5 px-6 overflow-x-auto no-scrollbar scroll-smooth flex shrink-0">
-          <div className="flex gap-1 py-2">
+        <div className={`mt-14 bg-[#0f172a]/90 backdrop-blur-lg border-b border-white/5 px-6 overflow-x-auto no-scrollbar scroll-smooth flex shrink-0 z-40 transition-transform duration-500 fixed top-0 left-0 right-0 ${!showUI ? '-translate-y-full' : 'translate-y-14'}`}>
+          <div className="flex gap-1 py-1.5">
             {slides.map((s, idx) => {
               const isActive = idx === currentSlide;
               return (
@@ -491,20 +537,17 @@ export default function StoryPresentation() {
                   key={s.id}
                   onClick={() => setCurrentSlide(idx)}
                   className={`
-                    relative px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-300
+                    relative px-4 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-300
                     ${isActive
-                      ? 'text-white bg-primary/20 border border-primary/30 shadow-[0_0_15px_rgba(45,212,191,0.1)]'
+                      ? 'text-white bg-primary/20 border border-primary/30'
                       : 'text-white/40 border border-transparent hover:text-white/70 hover:bg-white/5'
                     }
                   `}
                 >
                   <span className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full transition-colors ${isActive ? 'bg-primary animate-pulse' : 'bg-white/20'}`} />
+                    <span className={`w-1 h-1 rounded-full ${isActive ? 'bg-primary animate-pulse' : 'bg-white/20'}`} />
                     {idx + 1}. {s.title}
                   </span>
-                  {isActive && (
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
-                  )}
                 </button>
               );
             })}
@@ -513,10 +556,10 @@ export default function StoryPresentation() {
       )}
 
       {/* ── Main slide area ── */}
-      <main className="flex-1 flex overflow-hidden min-h-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950">
+      <main className="flex-1 flex overflow-hidden min-h-0 pt-28 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950">
         {/* Slide content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar" ref={targetRef}>
-          <div className="min-h-full p-6 md:p-10 lg:p-12 max-w-[1700px] mx-auto w-full">
+          <div className={`min-h-full p-6 md:p-10 lg:p-12 max-w-[1700px] mx-auto w-full transition-all duration-700 transform ${autoPlay ? 'scale-[1.01]' : 'scale-100'}`}>
             {slides.length > 0 && (
               <PresentationSlide
                 slide={slides[currentSlide]}
@@ -532,7 +575,7 @@ export default function StoryPresentation() {
       </main>
 
       {/* ── Bottom navigation bar ── */}
-      <footer className="h-14 bg-[#0f172a]/90 backdrop-blur border-t border-white/10 flex items-center justify-between px-6 shrink-0">
+      <footer className={`h-14 bg-[#0f172a]/95 backdrop-blur-xl border-t border-white/10 flex items-center justify-between px-6 shrink-0 fixed bottom-0 left-0 right-0 z-50 transition-transform duration-500 ${!showUI ? 'translate-y-full' : 'translate-y-0'}`}>
         <Button
           variant="ghost"
           size="sm"
