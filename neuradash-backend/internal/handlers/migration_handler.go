@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"neuradash/internal/config"
 	"neuradash/internal/crypto"
@@ -18,6 +19,7 @@ import (
 	"neuradash/internal/models"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -193,7 +195,9 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 
 	newTemplate.IsDefault = false
 	newTemplate.UserID = &userID
-	newTemplate.ID = "" // Let DB generate a fresh, unique UUID
+	newTemplate.ID = uuid.New().String()
+	newTemplate.CreatedAt = time.Now()
+	newTemplate.UpdatedAt = time.Now()
 
 	if newTemplate.Category == "" {
 		newTemplate.Category = "custom"
