@@ -98,6 +98,13 @@ func (h *MigrationHandler) resolveUserConfig(userID string) (resolvedConfig, err
 // ImportBIFile extracts the uploaded BI file and uses AI to generate a DataLens ReportTemplate.
 // POST /api/v1/templates/import
 func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
+	// Self-healing schema: ensure table exists and has all columns (e.g. migration_status)
+	// This prevents 500 errors in production when new columns are added to models.
+	if err := h.db.AutoMigrate(&models.ReportTemplate{}); err != nil {
+		fmt.Printf("Warning: AutoMigrate failed: %v\n", err)
+		// We continue, as the table might already be correct or migration might be blocked by permissions.
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "File upload missing"})
