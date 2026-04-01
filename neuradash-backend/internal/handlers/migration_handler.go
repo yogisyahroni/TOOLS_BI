@@ -167,6 +167,9 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 	}
 
 	newTemplate.IsDefault = false
+	newTemplate.UserID = &userID
+	newTemplate.ID = "" // Let DB generate a fresh, unique UUID
+
 	if newTemplate.Category == "" {
 		newTemplate.Category = "custom"
 	}

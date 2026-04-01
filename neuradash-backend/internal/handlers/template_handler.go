@@ -22,7 +22,7 @@ func NewTemplateHandler(db *gorm.DB) *TemplateHandler { return &TemplateHandler{
 func (h *TemplateHandler) ListTemplates(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	var templates []models.ReportTemplate
-	if err := h.db.Where("user_id = ?", userID).Order("created_at desc").Find(&templates).Error; err != nil {
+	if err := h.db.Where("user_id = ? OR user_id IS NULL", userID).Order("created_at desc").Find(&templates).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch templates"})
 	}
 	return c.JSON(fiber.Map{"data": templates})
