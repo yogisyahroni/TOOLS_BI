@@ -157,6 +157,9 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 
 	// Make AI Call to transform raw layout to DataLens Template
 	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized: No user ID found"})
+	}
 	cfg, err := h.resolveUserConfig(userID)
 	if err != nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "AI not configured for migration: " + err.Error()})

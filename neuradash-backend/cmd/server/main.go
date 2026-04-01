@@ -368,14 +368,6 @@ func main() {
 	dashboards.Delete("/:id", dashboardH.DeleteDashboard)
 	dashboards.Post("/:id/embed", dashboardH.GenerateEmbedToken)
 
-	// Templates routes
-	templates := api.Group("/templates")
-	templates.Get("/", templateH.ListTemplates)
-	templates.Post("/", templateH.CreateTemplate)
-	templates.Get("/:id", templateH.GetTemplate)
-	templates.Put("/:id", templateH.UpdateTemplate)
-	templates.Delete("/:id", templateH.DeleteTemplate)
-	templates.Post("/import", uploadRateLimit, migrationH.ImportBIFile)
 
 	// Report routes
 	reports := api.Group("/reports")
@@ -509,11 +501,14 @@ func main() {
 	annotations.Post("/", annotationH.CreateAnnotation)
 	annotations.Delete("/:id", annotationH.DeleteAnnotation)
 
-	// BUG-H4: Report Templates
+	// BUG-H4: Report Templates (Consolidated)
 	reportTemplates := api.Group("/report-templates")
 	reportTemplates.Get("/", templateH.ListTemplates)
 	reportTemplates.Post("/", templateH.CreateTemplate)
+	reportTemplates.Get("/:id", templateH.GetTemplate)
+	reportTemplates.Put("/:id", templateH.UpdateTemplate)
 	reportTemplates.Delete("/:id", templateH.DeleteTemplate)
+	reportTemplates.Post("/import", uploadRateLimit, migrationH.ImportBIFile)
 
 	// BUG-H2: Dataset Relationships for DB Diagram
 	relationships := api.Group("/relationships")

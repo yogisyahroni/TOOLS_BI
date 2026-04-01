@@ -360,7 +360,7 @@ export const reportTemplateApi = {
     import: (file: File) => {
         const formData = new FormData();
         formData.append('file', file);
-        return api.post<UserReportTemplate>('/templates/import', formData, {
+        return api.post<UserReportTemplate>('/report-templates/import', formData, {
             headers: { 'Content-Type': undefined }
         });
     },

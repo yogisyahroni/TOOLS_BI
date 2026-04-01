@@ -141,8 +141,20 @@ func (h *TemplateHandler) UpdateTemplate(c *fiber.Ctx) error {
 // DELETE /api/v1/report-templates/:id
 func (h *TemplateHandler) DeleteTemplate(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
-	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).Delete(&models.ReportTemplate{}).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Delete failed"})
+	id := c.Params("id")
+
+	// BUG-H4 fix: GORM Delete returns nil error even if 0 rows affected.
+	// We must check RowsAffected to ensure the user actually owns the template.
+	result := h.db.Where("id = ? AND user_id = ?", id, userID).Delete(&models.ReportTemplate{})
+	if result.Error != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Delete failed: " + result.Error.Error()})
 	}
+
+	if result.RowsAffected == 0 {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Template not found or you don't have permission to delete it",
+		})
+	}
+
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
