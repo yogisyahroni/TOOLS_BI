@@ -366,10 +366,7 @@ export default function StoryPresentation() {
   useEffect(() => {
     if (!autoPlay || slides.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrentSlide((p) => {
-        if (p >= slides.length - 1) { setAutoPlay(false); return p; }
-        return p + 1;
-      });
+      setCurrentSlide((p) => (p + 1) % slides.length);
     }, AUTO_PLAY_INTERVAL);
     return () => clearInterval(timer);
   }, [autoPlay, slides.length]);
@@ -519,7 +516,7 @@ export default function StoryPresentation() {
       <main className="flex-1 flex overflow-hidden min-h-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950">
         {/* Slide content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar" ref={targetRef}>
-          <div className="min-h-full p-6 md:p-10 lg:p-12 max-w-7xl mx-auto">
+          <div className="min-h-full p-6 md:p-10 lg:p-12 max-w-[1700px] mx-auto w-full">
             {slides.length > 0 && (
               <PresentationSlide
                 slide={slides[currentSlide]}
@@ -532,28 +529,6 @@ export default function StoryPresentation() {
             )}
           </div>
         </div>
-
-        {/* ── Right thumbnail panel (if multiple slides) ── */}
-        {slides.length > 1 && (
-          <aside className="hidden lg:flex w-52 bg-[#0f172a]/70 border-l border-white/10 flex-col py-4 gap-2 overflow-y-auto shrink-0">
-            <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider px-4 mb-1">
-              Slide
-            </p>
-            {slides.map((s, idx) => (
-              <button
-                key={s.id}
-                onClick={() => setCurrentSlide(idx)}
-                className={`mx-3 rounded-lg border text-left transition-all px-3 py-2.5 ${idx === currentSlide
-                    ? 'border-cyan-500 bg-cyan-500/10 text-white'
-                    : 'border-white/10 bg-transparent text-white/40 hover:border-white/30 hover:text-white/70'
-                  }`}
-              >
-                <p className="text-[10px] text-current/60 mb-0.5">{idx + 1}</p>
-                <p className="text-xs font-medium leading-tight line-clamp-2">{s.title}</p>
-              </button>
-            ))}
-          </aside>
-        )}
       </main>
 
       {/* ── Bottom navigation bar ── */}

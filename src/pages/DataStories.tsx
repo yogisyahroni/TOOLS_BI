@@ -224,21 +224,21 @@ function PresentationModal({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-5xl w-[95vw] h-[90vh] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-[1700px] w-[96vw] h-[92vh] max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden bg-[#0a0f1e] text-white border-white/10">
         {/* Header */}
-        <DialogHeader className="flex flex-row items-center justify-between p-4 border-b border-border bg-card shrink-0">
-          <DialogTitle className="text-xl font-bold truncate pr-4">{story.title}</DialogTitle>
-          <div className="pr-6">
-            <Button variant="outline" size="sm" onClick={() => toPDF()} className="hidden md:flex whitespace-nowrap">
+        <DialogHeader className="flex flex-row items-center justify-between px-6 py-4 border-b border-white/10 bg-[#0f172a]/90 backdrop-blur shrink-0">
+          <DialogTitle className="text-xl font-bold truncate pr-4 text-white">{story.title}</DialogTitle>
+          <div className="pr-10">
+            <Button variant="outline" size="sm" onClick={() => toPDF()} className="bg-white/5 border-white/10 text-white hover:bg-white/10">
               <Download className="w-4 h-4 mr-2" /> Export PDF
             </Button>
           </div>
         </DialogHeader>
 
         {/* Slide content — SCROLLABLE */}
-        <div className="flex-1 bg-muted/20 flex flex-col min-h-0" ref={targetRef}>
+        <div className="flex-1 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950 flex flex-col min-h-0" ref={targetRef}>
           {/* FIX: overflow-y-auto pada inner div agar slide bisa di-scroll */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-8 flex flex-col items-center justify-start gap-6 min-h-0">
+          <div className="flex-1 overflow-y-auto p-6 md:p-12 flex flex-col items-center justify-start gap-8 min-h-0 custom-scrollbar">
             {slides.length > 0 && (
               <SlideViewer slide={slides[currentSlideIndex]} savedCharts={savedCharts} />
             )}
