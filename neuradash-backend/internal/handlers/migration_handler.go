@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"neuradash/internal/config"
@@ -140,7 +141,13 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 	// Smart filtering for large layouts to fit AI limits (TPM: 12,000 for Groq free/on_demand)
 	// We remove null bytes (UTF-16LE artifacts) and limit to a safe character count.
 	// 25k chars is ~6k tokens, well within 12k TPM limits.
+	// For Tableau, we can be more generous because we clean datasources first.
 	maxChars := 25000
+	if ext == ".twb" || ext == ".twbx" {
+		rawLayout = cleanTableauXML(rawLayout)
+		maxChars = 40000 // Increase for Tableau to capture full layout tree
+	}
+
 	if len(rawLayout) > maxChars {
 		fmt.Printf("Warning: Layout from %s is large (%d chars). Truncating to %d chars to fit AI context.\n", file.Filename, len(rawLayout), maxChars)
 		rawLayout = rawLayout[:maxChars]
@@ -378,4 +385,12 @@ func (h *MigrationHandler) callOpenAIMigrate(cfg resolvedConfig, prompt string) 
 		return "", fmt.Errorf("AI returned no choices")
 	}
 	return result.Choices[0].Message.Content, nil
+}
+
+// cleanTableauXML removes the huge <datasources> block from a .twb file
+// as it contains metadata irrelevant to the visual layout, allowing more "signal"
+// (worksheets and dashboards) to fit within AI context limits.
+func cleanTableauXML(xml string) string {
+	re := regexp.MustCompile(`(?s)<datasources>.*?</datasources>`)
+	return re.ReplaceAllString(xml, "<datasources>[OMITTED_FOR_LAYOUT_MIGRATION]</datasources>")
 }
