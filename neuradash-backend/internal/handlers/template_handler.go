@@ -21,8 +21,16 @@ func NewTemplateHandler(db *gorm.DB) *TemplateHandler { return &TemplateHandler{
 // GET /api/v1/report-templates
 func (h *TemplateHandler) ListTemplates(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+	role := middleware.GetRole(c)
+	
 	var templates []models.ReportTemplate
-	if err := h.db.Where("user_id = ? OR user_id IS NULL", userID).Order("created_at desc").Find(&templates).Error; err != nil {
+	
+	query := h.db.Order("created_at desc")
+	if role != "admin" {
+		query = query.Where("user_id = ? OR user_id IS NULL", userID)
+	}
+	
+	if err := query.Find(&templates).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch templates"})
 	}
 	return c.JSON(fiber.Map{"data": templates})
@@ -92,11 +100,16 @@ func (h *TemplateHandler) GetTemplate(c *fiber.Ctx) error {
 // UpdateTemplate updates an existing report template.
 // PUT /api/v1/templates/:id
 func (h *TemplateHandler) UpdateTemplate(c *fiber.Ctx) error {
-	userID := middleware.GetUserID(c)
+	role := middleware.GetRole(c)
 	var template models.ReportTemplate
 
-	// Find the existing template, ensuring the user owns it (or they are an admin, depending on rules)
-	if err := h.db.Where("id = ? AND user_id = ?", c.Params("id"), userID).First(&template).Error; err != nil {
+	// Find the existing template. If admin, ignore user_id constraint.
+	query := h.db.Where("id = ?", c.Params("id"))
+	if role != "admin" {
+		query = query.Where("user_id = ?", userID)
+	}
+
+	if err := query.First(&template).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Template not found or unauthorized"})
 	}
 
@@ -141,11 +154,17 @@ func (h *TemplateHandler) UpdateTemplate(c *fiber.Ctx) error {
 // DELETE /api/v1/report-templates/:id
 func (h *TemplateHandler) DeleteTemplate(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
+	role := middleware.GetRole(c)
 	id := c.Params("id")
 
 	// BUG-H4 fix: GORM Delete returns nil error even if 0 rows affected.
-	// We must check RowsAffected to ensure the user actually owns the template.
-	result := h.db.Where("id = ? AND user_id = ?", id, userID).Delete(&models.ReportTemplate{})
+	// Administrator bypass: allow admins to delete any template.
+	query := h.db.Where("id = ?", id)
+	if role != "admin" {
+		query = query.Where("user_id = ?", userID)
+	}
+
+	result := query.Delete(&models.ReportTemplate{})
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Delete failed: " + result.Error.Error()})
 	}
