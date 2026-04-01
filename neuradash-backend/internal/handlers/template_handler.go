@@ -100,6 +100,7 @@ func (h *TemplateHandler) GetTemplate(c *fiber.Ctx) error {
 // UpdateTemplate updates an existing report template.
 // PUT /api/v1/templates/:id
 func (h *TemplateHandler) UpdateTemplate(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
 	role := middleware.GetRole(c)
 	var template models.ReportTemplate
 
