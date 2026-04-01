@@ -131,19 +131,20 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid AI base URL"})
 	}
 
-	// Security: Use an allow-list of literal strings to break the taint flow.
-	// If the host is in our registry, we use the registry's LITERAL string.
 	allowedAIHosts := map[string]string{
-		"api.openai.com":            "api.openai.com",
-		"openrouter.ai":             "openrouter.ai",
-		"api.groq.com":              "api.groq.com",
-		"api.deepseek.com":          "api.deepseek.com",
-		"api.together.xyz":          "api.together.xyz",
-		"api.mistral.ai":            "api.mistral.ai",
-		"integrate.api.nvidia.com":  "integrate.api.nvidia.com",
-		"api.moonshot.cn":           "api.moonshot.cn",
-		"localhost":                 "localhost",
-		"127.0.0.1":                 "127.0.0.1",
+		"api.openai.com":                    "api.openai.com",
+		"openrouter.ai":                     "openrouter.ai",
+		"api.groq.com":                      "api.groq.com",
+		"api.deepseek.com":                  "api.deepseek.com",
+		"api.together.xyz":                  "api.together.xyz",
+		"api.mistral.ai":                    "api.mistral.ai",
+		"integrate.api.nvidia.com":          "integrate.api.nvidia.com",
+		"api.moonshot.cn":                   "api.moonshot.cn",
+		"generativelanguage.googleapis.com": "generativelanguage.googleapis.com",
+		"api.anthropic.com":                 "api.anthropic.com",
+		"api.cohere.com":                    "api.cohere.com",
+		"localhost":                         "localhost",
+		"127.0.0.1":                         "127.0.0.1",
 	}
 
 	matchedHost := ""
@@ -172,7 +173,13 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 	}
 
 	data, _ := json.Marshal(reqBody)
-	finalURL := cleanURL.JoinPath("chat/completions").String()
+	path := "chat/completions"
+	if cfg.Provider == "anthropic" {
+		path = "messages"
+	} else if cfg.Provider == "cohere" {
+		path = "chat"
+	}
+	finalURL := cleanURL.JoinPath(path).String()
 
 	httpReq, err := http.NewRequest("POST", finalURL, bytes.NewReader(data))
 	if err != nil {
@@ -926,7 +933,13 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 			"tool_choice": "auto",
 		}
 		data, _ := json.Marshal(reqBody)
-		httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+		path := "chat/completions"
+		if cfg.Provider == "anthropic" {
+			path = "messages"
+		} else if cfg.Provider == "cohere" {
+			path = "chat"
+		}
+		httpReq, err := http.NewRequest("POST", baseURL+"/"+path, bytes.NewReader(data))
 		if err != nil {
 			return err
 		}
@@ -1092,6 +1105,12 @@ func providerBaseURL(provider string) string {
 		url = "https://integrate.api.nvidia.com/v1"
 	case "moonshot":
 		url = "https://api.moonshot.cn/v1"
+	case "google":
+		url = "https://generativelanguage.googleapis.com/v1beta/openai"
+	case "anthropic":
+		url = "https://api.anthropic.com/v1"
+	case "cohere":
+		url = "https://api.cohere.com/v2"
 	default:
 		url = "https://api.openai.com/v1"
 	}
