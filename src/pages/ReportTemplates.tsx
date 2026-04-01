@@ -41,8 +41,9 @@ const sectionTypeIcons: Record<string, any> = {
 
 export default function ReportTemplates() {
   const { toast } = useToast();
-  const { data: userTemplates = [] } = useReportTemplates();
+  const { data: userTemplatesRaw = [], refetch } = useReportTemplates();
   
+  const [activeTab, setActiveTab] = useState<'library' | 'imports'>('library');
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [importOpen, setImportOpen] = useState(false);
   const [viewTemplate, setViewTemplate] = useState<ReportTemplate | null>(null);
@@ -53,10 +54,16 @@ export default function ReportTemplates() {
   const deleteMut = useDeleteReportTemplate();
   const importMut = useImportTemplate();
 
-  // Integrated template list: Builtin + User (Migrated)
-  const allTemplates: ReportTemplate[] = [
-    ...builtinTemplates,
-    ...userTemplates.map((t) => ({
+  // Process raw templates into two groups
+  const userTemplatesFormatted = userTemplatesRaw.map((t) => {
+    let migrationStatus = null;
+    try {
+      migrationStatus = typeof t.migrationStatus === 'string' 
+        ? JSON.parse(t.migrationStatus) 
+        : (t.migrationStatus || null);
+    } catch (e) { /* ignore */ }
+
+    return {
       id: t.id,
       name: t.name,
       description: t.description,
@@ -66,33 +73,57 @@ export default function ReportTemplates() {
       pages: (typeof t.pages === 'string' ? JSON.parse(t.pages) : (t.pages || [])) as TemplatePage[],
       colorScheme: (t.colorScheme as ReportTemplate['colorScheme']) || { primary: '#2c3e50', secondary: '#3498db', accent: '#e74c3c', background: '#ffffff' },
       createdAt: new Date(t.createdAt),
-    })),
+      migrationStatus,
+    };
+  });
+
+  const activeMigrations = userTemplatesFormatted.filter(t => t.migrationStatus && t.migrationStatus.status !== 'completed');
+  const readyUserTemplates = userTemplatesFormatted.filter(t => !t.migrationStatus || t.migrationStatus.status === 'completed');
+
+  const allReadyTemplates: ReportTemplate[] = [
+    ...builtinTemplates,
+    ...readyUserTemplates,
   ];
 
   const filtered = selectedCategory === 'all' 
-    ? allTemplates 
-    : allTemplates.filter(t => t.category === selectedCategory);
+    ? allReadyTemplates 
+    : allReadyTemplates.filter(t => t.category === selectedCategory);
+
+  // Polling logic for active migrations
+  const isProcessing = activeMigrations.some(m => m.migrationStatus.status === 'processing');
+  
+  useState(() => {
+    let interval: any;
+    if (isProcessing) {
+      interval = setInterval(() => {
+        refetch();
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  });
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
+      // Backend now returns immediately with StatusAccepted (202)
       await importMut.mutateAsync(file);
       
-      // Auto-close dialog on success
       setImportOpen(false);
+      setActiveTab('imports'); // Switch to imports tab to show progress
       
       toast({
-        title: "Import Successful",
-        description: `Successfully migrated template from ${file.name}.`,
+        title: "Import Initialized",
+        description: `Migration for ${file.name} started in the background.`,
       });
       
       if (fileRef.current) fileRef.current.value = '';
+      refetch(); // Initial pull
     } catch (err: any) {
       toast({
-        title: "Import Failed",
-        description: err?.response?.data?.error || "Error during AI conversion. Please try a different file.",
+        title: "Initialization Failed",
+        description: err?.response?.data?.error || "Could not start migration job.",
         variant: "destructive"
       });
     }
@@ -146,211 +177,240 @@ export default function ReportTemplates() {
         </div>
       </motion.div>
 
-      {/* Import & Filter Bar */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-xl p-5 border border-border shadow-card">
-        <div className="flex flex-wrap items-center gap-4">
-          <Select value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as TemplateCategory | 'all')}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {Object.entries(categoryLabels).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Tabs for Navigation */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+        <div className="flex items-center justify-between mb-6">
+          <TabsList className="bg-muted/50 p-1 border border-border/50">
+            <TabsTrigger value="library" className="gap-2 px-4">
+              <Layout className="h-4 w-4" />
+              Template Library
+              <Badge variant="secondary" className="ml-1 h-5 min-w-5 flex items-center justify-center p-0 text-[10px]">
+                {allReadyTemplates.length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="imports" className="gap-2 px-4 transition-all">
+              <Import className="h-4 w-4" />
+              Active Imports
+              {activeMigrations.length > 0 && (
+                <Badge className="ml-1 h-5 min-w-5 flex items-center justify-center p-0 text-[10px] bg-primary text-primary-foreground animate-pulse">
+                  {activeMigrations.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-          <div className="flex-1" />
+          <div className="flex items-center gap-3">
+            {activeTab === 'library' && (
+              <Select value={selectedCategory} onValueChange={(v) => setSelectedCategory(v as TemplateCategory | 'all')}>
+                <SelectTrigger className="w-40 h-9 text-xs">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {Object.entries(categoryLabels).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
-          <Dialog open={importOpen} onOpenChange={setImportOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-primary/10 text-primary hover:bg-primary/20 border-primary/20" variant="outline">
-                <Import className="h-4 w-4" />
-                {importMut.isPending ? 'Processing...' : 'Import Template'}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[620px] overflow-hidden">
-              <AnimatePresence>
-                {importMut.isPending && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-md"
-                  >
-                    <div className="relative flex flex-col items-center p-8 text-center max-w-sm">
-                      <div className="absolute inset-0 bg-primary/20 rounded-full blur-3xl animate-pulse" />
-                      <Loader2 className="h-12 w-12 text-primary animate-spin mb-6 relative" />
-                      <h3 className="text-xl font-bold tracking-tight mb-2 relative">Migrating Template</h3>
-                      <p className="text-sm text-muted-foreground mb-6 relative">
-                        AI is analyzing your BI metadata and generating the NeuraDash report layout. This usually takes 10-20 seconds.
-                      </p>
-                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden relative">
-                        <motion.div
-                          className="h-full bg-primary"
-                          animate={{ x: ["-100%", "100%"] }}
-                          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-                        />
+            <Dialog open={importOpen} onOpenChange={setImportOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 gradient-primary shadow-glow border-none" size="sm">
+                  <Plus className="h-4 w-4" /> New Import
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[620px] overflow-hidden">
+                <DialogHeader>
+                  <DialogTitle>Import from BI Tool</DialogTitle>
+                </DialogHeader>
+                
+                <div className="grid grid-cols-2 gap-4 py-6">
+                  {[
+                    { name: 'Power BI', ext: '.pbix', source: 'powerbi', desc: 'Import Power BI Layout' },
+                    { name: 'Tableau', ext: '.twbx, .twb', source: 'tableau', desc: 'Import Tableau Workbook' },
+                    { name: 'PowerPoint', ext: '.pptx', source: 'pptx', desc: 'Import Presentation Slides' },
+                    { name: 'JSON', ext: '.json', source: 'custom', desc: 'Import NeuraDash Template' },
+                  ].map((tool) => (
+                    <button
+                      key={tool.name}
+                      className="p-4 rounded-xl border border-border bg-muted/30 hover:bg-primary/5 hover:border-primary/40 transition-all text-left flex flex-col gap-2 group"
+                      onClick={() => { setImportSource(tool.source as TemplateSource); fileRef.current?.click(); }}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-background flex items-center justify-center border border-border group-hover:text-primary group-hover:border-primary/30 transition-colors">
+                        <Import className="h-5 w-5" />
                       </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                      <div>
+                        <p className="font-semibold text-sm">{tool.name}</p>
+                        <p className="text-xs text-muted-foreground">{tool.desc}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
 
-              <DialogHeader>
-                <DialogTitle>Import from BI Tool</DialogTitle>
-              </DialogHeader>
-              
-              <div className="grid grid-cols-2 gap-4 py-6">
-                {[
-                  { name: 'Power BI', ext: '.pbix', source: 'powerbi', desc: 'Import Power BI Layout' },
-                  { name: 'Tableau', ext: '.twbx, .twb', source: 'tableau', desc: 'Import Tableau Workbook' },
-                  { name: 'PowerPoint', ext: '.pptx', source: 'pptx', desc: 'Import Presentation Slides' },
-                  { name: 'JSON', ext: '.json', source: 'custom', desc: 'Import NeuraDash Template' },
-                ].map((tool) => (
-                  <button
-                    key={tool.name}
-                    className="p-4 rounded-xl border border-border bg-muted/30 hover:bg-primary/5 hover:border-primary/40 transition-all text-left flex flex-col gap-2 group"
-                    onClick={() => { setImportSource(tool.source as TemplateSource); fileRef.current?.click(); }}
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-background flex items-center justify-center border border-border group-hover:text-primary group-hover:border-primary/30 transition-colors">
-                      <Import className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">{tool.name}</p>
-                      <p className="text-xs text-muted-foreground">{tool.desc}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 flex gap-3">
-                <Sparkles className="h-5 w-5 text-primary shrink-0" />
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  <span className="font-semibold text-primary block mb-0.5">AI-Powered Migration</span>
-                  Your file will be extracted and translated by our specialized AI agent. 
-                  Visuals, layouts, and mappings will be converted to high-fidelity NeuraDash components.
-                </p>
-              </div>
-              
-              <input
-                type="file"
-                ref={fileRef}
-                className="hidden"
-                onChange={handleImportFile}
-                accept=".pbix,.twbx,.twb,.json,.pptx"
-              />
-            </DialogContent>
-          </Dialog>
+                <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 flex gap-3">
+                  <Sparkles className="h-5 w-5 text-primary shrink-0" />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    <span className="font-semibold text-primary block mb-0.5">AI-Powered Migration</span>
+                    Your file will be extracted and translated by our specialized AI agent. 
+                    Layouts and mappings will be converted to high-fidelity NeuraDash components.
+                  </p>
+                </div>
+                
+                <input
+                  type="file"
+                  ref={fileRef}
+                  className="hidden"
+                  onChange={handleImportFile}
+                  accept=".pbix,.twbx,.twb,.json,.pptx"
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-      </motion.div>
 
-      {/* Templates Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filtered.map((tpl, i) => {
-          const CatIcon = categoryIcons[tpl.category] || Layout;
-          return (
-            <motion.div 
-              key={tpl.id} 
-              initial={{ opacity: 0, y: 20 }} 
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="bg-card rounded-xl border border-border shadow-card hover:shadow-glow transition-all group overflow-hidden"
-            >
-              {/* Color stripe */}
-              <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${tpl.colorScheme.primary}, ${tpl.colorScheme.accent})` }} />
-
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center border border-border" style={{ background: `${tpl.colorScheme.primary}10` }}>
-                      <CatIcon className="w-4 h-4" style={{ color: tpl.colorScheme.primary }} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-foreground text-sm leading-tight tracking-tight">{tpl.name}</h3>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
-                          {categoryLabels[tpl.category]}
-                        </Badge>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium opacity-70">
-                          {sourceLabels[tpl.source]}
-                        </Badge>
+        <TabsContent value="library" className="mt-0 outline-none">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filtered.map((tpl, i) => {
+              const CatIcon = categoryIcons[tpl.category] || Layout;
+              return (
+                <motion.div 
+                  key={tpl.id} 
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="bg-card rounded-xl border border-border shadow-card hover:shadow-glow transition-all group overflow-hidden"
+                >
+                  <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${tpl.colorScheme.primary}, ${tpl.colorScheme.accent})` }} />
+                  <div className="p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center border border-border" style={{ background: `${tpl.colorScheme.primary}10` }}>
+                          <CatIcon className="w-4 h-4" style={{ color: tpl.colorScheme.primary }} />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-foreground text-sm leading-tight tracking-tight">{tpl.name}</h3>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">{categoryLabels[tpl.category]}</Badge>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium opacity-70">{sourceLabels[tpl.source]}</Badge>
+                          </div>
+                        </div>
                       </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 mb-4 h-8">{tpl.description}</p>
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                      {tpl.pages.slice(0, 3).map((page) => (
+                        <div key={page.id} className="flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/50 rounded-md px-2 py-0.5 border border-border/50">
+                          <FileText className="w-2.5 h-2.5" />
+                          <span className="truncate max-w-[70px]">{page.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 pt-4 border-t border-border/50">
+                      <Button variant="ghost" size="sm" className="h-8 text-xs flex-1 font-medium hover:bg-primary/10 hover:text-primary" onClick={() => setViewTemplate(tpl)}>
+                        <Eye className="w-3.5 h-3.5 mr-1.5" /> Preview
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => duplicateTemplate(tpl)} title="Duplicate"><Copy className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => exportTemplate(tpl)} title="Export JSON"><Download className="w-3.5 h-3.5" /></Button>
+                      {!tpl.isDefault && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => deleteMut.mutate(tpl.id)} title="Delete"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      )}
                     </div>
                   </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground line-clamp-2 mb-4 h-8">{tpl.description}</p>
-
-                {/* Preview of pages */}
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {tpl.pages.slice(0, 3).map((page) => (
-                    <div key={page.id} className="flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/50 rounded-md px-2 py-0.5 border border-border/50">
-                      <FileText className="w-2.5 h-2.5" />
-                      <span className="truncate max-w-[70px]">{page.title}</span>
-                    </div>
-                  ))}
-                  {tpl.pages.length > 3 && (
-                    <div className="text-[10px] text-muted-foreground bg-muted/30 rounded-md px-1.5 py-0.5">
-                      +{tpl.pages.length - 3} more
-                    </div>
-                  )}
-                </div>
-
-                {/* Section type icons preview */}
-                <div className="flex flex-wrap gap-1 mb-5">
-                  {Array.from(new Set(tpl.pages.flatMap(p => p.sections.map(s => s.type)))).slice(0, 5).map(type => {
-                    const Icon = sectionTypeIcons[type] || Layout;
-                    return (
-                      <div key={type} className="w-7 h-7 rounded-md bg-muted/30 flex items-center justify-center border border-border/30" title={(type || 'unknown').replace(/_/g, ' ')}>
-                        <Icon className="w-3.5 h-3.5 text-muted-foreground/70" />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 pt-4 border-t border-border/50">
-                  <Button variant="ghost" size="sm" className="h-8 text-xs flex-1 font-medium hover:bg-primary/10 hover:text-primary" onClick={() => setViewTemplate(tpl)}>
-                    <Eye className="w-3.5 h-3.5 mr-1.5" /> Preview
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => duplicateTemplate(tpl)} title="Duplicate">
-                    <Copy className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => exportTemplate(tpl)} title="Export JSON">
-                    <Download className="w-3.5 h-3.5" />
-                  </Button>
-                  {!tpl.isDefault && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => deleteMut.mutate(tpl.id)}
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {filtered.length === 0 && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-2xl p-20 border border-border shadow-soft text-center max-w-2xl mx-auto">
-          <div className="w-20 h-20 rounded-full bg-muted/30 flex items-center justify-center mx-auto mb-6">
-            <Layout className="w-10 h-10 text-muted-foreground" />
+                </motion.div>
+              );
+            })}
           </div>
-          <h3 className="text-xl font-bold text-foreground mb-2">No templates found</h3>
-          <p className="text-muted-foreground mb-8">Import a file from Power BI, Tableau, or PowerPoint to generate your first custom template using AI.</p>
-          <Button onClick={() => setImportOpen(true)} className="gap-2">
-            <Import className="h-4 w-4" /> Import Now
-          </Button>
-        </motion.div>
-      )}
+
+          {filtered.length === 0 && (
+            <div className="bg-card rounded-2xl p-20 border border-border shadow-soft text-center max-w-2xl mx-auto mt-10">
+              <Layout className="w-10 h-10 text-muted-foreground mx-auto mb-6" />
+              <h3 className="text-xl font-bold mb-2">No templates found</h3>
+              <p className="text-muted-foreground mb-8">Import a file or try a different category filter.</p>
+              <Button onClick={() => setImportOpen(true)} className="gap-2"><Import className="h-4 w-4" /> Import Now</Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="imports" className="mt-0 outline-none">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {activeMigrations.map((tpl) => {
+              const status = tpl.migrationStatus;
+              const isFailed = status?.status === 'failed';
+              const progress = status?.total_pages > 0 ? (status.current_page / status.total_pages) * 100 : 0;
+
+              return (
+                <motion.div 
+                  key={tpl.id} 
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-card/50 backdrop-blur-md rounded-xl border border-border shadow-card overflow-hidden"
+                >
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                          {isFailed ? <Trash2 className="h-4 w-4 text-destructive" /> : <Loader2 className="h-4 w-4 text-primary animate-spin" />}
+                        </div>
+                        <h3 className="font-bold text-sm tracking-tight truncate max-w-[140px]">{tpl.name}</h3>
+                      </div>
+                      <Badge variant={isFailed ? "destructive" : "secondary"} className="text-[10px] uppercase tracking-wider">
+                        {isFailed ? 'Failed' : 'Processing'}
+                      </Badge>
+                    </div>
+
+                    {isFailed ? (
+                      <div className="bg-destructive/5 p-3 rounded-lg border border-destructive/10 mb-4">
+                        <p className="text-xs text-destructive font-medium leading-relaxed line-clamp-3">
+                          {status?.error || 'Unknown error during conversion.'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 mb-4">
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>Converting Metadata</span>
+                          <span className="font-bold text-foreground">{Math.round(progress)}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                          <motion.div 
+                            className="h-full bg-primary" 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                            transition={{ duration: 0.5 }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Processing page <span className="text-foreground font-bold">{status?.current_page || 0}</span> of {status?.total_pages || '?'}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 text-xs flex-1 text-destructive hover:bg-destructive/10"
+                        onClick={() => deleteMut.mutate(tpl.id)}
+                      >
+                        Cancel & Clear
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+            
+            {activeMigrations.length === 0 && (
+              <div className="col-span-full py-20 text-center bg-muted/20 border border-dashed border-border rounded-2xl">
+                <Import className="h-10 w-10 text-muted-foreground/30 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-muted-foreground/60">No Active Imports</h3>
+                <p className="text-sm text-muted-foreground/40 mt-1">Start a new import to see AI progress here.</p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Template Preview Dialog */}
       <Dialog open={!!viewTemplate} onOpenChange={(o) => { if(!o) setViewTemplate(null); }}>
@@ -396,24 +456,12 @@ export default function ReportTemplates() {
                           <h4 className="text-lg font-bold">{page.title}</h4>
                           {page.subtitle && <p className="text-sm text-muted-foreground">{page.subtitle}</p>}
                         </div>
-                        {page.filters && page.filters.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Filters:</span>
-                            <div className="flex gap-1.5">
-                              {page.filters.map(f => (
-                                <Badge key={f} variant="outline" className="bg-background/50">{f}</Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
 
-                      {/* Sections layout preview */}
                       <div className="grid grid-cols-12 gap-4">
                         {page.sections.map((section) => {
                           const colSpanValue = section.width === 'full' ? 12 : section.width === 'half' ? 6 : section.width === 'third' ? 4 : 3;
                           const Icon = sectionTypeIcons[section.type] || Layout;
-                          const heightClass = section.height === 'lg' ? 'h-48' : section.height === 'sm' ? 'h-24' : 'h-36';
 
                           return (
                             <div 
@@ -436,9 +484,7 @@ export default function ReportTemplates() {
                                 </Badge>
                               </div>
                               <div className="flex-1 rounded-lg border border-dashed border-border/50 bg-muted/20 flex items-center justify-center">
-                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-30">
-                                  Visual Preview
-                                </span>
+                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-30">Visual Preview</span>
                               </div>
                             </div>
                           );

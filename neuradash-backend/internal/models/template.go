@@ -16,9 +16,10 @@ type ReportTemplate struct {
 	Pages       json.RawMessage `json:"pages" gorm:"type:jsonb;default:'[]'"`
 	ColorScheme json.RawMessage `json:"colorScheme" gorm:"type:jsonb;default:'{}'"`
 	IsDefault   bool            `json:"isDefault" gorm:"default:false"`
-	IsPublic    bool            `json:"isPublic" gorm:"default:false"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	IsPublic       bool            `json:"isPublic" gorm:"default:false"`
+	MigrationStatus json.RawMessage `json:"migrationStatus" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
 }
 
 func (ReportTemplate) TableName() string { return "report_templates" }

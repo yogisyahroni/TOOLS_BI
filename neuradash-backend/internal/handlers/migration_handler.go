@@ -119,131 +119,306 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file"})
 	}
 
-	var rawLayout string
+	fmt.Printf("Detected file %s. Extracting pages for migration...\n", file.Filename)
 
-	// Extract layout config strings based on BI tool
+	var pages []string
+
+	// Phase 1: Structural Extraction (Local)
 	switch ext {
 	case ".pbix":
-		rawLayout, err = h.extractPowerBI(fileBytes, file.Size)
+		pages, err = h.extractPagesPowerBI(fileBytes, file.Size)
 	case ".pptx":
-		rawLayout, err = h.extractPowerPoint(fileBytes, file.Size)
+		pages, err = h.extractPagesPPTX(fileBytes, file.Size)
 	case ".twb", ".twbx":
-		// .twb is XML. .twbx is ZIP containing .twb
 		if ext == ".twbx" {
-			rawLayout, err = h.extractTableauZip(fileBytes, file.Size)
+			pages, err = h.extractPagesTableauZip(fileBytes, file.Size)
 		} else {
-			rawLayout = string(fileBytes) // Raw XML
+			pages, err = h.extractPagesTableau(string(fileBytes))
 		}
 	}
 
-	if err != nil || len(strings.TrimSpace(rawLayout)) == 0 {
-		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "Failed to extract layout metadata: " + err.Error()})
+	if err != nil || len(pages) == 0 {
+		errMsg := "Failed to extract layout metadata"
+		if err != nil {
+			errMsg += ": " + err.Error()
+		}
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": errMsg})
 	}
 
-	// Smart filtering for large layouts to fit AI limits (TPM: 12,000 for Groq free/on_demand)
-	// We remove null bytes (UTF-16LE artifacts) and limit to a safe character count.
-	// 25k chars is ~6k tokens, well within 12k TPM limits.
-	// For Tableau, we can be more generous because we clean datasources first.
-	maxChars := 25000
-	if ext == ".twb" || ext == ".twbx" {
-		rawLayout = cleanTableauXML(rawLayout)
-		maxChars = 40000 // Increase for Tableau to capture full layout tree
-	}
-
-	if len(rawLayout) > maxChars {
-		fmt.Printf("Warning: Layout from %s is large (%d chars). Truncating to %d chars to fit AI context.\n", file.Filename, len(rawLayout), maxChars)
-		rawLayout = rawLayout[:maxChars]
-	}
-
-	// Make AI Call to transform raw layout to DataLens Template
+	// Phase 2: Create Placeholder Template & Return JobID
 	userID := middleware.GetUserID(c)
 	if userID == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized: No user ID found"})
 	}
+
 	cfg, err := h.resolveUserConfig(userID)
 	if err != nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "AI not configured for migration: " + err.Error()})
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "AI not configured: " + err.Error()})
 	}
-	cfg.MaxTokens = 4096 // Ensure enough tokens for translation
+	cfg.MaxTokens = 4096
 
-	fmt.Printf("Generating AI Template for %s. Size: %d chars\n", file.Filename, len(rawLayout))
-
-	prompt := BuildTemplateMigrationPrompt(ext, rawLayout)
-	content, err := h.callOpenAIMigrate(cfg, prompt)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI conversion failed: " + err.Error()})
+	status := fiber.Map{
+		"status":       "processing",
+		"current_page": 0,
+		"total_pages":  len(pages),
+		"started_at":   time.Now(),
+		"message":      "Extraction successful. AI is processing pages...",
 	}
+	statusJSON, _ := json.Marshal(status)
 
-	content = strings.TrimSpace(content)
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(content, "```")
-	content = strings.TrimSpace(content)
-
-	var newTemplate models.ReportTemplate
-	if err := json.Unmarshal([]byte(content), &newTemplate); err != nil {
-		fmt.Println("AI Output:", content)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI generated invalid JSON structure"})
-	}
-
-	// Assign dynamic metadata
-	newTemplate.Name = fmt.Sprintf("Imported from %s", file.Filename)
-	if ext == ".pbix" {
-		newTemplate.Source = "PowerBI"
-	} else if ext == ".twb" || ext == ".twbx" {
-		newTemplate.Source = "Tableau"
-	} else {
-		newTemplate.Source = "PowerPoint"
-	}
-
-	newTemplate.IsDefault = false
-	newTemplate.UserID = &userID
-	newTemplate.ID = uuid.New().String()
-	newTemplate.CreatedAt = time.Now()
-	newTemplate.UpdatedAt = time.Now()
-
-	if newTemplate.Category == "" {
-		newTemplate.Category = "custom"
-	}
-
-	// Sanitize Pages and Sections data
-	if len(newTemplate.Pages) > 0 && string(newTemplate.Pages) != "null" {
-		var pages []importedPage
-		if err := json.Unmarshal(newTemplate.Pages, &pages); err == nil {
-			modified := false
-			for i := range pages {
-				for j := range pages[i].Sections {
-					// Ensure every section has a type to prevent frontend crash
-					if pages[i].Sections[j].Type == "" {
-						pages[i].Sections[j].Type = "layout"
-						modified = true
-					}
-					// Ensure ID exists
-					if pages[i].Sections[j].ID == "" {
-						pages[i].Sections[j].ID = fmt.Sprintf("sec_%d_%d", i, j)
-						modified = true
-					}
-				}
-			}
-			if modified {
-				newBytes, _ := json.Marshal(pages)
-				newTemplate.Pages = json.RawMessage(newBytes)
-			}
-		}
-	} else {
-		newTemplate.Pages = json.RawMessage("[]")
-	}
-
-	// Ensure ColorScheme is valid
-	if len(newTemplate.ColorScheme) == 0 || string(newTemplate.ColorScheme) == "null" || string(newTemplate.ColorScheme) == "{}" {
-		newTemplate.ColorScheme = json.RawMessage(`{"primary": "#2c3e50", "secondary": "#3498db", "accent": "#e74c3c", "background": "#ffffff"}`)
+	newTemplate := models.ReportTemplate{
+		ID:              uuid.New().String(),
+		UserID:          &userID,
+		Name:            fmt.Sprintf("Importing: %s", file.Filename),
+		Source:          strings.TrimPrefix(ext, "."),
+		Category:        "custom",
+		IsDefault:       false,
+		MigrationStatus: json.RawMessage(statusJSON),
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 
 	if err := h.db.Create(&newTemplate).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save template to database"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to initialize migration job"})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(newTemplate)
+	// Phase 3: Start Asynchronous Worker
+	go h.processMigrationJob(newTemplate.ID, pages, &cfg, ext)
+
+	// Return the template ID immediately so frontend can poll status
+	return c.Status(fiber.StatusAccepted).JSON(newTemplate)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Structural Page Extraction Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (h *MigrationHandler) extractPagesPowerBI(data []byte, size int64) ([]string, error) {
+	reader, err := zip.NewReader(bytes.NewReader(data), size)
+	if err != nil {
+		return nil, err
+	}
+	
+	var layoutRaw []byte
+	for _, f := range reader.File {
+		if strings.Contains(strings.ToLower(f.Name), "report/layout") {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			layoutRaw, _ = io.ReadAll(rc)
+			rc.Close()
+			break
+		}
+	}
+	
+	if len(layoutRaw) == 0 {
+		return nil, fmt.Errorf("Report/Layout not found inside .pbix")
+	}
+
+	// PowerBI Layout is UTF-16LE. Clean it.
+	cleaned := bytes.ReplaceAll(layoutRaw, []byte{0}, []byte{})
+	
+	// Parse as generic JSON to find sections (pages)
+	var layoutObj struct {
+		Sections []json.RawMessage `json:"sections"`
+	}
+	if err := json.Unmarshal(cleaned, &layoutObj); err != nil {
+		return []string{string(cleaned)}, nil
+	}
+
+	var pages []string
+	for _, s := range layoutObj.Sections {
+		pages = append(pages, string(s))
+	}
+	
+	if len(pages) == 0 {
+		return []string{string(cleaned)}, nil
+	}
+
+	return pages, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Asynchronous Migration Worker & TPM Guard
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (h *MigrationHandler) processMigrationJob(templateID string, pages []string, cfg *resolvedConfig, fileExt string) {
+	fmt.Printf("Worker started for Job %s. Total pages: %d\n", templateID, len(pages))
+
+	var allPages []json.RawMessage
+	var colorScheme json.RawMessage
+
+	// Simple Token Tracker for TPM Guard
+	tokensUsedThisMinute := 0
+	minuteStart := time.Now()
+
+	modelTPM := 11000 // Default for free models like Lyria
+	if strings.Contains(strings.ToLower(cfg.Model), "gpt-4") || strings.Contains(strings.ToLower(cfg.Model), "claude-3") {
+		modelTPM = 40000 // Higher limit for paid models
+	}
+
+	for i, pageContent := range pages {
+		// 1. TPM Guard check
+		estimatedTokens := len(pageContent) / 3 // Conservative: 3 chars per token for dense metadata
+		if tokensUsedThisMinute+estimatedTokens > modelTPM {
+			sleepDur := time.Until(minuteStart.Add(61 * time.Second))
+			fmt.Printf("TPM Limit reached for job %s. Sleeping for %v...\n", templateID, sleepDur)
+			time.Sleep(sleepDur)
+			tokensUsedThisMinute = 0
+			minuteStart = time.Now()
+		}
+
+		// 2. Call AI for this chunk
+		prompt := BuildTemplateMigrationPrompt(fileExt, pageContent)
+		aiOutput, err := h.callOpenAIMigrate(*cfg, prompt)
+		if err != nil {
+			h.updateMigrationError(templateID, fmt.Sprintf("Failed at page %d: %v", i+1, err))
+			return
+		}
+
+		// 3. Clean and Parse AI Output
+		aiOutput = h.cleanAIJson(aiOutput)
+		var chunkTemplate models.ReportTemplate
+		if err := json.Unmarshal([]byte(aiOutput), &chunkTemplate); err == nil {
+			// Extract pages and color scheme from the first successful chunk
+			if i == 0 {
+				colorScheme = chunkTemplate.ColorScheme
+			}
+			var chunkPages []json.RawMessage
+			json.Unmarshal(chunkTemplate.Pages, &chunkPages)
+			allPages = append(allPages, chunkPages...)
+		}
+
+		// 4. Update Progress in DB
+		tokensUsedThisMinute += estimatedTokens
+		h.updateMigrationProgress(templateID, i+1, len(pages), allPages, colorScheme)
+	}
+
+	// 5. Finalize
+	h.finalizeMigration(templateID)
+}
+
+func (h *MigrationHandler) cleanAIJson(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	return strings.TrimSpace(s)
+}
+
+func (h *MigrationHandler) updateMigrationProgress(id string, current, total int, pages []json.RawMessage, colors json.RawMessage) {
+	status := fiber.Map{
+		"status":       "processing",
+		"current_page": current,
+		"total_pages":  total,
+		"updated_at":   time.Now(),
+	}
+	statusJSON, _ := json.Marshal(status)
+	pagesJSON, _ := json.Marshal(pages)
+
+	h.db.Model(&models.ReportTemplate{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"migration_status": json.RawMessage(statusJSON),
+		"pages":            json.RawMessage(pagesJSON),
+		"color_scheme":     colors,
+		"updated_at":       time.Now(),
+	})
+}
+
+func (h *MigrationHandler) updateMigrationError(id string, err string) {
+	status := fiber.Map{
+		"status":     "failed",
+		"error":      err,
+		"updated_at": time.Now(),
+	}
+	statusJSON, _ := json.Marshal(status)
+	h.db.Model(&models.ReportTemplate{}).Where("id = ?", id).Update("migration_status", json.RawMessage(statusJSON))
+}
+
+func (h *MigrationHandler) finalizeMigration(id string) {
+	status := fiber.Map{
+		"status":     "completed",
+		"updated_at": time.Now(),
+	}
+	statusJSON, _ := json.Marshal(status)
+	h.db.Model(&models.ReportTemplate{}).Where("id = ?", id).Update("migration_status", json.RawMessage(statusJSON))
+}
+
+func (h *MigrationHandler) extractPagesPPTX(data []byte, size int64) ([]string, error) {
+	reader, err := zip.NewReader(bytes.NewReader(data), size)
+	if err != nil {
+		return nil, err
+	}
+
+	var pages []string
+	// Slides are usually in ppt/slides/slideN.xml
+	for _, f := range reader.File {
+		if strings.HasPrefix(f.Name, "ppt/slides/slide") && strings.HasSuffix(f.Name, ".xml") {
+			rc, err := f.Open()
+			if err != nil {
+				continue
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+			pages = append(pages, string(content))
+		}
+	}
+	
+	if len(pages) == 0 {
+		return nil, fmt.Errorf("No slides found in .pptx")
+	}
+	return pages, nil
+}
+
+func (h *MigrationHandler) extractPagesTableauZip(data []byte, size int64) ([]string, error) {
+	reader, err := zip.NewReader(bytes.NewReader(data), size)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, f := range reader.File {
+		if strings.HasSuffix(f.Name, ".twb") {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+			return h.extractPagesTableau(string(content))
+		}
+	}
+	return nil, fmt.Errorf(".twb not found inside .twbx")
+}
+
+func (h *MigrationHandler) extractPagesTableau(xmlContent string) ([]string, error) {
+	// Tableau XML is hierarchical. We look for <dashboards> or <worksheets>
+	// For simplicity, we can split by <dashboard> and <worksheet> tags
+	cleanXML := cleanTableauXML(xmlContent)
+	
+	var pages []string
+	// Basic regex or string split as a fallback for structural chunking
+	parts := strings.Split(cleanXML, "<dashboard ")
+	for i, p := range parts {
+		if i == 0 && !strings.Contains(p, "<worksheet ") {
+			continue // Skip prolog
+		}
+		if strings.Contains(p, "</dashboard>") {
+			pages = append(pages, "<dashboard "+strings.Split(p, "</dashboard>")[0]+"</dashboard>")
+		}
+	}
+
+	worksheets := strings.Split(cleanXML, "<worksheet ")
+	for i, p := range worksheets {
+		if i == 0 { continue }
+		if strings.Contains(p, "</worksheet>") {
+			pages = append(pages, "<worksheet "+strings.Split(p, "</worksheet>")[0]+"</worksheet>")
+		}
+	}
+
+	if len(pages) == 0 {
+		return []string{cleanXML}, nil // Return everything if no pages found
+	}
+	return pages, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

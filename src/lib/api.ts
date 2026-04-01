@@ -690,6 +690,12 @@ export interface UserReportTemplate {
     colorScheme: Record<string, string>;
     isDefault: boolean;
     createdAt: string;
+    migrationStatus?: string | {
+        status: 'processing' | 'completed' | 'failed';
+        current_page: number;
+        total_pages: number;
+        error?: string;
+    };
 }
 
 export interface UserReportTemplateCreate {
