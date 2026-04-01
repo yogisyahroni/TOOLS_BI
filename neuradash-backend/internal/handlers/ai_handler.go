@@ -213,6 +213,10 @@ retryChat:
 			useTools = false
 			goto retryChat
 		}
+		// Friendly Error Interceptor for Credits
+		if resp.StatusCode == 402 || strings.Contains(strings.ToLower(bodyStr), "insufficient credits") {
+			return c.Status(402).JSON(fiber.Map{"error": "Saldo AI (OpenRouter) Anda habis. Silakan isi ulang saldo di https://openrouter.ai/settings/credits untuk melanjutkan."})
+		}
 		return c.Status(resp.StatusCode).JSON(fiber.Map{"error": bodyStr})
 	}
 
@@ -260,18 +264,18 @@ func (h *AIHandler) ChatStream(c *fiber.Ctx) error {
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		err := h.streamOpenAIChatMessages(cfg, req.Messages, func(eventType string, data string) {
-			payloadObj := map[string]interface{}{
-				"event": eventType,
-				"data":  data,
-			}
-			payloadBytes, _ := json.Marshal(payloadObj)
-			sendSSEEvent(w, eventType, string(payloadBytes))
+			// Do not wrap in another object, send raw data string for the event
+			sendSSEEvent(w, eventType, data)
 			w.Flush()
 		})
 
 		if err != nil {
-			errJSON, _ := json.Marshal(map[string]string{"error": err.Error()})
-			sendSSEEvent(w, "error", string(errJSON))
+			errStr := err.Error()
+			// Friendly Error Interceptor for Credits
+			if strings.Contains(errStr, "402") || strings.Contains(strings.ToLower(errStr), "insufficient credits") {
+				errStr = "Saldo AI (OpenRouter) Anda habis. Silakan isi ulang saldo di https://openrouter.ai/settings/credits untuk melanjutkan."
+			}
+			sendSSEEvent(w, "error", jsonEscape(errStr))
 		}
 
 		sendSSEEvent(w, "done", "{}")
