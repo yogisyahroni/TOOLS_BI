@@ -20,6 +20,24 @@ import (
 	"gorm.io/gorm"
 )
 
+// Internal types for template data sanitization
+type importedPage struct {
+	ID       string            `json:"id"`
+	Title    string            `json:"title"`
+	Subtitle string            `json:"subtitle"`
+	Filters  []string          `json:"filters"`
+	Sections []importedSection `json:"sections"`
+}
+
+type importedSection struct {
+	ID     string      `json:"id"`
+	Type   string      `json:"type"`
+	Title  string      `json:"title"`
+	Width  string      `json:"width"`
+	Height string      `json:"height"`
+	Config interface{} `json:"config"`
+}
+
 // MigrationHandler handles extracting files and using AI to convert to DataLens templates
 type MigrationHandler struct {
 	db            *gorm.DB
@@ -174,6 +192,38 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 		newTemplate.Category = "custom"
 	}
 
+	// Sanitize Pages and Sections data
+	if len(newTemplate.Pages) > 0 && string(newTemplate.Pages) != "null" {
+		var pages []importedPage
+		if err := json.Unmarshal(newTemplate.Pages, &pages); err == nil {
+			modified := false
+			for i := range pages {
+				for j := range pages[i].Sections {
+					// Ensure every section has a type to prevent frontend crash
+					if pages[i].Sections[j].Type == "" {
+						pages[i].Sections[j].Type = "layout"
+						modified = true
+					}
+					// Ensure ID exists
+					if pages[i].Sections[j].ID == "" {
+						pages[i].Sections[j].ID = fmt.Sprintf("sec_%d_%d", i, j)
+						modified = true
+					}
+				}
+			}
+			if modified {
+				newBytes, _ := json.Marshal(pages)
+				newTemplate.Pages = json.RawMessage(newBytes)
+			}
+		}
+	} else {
+		newTemplate.Pages = json.RawMessage("[]")
+	}
+
+	// Ensure ColorScheme is valid
+	if len(newTemplate.ColorScheme) == 0 || string(newTemplate.ColorScheme) == "null" || string(newTemplate.ColorScheme) == "{}" {
+		newTemplate.ColorScheme = json.RawMessage(`{"primary": "#2c3e50", "secondary": "#3498db", "accent": "#e74c3c", "background": "#ffffff"}`)
+	}
 
 	if err := h.db.Create(&newTemplate).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save template to database"})

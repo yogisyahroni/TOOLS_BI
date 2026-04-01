@@ -123,7 +123,7 @@ export default function ReportTemplates() {
     const blob = new Blob([JSON.stringify(tpl, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `${tpl.name.replace(/\s+/g, '_')}.json`; a.click();
+    a.href = url; a.download = `${(tpl.name || 'template').replace(/\s+/g, '_')}.json`; a.click();
     URL.revokeObjectURL(url);
     toast({ title: 'Template exported' });
   };
@@ -303,7 +303,7 @@ export default function ReportTemplates() {
                   {Array.from(new Set(tpl.pages.flatMap(p => p.sections.map(s => s.type)))).slice(0, 5).map(type => {
                     const Icon = sectionTypeIcons[type] || Layout;
                     return (
-                      <div key={type} className="w-7 h-7 rounded-md bg-muted/30 flex items-center justify-center border border-border/30" title={type.replace(/_/g, ' ')}>
+                      <div key={type} className="w-7 h-7 rounded-md bg-muted/30 flex items-center justify-center border border-border/30" title={(type || 'unknown').replace(/_/g, ' ')}>
                         <Icon className="w-3.5 h-3.5 text-muted-foreground/70" />
                       </div>
                     );
@@ -432,7 +432,7 @@ export default function ReportTemplates() {
                                   <span className="text-sm font-bold truncate max-w-[150px]">{section.title}</span>
                                 </div>
                                 <Badge variant="outline" className="text-[9px] px-1.5 py-0 capitalize opacity-60">
-                                  {section.type.replace(/_/g, ' ')}
+                                  {(section.type || 'unknown').replace(/_/g, ' ')}
                                 </Badge>
                               </div>
                               <div className="flex-1 rounded-lg border border-dashed border-border/50 bg-muted/20 flex items-center justify-center">
