@@ -241,26 +241,36 @@
 
 /* Recharts Global Theme Styling */
 .recharts-default-tooltip {
-  background-color: hsl(var(--card)) !important;
+  background-color: hsl(var(--card) / 0.8) !important;
+  backdrop-filter: blur(8px) !important;
   border: 1px solid hsl(var(--border)) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.2) !important;
+  padding: 8px 12px !important;
 }
 
-.recharts-tooltip-item-list {
+.recharts-tooltip-item-list, 
+.recharts-tooltip-item,
+.recharts-tooltip-item-name,
+.recharts-tooltip-item-separator,
+.recharts-tooltip-item-value,
+.recharts-tooltip-item-unit {
   color: hsl(var(--foreground)) !important;
+  font-size: 13px !important;
 }
 
 .recharts-tooltip-label {
   color: hsl(var(--muted-foreground)) !important;
-  font-weight: 600 !important;
-  margin-bottom: 4px !important;
+  font-weight: 700 !important;
+  margin-bottom: 6px !important;
+  font-size: 13px !important;
 }
 
 .recharts-legend-item-text {
   color: hsl(var(--foreground)) !important;
   font-size: 12px !important;
   vertical-align: middle !important;
+  font-weight: 500 !important;
 }
 
 .recharts-cartesian-axis-tick-value {
