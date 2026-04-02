@@ -49,6 +49,7 @@ const menuGroups: MenuGroup[] = [
   {
     title: 'Visualize',
     items: [
+      { icon: Sparkles, label: 'AI Dashboard Builder', path: '/ai-dashboard', badge: 'AI' },
       { icon: PaintBucket, label: 'Chart Builder', path: '/chart-builder' },
       { icon: LayoutGrid, label: 'Dashboard Builder', path: '/dashboard-builder' },
       { icon: Globe, label: 'Geo Visualization', path: '/geo' },

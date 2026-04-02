@@ -68,6 +68,7 @@ const DBDiagram         = lazy(() => import("./pages/DBDiagram"));
 //    Each becomes a separate async chunk on first visit
 const ChartBuilder     = lazy(() => import("./pages/ChartBuilder"));
 const DashboardBuilder = lazy(() => import("./pages/DashboardBuilder"));
+const AIDashboardBuilder = lazy(() => import("@/pages/AIDashboardBuilder"));
 const GeoVisualization = lazy(() => import("./pages/GeoVisualization"));
 const VisualETL        = lazy(() => import("./pages/VisualETL"));
 const ETLPipeline      = lazy(() => import("./pages/ETLPipeline"));
@@ -110,6 +111,7 @@ function ProtectedLayout() {
           <Route path="/pivot"            element={<PivotTable />} />
           <Route path="/chart-builder"    element={<ChartBuilder />} />
           <Route path="/dashboard-builder"element={<DashboardBuilder />} />
+          <Route path="/ai-dashboard"     element={<AIDashboardBuilder />} />
           <Route path="/kpi"              element={<KPIScorecard />} />
           <Route path="/query"            element={<QueryEditor />} />
           <Route path="/etl"              element={<ETLPipeline />} />

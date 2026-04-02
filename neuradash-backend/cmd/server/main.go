@@ -440,6 +440,7 @@ func main() {
 	api.Post("/ask-data", aiH.AskData)
 	api.Post("/ask-data/stream", aiH.StreamAskData)       // SSE: token-by-token SQL + results
 	api.Post("/reports/stream", aiH.StreamGenerateReport) // SSE: streamed report generation
+	api.Post("/ai-dashboard/stream", aiH.StreamGenerateAIDashboard) // SSE: streamed AI dashboard layout generation
 	api.Get("/ask-data/history", authRequired, aiH.ListAskDataHistory)
 	api.Post("/ask-data/history", authRequired, aiH.SaveAskDataHistory)
 	api.Delete("/ask-data/history/:id", authRequired, aiH.DeleteAskDataHistory)
