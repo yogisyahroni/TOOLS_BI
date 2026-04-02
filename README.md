@@ -27,6 +27,8 @@ We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with
 - **AI-Powered Reports & Data Stories**: Otomatis menghasilkan ringkasan eksekutif dan narasi penjelasan dari dataset mentah. Kini mendukung **Mode Presentasi Interaktif** (Tableau-style) yang dapat dibagikan secara publik.
 - **Async AI Report Migration (✨)**: Konversi asinkron file Power BI (`.pbix`), Tableau (`.twbx`), dan PowerPoint (`.pptx`) ke dalam template NeuraDash yang sepenuhnya fungsional. Proses ini berjalan di latar belakang (background) sehingga tidak menghambat produktivitas pengguna.
 - **Persistence & Resume (✨)**: Mekanisme ketahanan migrasi yang menyimpan status kemajuan (checkpoint) secara atomik. Jika terjadi kegagalan AI atau gangguan infrastruktur, NeuraDash menyediakan opsi **"Resume"** sekali klik untuk melanjutkan proses dari titik terakhir yang berhasil, mencegah kehilangan data dan redundansi pemrosesan.
+- **Agentic AI Dashboard Builder (✨ Vercel v0 Style)**: Rancang dashboard BI utuh dari instruksi bahasa alami. AI secara otonom melakukan planning, eksekusi query SQL, dan penentuan layout visual (12-column grid) secara live melalui **Server-Sent Events (SSE) Streaming**.
+- **One-Click Save to Library (✨)**: Integrasi penuh yang memungkinkan hasil rancangan AI disimpan secara permanen ke dalam library Dashboard utama untuk penggunaan jangka panjang.
 - **Enterprise Data Assistant**: Asisten AI yang sadar konteks, terintegrasi langsung ke dalam Editor Query SQL dan pipeline ETL untuk membantu formulasi logika kompleks dan debugging.
 
 ### 🛠️ Data Engineering & Modeling
