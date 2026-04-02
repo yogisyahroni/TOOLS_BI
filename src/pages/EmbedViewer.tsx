@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { API_BASE } from '@/lib/api';
 import { DashboardViewer } from '@/components/DashboardViewer';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function EmbedViewer() {
     const { token } = useParams<{ token: string }>();
@@ -67,12 +68,17 @@ export default function EmbedViewer() {
     const isDashboard = embedData.resourceType === 'dashboard';
 
     return (
-        <div className="w-full h-screen overflow-hidden bg-background">
-            {embedData.showToolbar && (
-                <div className="h-12 border-b border-border bg-card flex items-center px-4 shadow-sm z-10 relative">
-                    <span className="font-semibold text-sm">
+        <div className="w-full h-screen overflow-hidden bg-background relative">
+            {embedData.showToolbar ? (
+                <div className="h-12 border-b border-border bg-card flex items-center justify-between px-4 shadow-sm z-10 relative">
+                    <span className="font-semibold text-sm text-foreground">
                         {resourcePayload?.name || 'NeuraDash Embed View'}
                     </span>
+                    <ThemeToggle />
+                </div>
+            ) : (
+                <div className="fixed bottom-4 right-4 z-50 opacity-40 hover:opacity-100 transition-opacity bg-card rounded-md border border-border shadow-md">
+                    <ThemeToggle />
                 </div>
             )}
             <div className="p-4 h-[calc(100vh)] overflow-auto">

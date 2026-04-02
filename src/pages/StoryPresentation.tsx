@@ -34,6 +34,7 @@ import { API_BASE, type DataStory, type SavedChart } from '@/lib/api';
 import { ChartRenderer } from '@/components/ChartRenderer';
 import type { SlideWidget } from '@/types/data';
 import type { Slide } from '@/components/SlideBuilder';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ExtendedSlide extends Slide {
@@ -140,9 +141,9 @@ function PresentationChartCard({ widget, savedCharts, token, publicCharts }: { w
   // Text / fallback widgets
   if (widget.type === 'text' || widget.fallbackText) {
     return (
-      <div className={`rounded-xl border border-white/10 bg-white/5 p-5 flex flex-col gap-2 ${widget.width === 'full' ? 'col-span-2' : ''}`}>
-        <h4 className="font-semibold text-sm text-white">{widget.title}</h4>
-        <p className="text-sm text-white/60 leading-relaxed whitespace-pre-line">
+      <div className={`rounded-xl border border-border bg-muted/30 p-5 flex flex-col gap-2 ${widget.width === 'full' ? 'col-span-2' : ''}`}>
+        <h4 className="font-semibold text-sm text-foreground">{widget.title}</h4>
+        <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
           {widget.fallbackText || widget.htmlContent || widget.insight || widget.title}
         </p>
       </div>
@@ -161,32 +162,32 @@ function PresentationChartCard({ widget, savedCharts, token, publicCharts }: { w
   const colSpan = widthMap[widget.width] || 'col-span-12';
 
   return (
-    <div className={`group relative rounded-2xl border border-white/5 bg-[#0f172a]/40 backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5 ${colSpan}`}>
+    <div className={`group relative rounded-2xl border border-border bg-card/40 backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5 ${colSpan}`}>
       {/* Decorative gradient corner */}
       <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
       <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h4 className="font-bold text-sm text-white/90 tracking-tight leading-tight group-hover:text-primary transition-colors">
+          <h4 className="font-bold text-sm text-foreground/90 tracking-tight leading-tight group-hover:text-primary transition-colors">
             {widget.title}
           </h4>
           {widget.insight && (
-            <p className="text-[11px] text-white/40 font-medium leading-relaxed line-clamp-2 max-w-[90%] italic">
+            <p className="text-[11px] text-muted-foreground/80 font-medium leading-relaxed line-clamp-2 max-w-[90%] italic">
               "{widget.insight}"
             </p>
           )}
         </div>
-        <div className="p-2 rounded-lg bg-white/5 border border-white/5 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all">
-          <Icon className="w-3.5 h-3.5 text-white/40 group-hover:text-primary transition-colors" />
+        <div className="p-2 rounded-lg bg-muted border border-border/50 group-hover:bg-primary/10 group-hover:border-primary/20 transition-all">
+          <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
         </div>
       </div>
       <div className={`${heightClass} p-4 pt-1 relative`}>
         {isLoading ? (
           <div className="flex items-center justify-center w-full h-full">
-            <Loader2 className="w-6 h-6 animate-spin text-cyan-400/50" />
+            <Loader2 className="w-6 h-6 animate-spin text-primary/50" />
           </div>
         ) : !hasRequiredData ? (
-          <div className="flex flex-col items-center justify-center w-full h-full text-white/30 gap-2">
+          <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground/50 gap-2">
             <Info className="w-5 h-5" />
             <span className="text-xs">Data tidak tersedia</span>
           </div>
@@ -231,13 +232,13 @@ function PresentationSlide({
       {/* Slide header */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-1">
-          <span className="text-xs font-medium text-cyan-400/70 uppercase tracking-wider">
+          <span className="text-xs font-medium text-primary/70 uppercase tracking-wider">
             Slide {slideNumber} / {totalSlides}
           </span>
         </div>
-        <h2 className="text-3xl font-bold text-white tracking-tight leading-tight">{slide.title}</h2>
+        <h2 className="text-3xl font-bold text-foreground tracking-tight leading-tight">{slide.title}</h2>
         {slide.subtitle && (
-          <p className="text-sm text-white/50 mt-2">{slide.subtitle}</p>
+          <p className="text-sm text-muted-foreground mt-2">{slide.subtitle}</p>
         )}
       </div>
 
@@ -250,7 +251,7 @@ function PresentationSlide({
             ))}
           </div>
         ) : (
-          <div className="prose prose-invert prose-lg max-w-none prose-headings:font-bold prose-headings:text-white prose-p:text-white/70 prose-strong:text-white">
+          <div className="prose dark:prose-invert prose-lg max-w-none prose-headings:font-bold prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground">
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
               {slide.content || ''}
             </ReactMarkdown>
@@ -428,9 +429,9 @@ export default function StoryPresentation() {
   // ── Loading / Not found ────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 text-white/60">
-          <Loader2 className="w-10 h-10 animate-spin text-cyan-400" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 text-muted-foreground">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
           <p className="text-sm">Memuat presentasi...</p>
         </div>
       </div>
@@ -439,10 +440,10 @@ export default function StoryPresentation() {
 
   if (!story) {
     return (
-      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
-        <div className="text-center text-white/60">
-          <BookOpen className="w-16 h-16 mx-auto mb-4 text-white/20" />
-          <h2 className="text-xl font-semibold text-white mb-2">
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center text-muted-foreground">
+          <BookOpen className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
+          <h2 className="text-xl font-semibold text-foreground mb-2">
             {publicError || 'Presentasi tidak ditemukan'}
           </h2>
           <p className="text-sm mb-6">
@@ -450,7 +451,7 @@ export default function StoryPresentation() {
           </p>
           {!token && (
             <Link to="/stories">
-              <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">
+              <Button variant="outline" className="border-border text-foreground hover:bg-muted">
                 <ArrowLeft className="w-4 h-4 mr-2" /> Kembali ke Data Stories
               </Button>
             </Link>
@@ -461,37 +462,39 @@ export default function StoryPresentation() {
   }
 
   return (
-    <div className={`min-h-screen bg-[#0a0f1e] flex flex-col relative transition-all duration-500 ${isFullscreen && !showUI ? 'cursor-none' : ''}`} style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className={`min-h-screen bg-background flex flex-col relative transition-all duration-500 ${isFullscreen && !showUI ? 'cursor-none' : ''}`} style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* ── Top bar ── */}
-      <header className={`h-14 bg-[#0f172a]/95 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-6 shrink-0 fixed top-0 left-0 right-0 z-50 transition-transform duration-500 ${!showUI ? '-translate-y-full' : 'translate-y-0'}`}>
+      <header className={`h-14 bg-background/95 backdrop-blur-xl border-b border-border flex items-center justify-between px-6 shrink-0 fixed top-0 left-0 right-0 z-50 transition-transform duration-500 ${!showUI ? '-translate-y-full' : 'translate-y-0'}`}>
         <div className="flex items-center gap-3">
           {!token && (
-            <Link to="/stories" className="text-white/40 hover:text-white transition-colors">
+            <Link to="/stories" className="text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft className="w-4 h-4" />
             </Link>
           )}
           {token && (
-            <div className="text-cyan-400">
+            <div className="text-primary">
               <ShieldCheck className="w-4 h-4" />
             </div>
           )}
-          <div className="w-px h-4 bg-white/20" />
+          <div className="w-px h-4 bg-border" />
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
               <BookOpen className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-sm font-semibold text-white truncate max-w-[200px] md:max-w-[400px]">
+            <span className="text-sm font-semibold text-foreground truncate max-w-[200px] md:max-w-[400px]">
               {story.title}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Theme Toggle in Header */}
+          <ThemeToggle />
           {/* Presentation Mode */}
           <Button
             variant="ghost"
             size="sm"
             onClick={handleTogglePresentation}
-            className={`transition-all duration-300 h-8 px-3 text-xs gap-1.5 ${isPresenting ? 'bg-primary/20 text-primary border-primary/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+            className={`transition-all duration-300 h-8 px-3 text-xs gap-1.5 ${isPresenting ? 'bg-primary/20 text-primary border-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
           >
             {isPresenting
               ? <><Pause className="w-3.5 h-3.5" /> Stop</>
@@ -499,13 +502,13 @@ export default function StoryPresentation() {
           </Button>
           {/* Share */}
           <Button variant="ghost" size="sm" onClick={handleShare}
-            className="text-white/60 hover:text-white hover:bg-white/10 h-8 px-3 gap-1.5">
+            className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 px-3 gap-1.5">
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden md:inline text-xs">Bagikan</span>
           </Button>
           {/* Export PDF */}
           <Button variant="ghost" size="sm" onClick={() => toPDF()}
-            className="text-white/60 hover:text-white hover:bg-white/10 h-8 px-3 gap-1.5">
+            className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 px-3 gap-1.5">
             <Download className="w-3.5 h-3.5" />
             <span className="hidden md:inline text-xs">Export PDF</span>
           </Button>
@@ -513,7 +516,7 @@ export default function StoryPresentation() {
           {!token && (
             <Link to="/stories" target="_self">
               <Button variant="outline" size="sm"
-                className="border-white/20 text-white/70 hover:bg-white/10 h-8 px-3 text-xs gap-1.5 hidden md:flex">
+                className="border-border text-foreground hover:bg-muted h-8 px-3 text-xs gap-1.5 hidden md:flex">
                 <Edit2 className="w-3.5 h-3.5" /> Edit
               </Button>
             </Link>
@@ -523,7 +526,7 @@ export default function StoryPresentation() {
 
       {/* ── Tabs Navigation (Tableau Style) ── */}
       {slides.length > 1 && (
-        <div className={`mt-14 bg-[#0f172a]/90 backdrop-blur-lg border-b border-white/5 px-6 overflow-x-auto no-scrollbar scroll-smooth flex shrink-0 z-40 transition-transform duration-500 fixed top-0 left-0 right-0 ${!showUI ? '-translate-y-full' : 'translate-y-14'}`}>
+        <div className={`mt-14 bg-background/90 backdrop-blur-lg border-b border-border px-6 overflow-x-auto no-scrollbar scroll-smooth flex shrink-0 z-40 transition-transform duration-500 fixed top-0 left-0 right-0 ${!showUI ? '-translate-y-full' : 'translate-y-14'}`}>
           <div className="flex gap-1 py-1.5">
             {slides.map((s, idx) => {
               const isActive = idx === currentSlide;
@@ -534,13 +537,13 @@ export default function StoryPresentation() {
                   className={`
                     relative px-4 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-300
                     ${isActive
-                      ? 'text-white bg-primary/20 border border-primary/30'
-                      : 'text-white/40 border border-transparent hover:text-white/70 hover:bg-white/5'
+                      ? 'text-foreground bg-primary/10 border border-primary/30'
+                      : 'text-muted-foreground border border-transparent hover:text-foreground hover:bg-muted'
                     }
                   `}
                 >
                   <span className="flex items-center gap-2">
-                    <span className={`w-1 h-1 rounded-full ${isActive ? 'bg-primary animate-pulse' : 'bg-white/20'}`} />
+                    <span className={`w-1 h-1 rounded-full ${isActive ? 'bg-primary animate-pulse' : 'bg-muted-foreground'}`} />
                     {idx + 1}. {s.title}
                   </span>
                 </button>
@@ -551,7 +554,7 @@ export default function StoryPresentation() {
       )}
 
       {/* ── Main slide area ── */}
-      <main className="flex-1 flex overflow-hidden min-h-0 pt-28 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-900 to-slate-950">
+      <main className="flex-1 flex overflow-hidden min-h-0 pt-28 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] dark:from-blue-900/10 dark:via-slate-900 dark:to-slate-950 from-blue-50 via-background to-background">
         {/* Slide content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar" ref={targetRef}>
           <div className={`min-h-full p-6 md:p-10 lg:p-12 max-w-[1700px] mx-auto w-full transition-all duration-700 transform ${isPresenting ? 'scale-[1.01]' : 'scale-100'}`}>
@@ -570,13 +573,13 @@ export default function StoryPresentation() {
       </main>
 
       {/* ── Bottom navigation bar ── */}
-      <footer className={`h-14 bg-[#0f172a]/95 backdrop-blur-xl border-t border-white/10 flex items-center justify-between px-6 shrink-0 fixed bottom-0 left-0 right-0 z-50 transition-transform duration-500 ${!showUI ? 'translate-y-full' : 'translate-y-0'}`}>
+      <footer className={`h-14 bg-background/95 backdrop-blur-xl border-t border-border flex items-center justify-between px-6 shrink-0 fixed bottom-0 left-0 right-0 z-50 transition-transform duration-500 ${!showUI ? 'translate-y-full' : 'translate-y-0'}`}>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setCurrentSlide(Math.max(0, currentSlide - 1))}
           disabled={currentSlide === 0}
-          className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 gap-1.5"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 gap-1.5"
         >
           <ChevronLeft className="w-4 h-4" /> Sebelumnya
         </Button>
@@ -588,8 +591,8 @@ export default function StoryPresentation() {
               key={idx}
               onClick={() => setCurrentSlide(idx)}
               className={`rounded-full transition-all shrink-0 ${idx === currentSlide
-                  ? 'bg-cyan-400 w-5 h-2'
-                  : 'bg-white/20 hover:bg-white/40 w-2 h-2'
+                  ? 'bg-primary w-5 h-2'
+                  : 'bg-muted-foreground/30 hover:bg-muted-foreground/60 w-2 h-2'
                 }`}
               title={`Slide ${idx + 1}`}
             />
@@ -601,7 +604,7 @@ export default function StoryPresentation() {
           size="sm"
           onClick={() => setCurrentSlide(Math.min(slides.length - 1, currentSlide + 1))}
           disabled={currentSlide === slides.length - 1}
-          className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 gap-1.5"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 gap-1.5"
         >
           Berikutnya <ChevronRight className="w-4 h-4" />
         </Button>
