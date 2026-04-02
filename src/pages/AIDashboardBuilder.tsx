@@ -25,7 +25,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { useDatasets } from '@/hooks/useApi';
-import { API_BASE, getAccessToken, dashboardApi } from '@/lib/api';
+import { API_BASE, getAccessToken, dashboardApi, chartApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 
@@ -42,7 +42,7 @@ const COLORS = [
 
 interface AIDashboardChart {
   title: string;
-  type: string; // "stat", "line", "bar", "area", "pie", "donut", "radar", "geo", "pivot", "table"
+  type: string; // bar,line,pie,donut,area,scatter,radar,funnel,treemap,stat
   width: number;
   query: string;
   data: Record<string, unknown>[];
@@ -205,30 +205,27 @@ function AIDashboardBuilder() {
 
         const chartPayload = {
           title: `AI - ${c.title}`,
-          type: c.type,
-          dataset_id: selectedDatasetId,
-          x_axis: xAxis,
-          y_axis: yAxis,
-          group_by: '',
-          config: JSON.stringify({
+          type: c.type as any,
+          datasetId: selectedDatasetId,
+          xAxis: xAxis || 'category',
+          yAxis: yAxis || 'value',
+          groupBy: '',
+          dataLimit: 100,
+          config: {
             query: c.query,
             isAiGenerated: true,
             width: c.width
-          })
+          }
         };
 
-        const response = await fetch(`${API_BASE}/charts`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAccessToken()}`,
-          },
-          body: JSON.stringify(chartPayload),
-        });
-
-        if (!response.ok) throw new Error(`Failed to save chart: ${c.title}`);
-        const result = await response.json();
-        savedChartIds[i] = result.data.id;
+        const res = await chartApi.create(chartPayload);
+        
+        // AxiosResponse<SavedChart> -> res.data is the SavedChart object
+        if (res.data && res.data.id) {
+          savedChartIds[i] = res.data.id;
+        } else {
+          throw new Error(`Invalid response from server when saving chart: ${c.title}`);
+        }
       }
 
       // 2. Calculate Layout (x, y, w, h) for Grid Compatibility

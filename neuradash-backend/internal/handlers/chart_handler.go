@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -100,10 +101,11 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 	var req struct {
 		Title     string `json:"title"`
 		DatasetID string `json:"datasetId"`
-		Type      string `json:"type"` // bar,line,pie,area,scatter,radar,funnel,treemap
-		XAxis     string `json:"xAxis"`
-		YAxis     string `json:"yAxis"`
-		GroupBy   string `json:"groupBy"`
+		Type      string `json:"type"` // bar,line,pie,donut,area,scatter,radar,funnel,treemap,stat
+		XAxis     string          `json:"xAxis"`
+		YAxis     string          `json:"yAxis"`
+		GroupBy   string          `json:"groupBy"`
+		Config    json.RawMessage `json:"config"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
@@ -121,6 +123,7 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 		XAxis:       req.XAxis,
 		YAxis:       req.YAxis,
 		GroupBy:     req.GroupBy,
+		Config:      req.Config,
 		Annotations: []byte("[]"), // Fix JSONB nil issue in Postgres
 		CreatedAt:   time.Now(),
 	}
@@ -161,9 +164,10 @@ func (h *ChartHandler) UpdateChart(c *fiber.Ctx) error {
 	var req struct {
 		Title   *string `json:"title"`
 		Type    *string `json:"type"`
-		XAxis   *string `json:"xAxis"`
-		YAxis   *string `json:"yAxis"`
-		GroupBy *string `json:"groupBy"`
+		XAxis   *string          `json:"xAxis"`
+		YAxis   *string          `json:"yAxis"`
+		GroupBy *string          `json:"groupBy"`
+		Config  *json.RawMessage `json:"config"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
@@ -191,6 +195,9 @@ func (h *ChartHandler) UpdateChart(c *fiber.Ctx) error {
 		}
 		if req.GroupBy != nil {
 			patch.GroupBy = *req.GroupBy
+		}
+		if req.Config != nil {
+			patch.Config = *req.Config
 		}
 		if err := h.svc.UpdateChart(c.Context(), &patch, userID); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Update failed: %v", err)})

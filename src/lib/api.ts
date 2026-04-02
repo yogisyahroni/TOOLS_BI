@@ -546,6 +546,7 @@ export interface SavedChart {
     xAxis: string;
     yAxis: string;
     groupBy?: string;
+    config?: any;
     dataLimit?: number;
     sortOrder?: string;
     dateCol?: string;
@@ -562,6 +563,7 @@ export interface SavedChartCreate {
     xAxis?: string;
     yAxis?: string;
     groupBy?: string;
+    config?: any;
     dataLimit?: number;
     sortOrder?: string;
     dateCol?: string;
