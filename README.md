@@ -6,127 +6,85 @@
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
   <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go" />
 
-  <h1>Neuradash : Enterprise AI Analytics & BI Platform</h1>
-  <p>A comprehensive, high-performance Business Intelligence (BI) and Data Engineering platform empowering organizations to bridge the gap between raw data silos and strategic decision-making.</p>
+  <br />
+  <br />
+
+  <h1>Neuradash</h1>
+  <p><b>Enterprise AI Analytics & Strategic BI Platform</b></p>
+  <p>A high-performance "Data Operating System" designed to bridge the gap between fragmented data silos and actionable strategic intelligence through autonomous AI and resilient engineering.</p>
 </div>
 
 ---
 
-**Neuradash** acts as an all-in-one Data Operating System. From bringing in raw data via Visual ETL, tracking metrics via KPI Scorecards, building responsive dashboards, all the way to querying data via our **Natural Language to SQL (NL2SQL) AI Engine**, Neuradash handles the full lifecycle of modern enterprise analytics.
+## 🏛️ Project Vision
+**Neuradash** is not just another dashboarding tool; it is an end-to-end analytical ecosystem. It handles the entire data lifecycle—from visual-node **ETL pipelines** and **automated data profiling** to **Natural Language to SQL (NL2SQL)** conversion and autonomous **Agentic Dashboard Generation**. 
 
-## 🚀 Comprehensive Feature Setup
-
-We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with over **40+ specialized modules** dedicated to deep data work.
-
-### 🤖 AI-Powered Analytics
-
-- **Ask Data (NL2SQL)**: Chat with your data. A highly optimized AI inference engine converts natural language to optimized SQL queries and automatically renders the appropriate charts.
-- **5 Advanced AI Personas (✨NEW)**: The AI dynamically switches between 5 expert data skills based on context: *Data Visualizer Engineer* (chart recommendations), *Predictive Analyst* (forecasting & extrapolation), *Financial & Risk Analyst* (ROI/Margin calculations), *Anomaly & Fraud Detection Expert* (outlier awareness), and *Sentiment & NLP Analyst* (text polarity).
-- **Hybrid Prompt Refiner (✨)**: One-click "Polishing" of natural language inputs. Automatically transforms raw user queries into professional, unambiguous instructions tailored to SQL or Report contexts.
-- **Automated Follow-up Suggestions**: Predictive "Suggestion Pills" that appear after every AI response, guiding users toward deeper analysis or alternate visualization styles.
-- **AI-Powered Reports & Data Stories**: Otomatis menghasilkan ringkasan eksekutif dan narasi penjelasan dari dataset mentah. Kini mendukung **Mode Presentasi Interaktif** (Tableau-style) yang dapat dibagikan secara publik.
-- **Async AI Report Migration (✨)**: Konversi asinkron file Power BI (`.pbix`), Tableau (`.twbx`), dan PowerPoint (`.pptx`) ke dalam template NeuraDash yang sepenuhnya fungsional. Proses ini berjalan di latar belakang (background) sehingga tidak menghambat produktivitas pengguna.
-- **Persistence & Resume (✨)**: Mekanisme ketahanan migrasi yang menyimpan status kemajuan (checkpoint) secara atomik. Jika terjadi kegagalan AI atau gangguan infrastruktur, NeuraDash menyediakan opsi **"Resume"** sekali klik untuk melanjutkan proses dari titik terakhir yang berhasil, mencegah kehilangan data dan redundansi pemrosesan.
-- **Agentic AI Dashboard Builder (✨ Vercel v0 Style)**: Rancang dashboard BI utuh dari instruksi bahasa alami. AI secara otonom melakukan planning, eksekusi query SQL, dan penentuan layout visual (12-column grid) secara live melalui **Server-Sent Events (SSE) Streaming**.
-- **One-Click Save to Library (✨)**: Integrasi penuh yang memungkinkan hasil rancangan AI disimpan secara permanen ke dalam library Dashboard utama untuk penggunaan jangka panjang.
-- **Enterprise Data Assistant**: Asisten AI yang sadar konteks, terintegrasi langsung ke dalam Editor Query SQL dan pipeline ETL untuk membantu formulasi logika kompleks dan debugging.
-
-### 🛠️ Data Engineering & Modeling
-
-- **Visual ETL & Pipeline Builder**: Antarmuka drop-and-drag berbasis node untuk Ekstraksi, Transformasi, dan Pemuatan (ETL) data Anda.
-- **Dynamic Resource-Aware Chunking (✨)**: Backend secara otomatis memantau RAM sistem secara real-time dan menyesuaikan kecepatan pemrosesan/ukuran batch secara dinamis. Ini menjamin waktu aktif 100% bahkan pada server dengan sumber daya terbatas (seperti Render Free Tier) dengan mencegah crash OOM selama impor data massal.
-- **Checkpoint & Auto-Resume**: Progres disimpan setelah setiap batch. Jika server restart, pipeline yang terhenti akan otomatis dilanjutkan dari titik pemeriksaan terakhir yang berhasil.
-- **Smart Schema & DB Diagram (ERD)**: Pembuatan profil database otomatis untuk memvisualisasikan hubungan tabel, kunci asing, dan batasan secara sempurna.
-- **Data Modeling & calculated Fields**: Tambahkan logika bisnis kustom, metrik turunan, dan kolom kalkulasi dinamis.
-- **Data Profiling**: Wawasan instan ke dalam dataset Anda (distribusi null, metrik min/max, pengelompokan kategorikal).
-- **Data Refresh**: Siapkan jadwal sinkronisasi otomatis untuk menjaga paritas dataset dengan sumber asli secara live.
-- **External Connections**: Dukungan langsung untuk terhubung ke instans eksternal PostgreSQL, MySQL, SQL Server, Snowflake, dan BigQuery.
-- **Data Upload**: Parsing dan unggahan asli dokumen CSV, JSON, dan Excel berukuran besar.
-- **AI Robustness: Structural Chunking & TPM Guard (✨)**: Mekanisme pertahanan untuk mencegah kegagalan migrasi dokumen besar. Sistem memproses halaman dokumen satu per satu secara berurutan dan dilengkapi dengan **TokenThrottler** yang secara otomatis mengatur kecepatan (throttling) untuk menghindari batas 'Too Many Requests' (429) dari penyedia AI.
-
-### 📊 Advanced Visualization & Dashboarding
-
-- **Chart & Dashboard Builder**: Kanvas drag-and-drop berbasis grid yang responsif, mendukung perpustakaan elemen interaktif yang luas.
-- **Geo-Visualization**: Pemetaan spasial interaktif untuk kinerja regional. Didukung oleh MapLibre dan Deck.gl untuk jutaan titik data.
-- **Pivot Tables**: Operasi tabular multi-dimensi canggih untuk membedah data kategorikal secara asli di browser.
-- **KPI Scorecards**: Pelacakan metrik eksekutif, benchmarking, dan analisis komparatif real-time terhadap target.
-- **Interactive Drill-Downs & Cross-Filtering**: Mempersempit detail dengan mudah. Mengklik elemen di satu chart secara otomatis memfilter setiap chart lainnya di dashboard.
-- **Conditional Formatting**: Logika pemformatan sel seperti Excel untuk menyoroti anomali secara visual.
-
-### 🔐 Enterprise Governance & Security
-
-- **Row-Level Security (RLS) & Data Privacy**: Kebijakan kontrol akses yang sangat granular untuk memastikan keamanan multi-tenant dan perlindungan PII.
-- **Embed & Share (Iframe & Story)**: Mekanisme URL bertanda tangan yang aman untuk menyematkan chart tertentu, dashboard penuh, atau **Presentasi Data Story** ke portal eksternal. Mendukung *metadata preloading* untuk visualisasi publik tanpa login.
-- **Scheduled Reports**: Kirim dashboard otomatis sebagai PDF atau gambar melalui Email atau Webhook.
-- **Annotations & Alerts**: Siapkan peringatan berbasis ambang batas dan anotasi pada puncak chart tertentu untuk kolaborasi tim.
-- **Bookmarks & Report Templates**: Simpan status filter/parameter tertentu, dan gunakan kembali tata letak UI laporan standar secara instan.
-
-### 📂 Supported External Databases & Formats
-
-| Category | Supported Items |
-| :--- | :--- |
-| **Databases** | PostgreSQL (Supabase, Neon, AWS RDS), MySQL, SQL Server (Azure), SQLite, ClickHouse, DuckDB |
-| **BI Formats** | Power BI (`.pbix`), Tableau (`.twb`, `.twbx`), PowerPoint (`.pptx`) |
-| **Files** | CSV, Excel, JSON (Max 100 MB) |
+Designed for high-reliability environments, Neuradash features unique **resource-aware processing** and **atomic persistence** to ensure zero downtime during massive data migrations.
 
 ---
 
-## 🏛️ System Architecture
+## 🔥 Key Innovations & Features
 
-Neuradash utilizes a decoupled **Clean Architecture**, supporting stateless frontend interactions with highly specialized backend services.
+### 🤖 Next-Gen AI Analytics
+- **Agentic AI Dashboard Builder (✨ Vercel v0 Style)**: Construct entire BI dashboards from raw natural language instructions. The AI autonomously plans the architecture, executes optimized SQL, and generates a responsive **12-column grid layout** live via **SSE Streaming**.
+- **Ask Data (Advanced NL2SQL)**: Chat with your database. Our optimized inference engine resolves complex queries and recommends the best-fit visualizations (Bar, Line, Pie, Radar, or Tables) instantly.
+- **5 Expert AI Personas**: The system intelligently switches between specialized agents: *Data Visualization Architect*, *Predictive Analyst*, *Financial Risk Expert*, *Anomaly Detection Specialist*, and *NLP Sentiment Analyst*.
+- **Async BI Migration Engine**: Convert legacy enterprise assets (**Power BI `.pbix`**, **Tableau `.twbx`**, **PowerPoint `.pptx`**) into functional Neuradash templates asynchronously in the background.
+- **AI-Powered Resilience (Checkpoint & Resume)**: Atomic persistence mechanism that saves migration progress at every step. If infrastructure failures occur, users can resume complex AI tasks with a single click from the last successful checkpoint.
+
+### 🛠️ Robust Data Engineering
+- **Visual ETL & Node-Based Pipelines**: Drag-and-drop interface for building complex Extract, Transform, Load (ETL) workflows without writing code.
+- **Dynamic Resource-Aware Chunking**: Real-time RAM and CPU monitoring on the backend. The system dynamically adjusts batch sizes to prevent **Out-of-Memory (OOM)** crashes, ensuring stability even on limited infrastructure (e.g., Render Free Tier).
+- **Proactive Data Profiling**: Instantly extract deep insights from raw datasets, including null distributions, categorical grouping, and statistical min/max/average metrics.
+- **Enterprise Connectivity**: Native support for **PostgreSQL**, **MySQL**, **SQL Server**, **Snowflake**, and **BigQuery** with secure read-only SQL execution and schema-introspection.
+
+### 📊 Professional Visualization
+- **12-Column Responsive Matrix**: A high-fidelity dashboard canvas supporting drag-and-drop interactions, resizing, and intelligent grid snapping.
+- **High-Performance Geospatial Mapping**: Powered by **MapLibre** and **Deck.gl** for rendering millions of spatial data points with interactive regional performance tracking.
+- **Interactive Drill-Downs & Cross-Filtering**: Slice and dice data with ease. Selecting a segment in one chart automatically filters all related visualizations using state-synchronized context.
+- **Executive KPI Scorecards**: Real-time tracking of critical business metrics with benchmarking and comparative period analysis.
+
+### 🔐 Governance & Security
+- **Strict Row-Level Security (RLS)**: Fine-grained access control policies ensuring multi-tenant isolation and PII protection at the database layer.
+- **Secure Embed & Share**: Generate signed URLs and secure Iframes for internal portals or public presentations with preloaded metadata support.
+- **Audit-Ready Logs**: Comprehensive tracking of query execution, data access, and metadata changes.
+
+---
+
+## 💻 Tech Stack (Grade S++)
+
+### **Frontend Architecture**
+- **Core**: React 18 + TypeScript + Vite.
+- **Styling**: Tailwind CSS + Shadcn UI (Radix Primitives).
+- **State Management**: **Zustand** (Global UI) + **TanStack Query** (Server-state caching & deduplication).
+- **Graphics Engine**: Apache ECharts, Recharts, Deck.gl, Framer Motion.
+- **Canvas**: React Grid Layout + @hello-pangea/dnd.
+
+### **Backend Infrastructure**
+- **Language**: **Go 1.22** (Concurrency-optimized).
+- **Framework**: Fiber v2 (Enterprise API Engine).
+- **Persistence**: GORM + PostgreSQL 16 (Stateless architecture).
+- **Real-time**: Redis 7 + WebSocket Hubs for live dashboard synchronization.
+- **AI Core**: Native LLM bridging with specialized prompt-refining logic.
+
+---
+
+## 📐 System Architecture
 
 ```mermaid
 graph TD
-    User((User)) -->|Browser| FE[React + Vite Frontend]
-    FE -->|API / WebSocket| BE[Go + Fiber Backend Engine]
-    BE -->|SQL / Auth| DB[(PostgreSQL / Supabase)]
-    BE -->|Realtime| Redis[(Redis Cache)]
-    BE -->|NL2SQL / AI| LLM[LLM / OpenAI]
+    User((User)) -->|HTTPS/WSS| FE[React + Vite Frontend]
+    FE -->|JSON/SSE| BE[Go Fiber Engine]
+    BE -->|SQL/Auth| DB[(PostgreSQL / Supabase)]
+    BE -->|State/Cache| Redis[(Redis 7)]
+    BE -->|Inference| LLM[LLM / OpenAI]
     
-    subgraph "Data Processing Center"
-        ETL[Pipeline Engine] -->|Checkpoint| BE
-        BE -->|Async Sync| ExtDB[(External DB Replicas)]
-        BE -->|Assets| S3[(MinIO / S3 Storage)]
+    subgraph "Resilient Data Layer"
+        ETL[ETL Node Engine] -->|Atomic Checkpoint| BE
+        BE -->|Connector| Remote[(External Warehouses)]
+        BE -->|Storage| S3[(S3 Compatible Storage)]
     end
 ```
-
----
-
-## 💻 Technical Stack
-
-This project is built using 2024-standard modern web primitives:
-
-### **Frontend Infrastructure**
-
-- **Core Framework**: React 18 + TypeScript + Vite.
-- **Styling**: Tailwind CSS, Shadcn UI (accessible Radix primitives).
-- **State & Data**: Zustand (Global UI state), TanStack Query / React Query (Server-state caching).
-- **Visuals & Charts**: Apache ECharts, Recharts, Deck.gl, React Map GL for rendering robust top-tier graphical reports.
-- **Interactions**: Framer Motion (micro-animations), @hello-pangea/dnd / React Grid Layout (Dashboard Canvas).
-
-### **Backend & Infrastructure**
-
-- **Language & Framework**: Go 1.22 + Fiber v2 (High-performance API engine).
-- **ORM & Database**: GORM + PostgreSQL 16 (Stateless architecture with RLS).
-- **Cache & Realtime**: Redis 7 (Speed) + WebSocket Hub (Live updates).
-- **Storage**: MinIO / AWS S3 compatible (Asset & dataset storage).
-- **Security**: JWT (Refresh token rotation) + Bcrypt (Hashing).
-- **AI Core**: Native LLM bridging for context-grounded NL2SQL execution.
-
----
-
-## 🛣️ API Overview (v1)
-
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| POST | `/auth/login` | Secure JWT Authentication |
-| POST | `/datasets/upload` | Multipart file upload (CSV/Excel) |
-| POST | `/import/confirm` | Finalize ETL configuration |
-| POST | `/connections/sync` | Live DB Introspection |
-| POST | `/connections/query` | Secure Read-only SQL Execution |
-| GET  | `/templates` | Sync templates and migration status |
-| POST | `/templates/import` | Start async BI file migration |
-| POST | `/templates/resume/:id` | Resume failed or interrupted migration |
 
 ---
 
@@ -134,85 +92,50 @@ This project is built using 2024-standard modern web primitives:
 
 ```text
 .
-├── src/                   # Frontend: React 18 Components & Pages
-│   ├── components/        # Reusable UI (Shadcn, Charts, Pivot Table)
-│   ├── pages/             # 40+ Features (AskData, ETL, Dashboard, Map)
-│   └── lib/               # Supabase Client & Shared Logic
-├── neuradash-backend/      # Backend: Go 1.22 + Fiber Enterprise Engine
-│   ├── internal/          # Business logic (ETL Engine, NL2SQL, Parsers)
-│   ├── migrations/        # PostgreSQL schema versioning
-│   └── docker-compose.yml # Containerized DB, Redis, MinIO
-├── rules.md               # Core System Governance Rules
-├── TECHNICAL_SPECS.md     # Deep architecture breakdown
-├── PERFORMANCE_TEST.md    # Benchmarking results & resilience logs
-├── package.json           # Frontend configuration
-└── README.md              # Global project documentation
+├── src/                   # Frontend: React 18 UI & State
+│   ├── components/        # Shadcn UI, Recharts, Geo-viz
+│   ├── pages/             # 40+ Features (AI Builder, ETL, Data Stories)
+│   └── lib/               # Shared logic & Client initializers
+├── neuradash-backend/      # Backend: Go 1.22 Concurrent Core
+│   ├── internal/          # Business logic (Planning, Parsing, OOM Guard)
+│   ├── cmd/server/        # Entrypoint
+│   └── docker-compose.yml # Dev infrastructure (DB, Redis, MinIO)
+├── package.json           # Frontend dependencies
+└── README.md              # Project documentation
 ```
 
 ---
 
-## ⚙️ Development Guide
+## ⚙️ Quick Start
 
 ### Prerequisites
-
 - Node.js (v18+)
-- npm or pnpm
-- A Supabase Project configured locally or in the cloud for DB and Authentication handling.
+- Go (v1.22+)
+- Docker (for local infrastructure)
 
-### Quick Setup
-
-1. **Clone the repository:**
-
+### Installation
+1. **Clone the Repo**:
    ```bash
    git clone https://github.com/yogisyahroni/TOOLS_BI.git
    cd TOOLS_BI
    ```
-
-2. **Install Frontend Dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-3. **Configure the Environment:**
-   - **Backend**: `cp neuradash-backend/.env.example neuradash-backend/.env` (Fill `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`).
-   - **Frontend**: Create `.env` in root with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-
-4. **Boot Infrastructure (Docker):**
+2. **Setup Infrastructure**:
    ```bash
    docker-compose up -d
    ```
-
-5. **Spin up Neuradash:**
-   - **Backend**: `cd neuradash-backend && go run ./cmd/server/`
-   - **Frontend**: `npm install && npm run dev`
-
-### 🧪 Quality Assurance
-
-```bash
-# Backend unit tests (isolated logic)
-go test ./internal/engine/... ./internal/parser/... -v
-
-# Full project coverage
-go test ./... -v
-```
-
-5. **Build for Production / Deployment:**
-
-   ```bash
-   npm run build
-   ```
+3. **Environment Configuration**:
+   - Create `.env` in root for Frontend (VITE_SUPABASE_URL, etc.).
+   - Create `.env` in `neuradash-backend/` for Backend.
+4. **Launch Application**:
+   - Backend: `cd neuradash-backend && go run ./cmd/server/`
+   - Frontend: `npm install && npm run dev`
 
 ---
 
-## 📩 Contact & Purpose
+## 📩 Purpose & Capabilities
+This project serves as a showcase of high-end **Full-stack Technical Architecture**, **Data Engineering at scale**, and **AI Product Integration**. It is built with a focus on:
+- **Resilience**: Handling massive data without crashes.
+- **Velocity**: Accelerating speed-to-insight by 10x via AI.
+- **Aesthetics**: Premium UI/UX that meets 2024 enterprise standards.
 
-*This project exemplifies capabilities in complex full-stack architectures, high-performance data engineering, scalable UI ecosystems, and native AI integration.*
-
-- **Ultimate Goal**: Create a self-service reality empowering non-technical stakeholders to get 10x faster speed-to-insight without writing SQL.
-- **Production Checklist**:
-  - [ ] Set `JWT_SECRET` (64-byte random string).
-  - [ ] Set `SERVER_ENV=production`.
-  - [ ] Configure PostgreSQL SSL (`sslmode=require`).
-  - [ ] Build: `go build -ldflags="-s -w" -o server ./cmd/server/`.
-- **Availability**: Open to Data Engineer, Backend/Frontend Architect, or Senior Full-stack opportunities.
+**Built for the next generation of data-driven enterprises.**
