@@ -364,6 +364,7 @@ export const reportTemplateApi = {
             headers: { 'Content-Type': undefined }
         });
     },
+    resume: (id: string) => api.post(`/report-templates/resume/${id}`),
 };
 
 // BUG-H2: Dataset Relationships (DB Diagram)

@@ -509,6 +509,7 @@ func main() {
 	reportTemplates.Put("/:id", templateH.UpdateTemplate)
 	reportTemplates.Delete("/:id", templateH.DeleteTemplate)
 	reportTemplates.Post("/import", uploadRateLimit, migrationH.ImportBIFile)
+	reportTemplates.Post("/resume/:id", migrationH.ResumeMigration)
 
 	// BUG-H2: Dataset Relationships for DB Diagram
 	relationships := api.Group("/relationships")

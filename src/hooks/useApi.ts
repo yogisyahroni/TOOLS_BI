@@ -499,6 +499,14 @@ export function useImportTemplate() {
     });
 }
 
+export function useResumeTemplate() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => reportTemplateApi.resume(id).then((r) => r.data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['report-templates'] }),
+    });
+}
+
 export function useDeleteReportTemplate() {
     const qc = useQueryClient();
     return useMutation({

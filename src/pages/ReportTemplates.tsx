@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { builtinTemplates } from '@/lib/builtinTemplates';
 import type { ReportTemplate, TemplateCategory, TemplateSource, TemplatePage, TemplateSection } from '@/types/data';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { useReportTemplates, useCreateReportTemplate, useDeleteReportTemplate, useImportTemplate } from '@/hooks/useApi';
+import { useReportTemplates, useCreateReportTemplate, useDeleteReportTemplate, useImportTemplate, useResumeTemplate } from '@/hooks/useApi';
 
 function genId() { return Math.random().toString(36).substring(2, 12); }
 
@@ -53,6 +53,7 @@ export default function ReportTemplates() {
   const createMut = useCreateReportTemplate();
   const deleteMut = useDeleteReportTemplate();
   const importMut = useImportTemplate();
+  const resumeMut = useResumeTemplate();
 
   // Process raw templates into two groups
   const userTemplatesFormatted = userTemplatesRaw.map((t) => {
@@ -124,6 +125,23 @@ export default function ReportTemplates() {
       toast({
         title: "Initialization Failed",
         description: err?.response?.data?.error || "Could not start migration job.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleResume = async (id: string, name: string) => {
+    try {
+      await resumeMut.mutateAsync(id);
+      toast({
+        title: "Migration Resumed",
+        description: `Retrying migration for ${name}...`,
+      });
+      refetch();
+    } catch (err: any) {
+      toast({
+        title: "Resume Failed",
+        description: err?.response?.data?.error || "Could not resume migration.",
         variant: "destructive"
       });
     }
@@ -395,6 +413,18 @@ export default function ReportTemplates() {
                       >
                         Cancel & Clear
                       </Button>
+                      {isFailed && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 text-xs flex-1 gap-1.5 border-primary/30 hover:bg-primary/5 hover:border-primary/50 text-foreground"
+                          onClick={() => handleResume(tpl.id, tpl.name)}
+                          disabled={resumeMut.isPending}
+                        >
+                          {resumeMut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3 text-primary" />}
+                          Resume Migration
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </motion.div>

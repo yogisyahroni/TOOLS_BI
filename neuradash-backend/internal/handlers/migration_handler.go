@@ -164,15 +164,7 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 	}
 	cfg.MaxTokens = 4096
 
-	status := fiber.Map{
-		"status":       "processing",
-		"current_page": 0,
-		"total_pages":  len(pages),
-		"started_at":   time.Now(),
-		"message":      "Extraction successful. AI is processing pages...",
-	}
-	statusJSON, _ := json.Marshal(status)
-
+	pagesJSON, _ := json.Marshal(pages)
 	newTemplate := models.ReportTemplate{
 		ID:              uuid.New().String(),
 		UserID:          &userID,
@@ -180,7 +172,8 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 		Source:          strings.TrimPrefix(ext, "."),
 		Category:        "custom",
 		IsDefault:       false,
-		MigrationStatus: json.RawMessage(statusJSON),
+		SourceMetadata:  json.RawMessage(pagesJSON),
+		ProcessedCount:  0,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 	}
@@ -189,11 +182,53 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to initialize migration job"})
 	}
 
-	// Phase 3: Start Asynchronous Worker
-	go h.processMigrationJob(newTemplate.ID, pages, &cfg, ext)
+	// Phase 3: Start Asynchronous Worker (start from 0)
+	go h.processMigrationJob(newTemplate.ID, pages, &cfg, ext, 0)
 
 	// Return the template ID immediately so frontend can poll status
 	return c.Status(fiber.StatusAccepted).JSON(newTemplate)
+}
+
+// ResumeMigration handles continuing a partially finished or failed migration.
+// POST /api/v1/templates/resume/:id
+func (h *MigrationHandler) ResumeMigration(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userID := middleware.GetUserID(c)
+
+	var template models.ReportTemplate
+	if err := h.db.Where("id = ? AND user_id = ?", id, userID).First(&template).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Migration job not found"})
+	}
+
+	// 1. Extract saved pages from SourceMetadata
+	var pages []string
+	if err := json.Unmarshal(template.SourceMetadata, &pages); err != nil || len(pages) == 0 {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "No source metadata available to resume"})
+	}
+
+	// 2. Resolve AI Config
+	cfg, err := h.resolveUserConfig(userID)
+	if err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "AI not configured: " + err.Error()})
+	}
+	cfg.MaxTokens = 4096
+
+	// 3. Reset status to processing
+	status := fiber.Map{
+		"status":       "processing",
+		"current_page": template.ProcessedCount,
+		"total_pages":  len(pages),
+		"updated_at":   time.Now(),
+		"message":      fmt.Sprintf("Resuming from page %d...", template.ProcessedCount+1),
+	}
+	statusJSON, _ := json.Marshal(status)
+	h.db.Model(&template).Update("migration_status", json.RawMessage(statusJSON))
+
+	// 4. Re-launch worker from offset
+	ext := "." + template.Source
+	go h.processMigrationJob(template.ID, pages, &cfg, ext, template.ProcessedCount)
+
+	return c.JSON(fiber.Map{"status": "resumed", "current_page": template.ProcessedCount})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -276,11 +311,21 @@ func cleanPowerBIJson(jsonStr string) string {
 // Asynchronous Migration Worker & TPM Guard
 // ─────────────────────────────────────────────────────────────────────────────
 
-func (h *MigrationHandler) processMigrationJob(templateID string, pages []string, cfg *resolvedConfig, fileExt string) {
-	fmt.Printf("Worker started for Job %s. Total pages: %d\n", templateID, len(pages))
+// Asynchronous Migration Worker & TPM Guard
+// startIndex allows resuming from a specific page relative to total pages.
+func (h *MigrationHandler) processMigrationJob(templateID string, pages []string, cfg *resolvedConfig, fileExt string, startIndex int) {
+	fmt.Printf("Worker started/resumed for Job %s at index %d. Total: %d\n", templateID, startIndex, len(pages))
 
 	var allPages []json.RawMessage
 	var colorScheme json.RawMessage
+
+	// If resuming, we should load existing pages already processed
+	if startIndex > 0 {
+		var template models.ReportTemplate
+		h.db.Select("pages", "color_scheme").Where("id = ?", templateID).First(&template)
+		json.Unmarshal(template.Pages, &allPages)
+		colorScheme = template.ColorScheme
+	}
 
 	// Simple Token Tracker for TPM Guard
 	tokensUsedThisMinute := 0
@@ -291,7 +336,8 @@ func (h *MigrationHandler) processMigrationJob(templateID string, pages []string
 		modelTPM = 40000 
 	}
 
-	for i, pageContent := range pages {
+	for i := startIndex; i < len(pages); i++ {
+		pageContent := pages[i]
 		// 1. Forced Cooling Period: Always wait 10s between pages 
 		// This prevents rolling window accumulation errors (429)
 		if i > 0 {
@@ -367,6 +413,7 @@ func (h *MigrationHandler) updateMigrationProgress(id string, current, total int
 		"migration_status": json.RawMessage(statusJSON),
 		"pages":            json.RawMessage(pagesJSON),
 		"color_scheme":     colors,
+		"processed_count":  current, // Store how many pages are fully processed
 		"updated_at":       time.Now(),
 	})
 }
