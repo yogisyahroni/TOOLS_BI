@@ -301,13 +301,13 @@ function AIDashboardBuilder() {
         description: "Dashboard has been created and saved to your library.",
       });
 
-      // Navigate to the Dashboard Builder to edit the result
       navigate(`/dashboard-builder?id=${newDash.id}`);
-    } catch (err) {
-      const error = err as Error;
+    } catch (err: any) {
+      console.error("[DEBUG] Final Save Error:", err);
+      const finalError = err.response?.data?.error || err.message || "Request failed";
       toast({
         title: 'Gagal Menyimpan',
-        description: error.message || 'Terjadi kesalahan sistem saat mencoba menyimpan dashboard.',
+        description: finalError,
         variant: 'destructive',
       });
     } finally {
