@@ -21,6 +21,7 @@ We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with
 ### 🤖 AI-Powered Analytics
 
 - **Ask Data (NL2SQL)**: Chat with your data. A highly optimized AI inference engine converts natural language to optimized SQL queries and automatically renders the appropriate charts.
+- **5 Advanced AI Personas (✨NEW)**: The AI dynamically switches between 5 expert data skills based on context: *Data Visualizer Engineer* (chart recommendations), *Predictive Analyst* (forecasting & extrapolation), *Financial & Risk Analyst* (ROI/Margin calculations), *Anomaly & Fraud Detection Expert* (outlier awareness), and *Sentiment & NLP Analyst* (text polarity).
 - **Hybrid Prompt Refiner (✨)**: One-click "Polishing" of natural language inputs. Automatically transforms raw user queries into professional, unambiguous instructions tailored to SQL or Report contexts.
 - **Automated Follow-up Suggestions**: Predictive "Suggestion Pills" that appear after every AI response, guiding users toward deeper analysis or alternate visualization styles.
 - **AI-Powered Reports & Data Stories**: Otomatis menghasilkan ringkasan eksekutif dan narasi penjelasan dari dataset mentah. Kini mendukung **Mode Presentasi Interaktif** (Tableau-style) yang dapat dibagikan secara publik.
