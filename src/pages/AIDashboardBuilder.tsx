@@ -514,96 +514,94 @@ function AIDashboardBuilder() {
          )}
 
          {!stream.isStreaming && charts.length === 0 && (
-           <div className="flex flex-col h-full justify-center items-center pb-20 px-4">
-             <div className="w-full max-w-4xl space-y-10">
-               {/* New Professional Header (Centered within its container) */}
-               <motion.div 
-                 initial={{ opacity: 0, y: -20 }} 
-                 animate={{ opacity: 1, y: 0 }} 
-                 transition={{ duration: 0.5 }}
-                 className="flex flex-col sm:flex-row sm:items-center gap-4 py-4"
-               >
-                 <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
-                   <Sparkles className="w-6 h-6 text-primary-foreground" />
-                 </div>
-                 <div>
-                   <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
-                     Agentic AI Dashboard Builder
-                   </h1>
-                   <p className="text-muted-foreground text-sm lg:text-base">Rancang dashboard profesional otomatis menggunakan otonomi AI.</p>
-                 </div>
-               </motion.div>
-  
-               {/* Suggestion Cards Grid (Centered with max-width) */}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <motion.button
-                   initial={{ opacity: 0, y: 20 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   transition={{ delay: 0.2 }}
-                   onClick={() => setPrompt("Analisis growth sales per bulan dan kategori produk terlaris")}
-                   className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
-                 >
-                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <BarChart3 className="w-16 h-16" />
-                   </div>
-                   <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
-                     <BarChart3 className="w-5 h-5" />
-                   </div>
-                   <h3 className="font-bold text-foreground mb-2">Growth Analytics</h3>
-                   <p className="text-sm text-muted-foreground">"Analisis growth sales per bulan dan kategori produk terlaris"</p>
-                 </motion.button>
-  
-                 <motion.button
-                   initial={{ opacity: 0, y: 20 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   transition={{ delay: 0.3 }}
-                   onClick={() => setPrompt("Tampilkan peta sebaran kustomer dan tabel detail transaksi harian")}
-                   className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
-                 >
-                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <MapPin className="w-16 h-16" />
-                   </div>
-                   <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
-                     <MapPin className="w-5 h-5" />
-                   </div>
-                   <h3 className="font-bold text-foreground mb-2">Customer Mapping</h3>
-                   <p className="text-sm text-muted-foreground">"Tampilkan peta sebaran kustomer dan tabel detail transaksi harian"</p>
-                 </motion.button>
-  
-                 <motion.button
-                   initial={{ opacity: 0, y: 20 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   transition={{ delay: 0.4 }}
-                   onClick={() => setPrompt("Dashboard eksekutif untuk performa finansial tahun ini dengan perbandingan budget")}
-                   className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
-                 >
-                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <LayoutGrid className="w-16 h-16" />
-                   </div>
-                   <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
-                     <LayoutGrid className="w-5 h-5" />
-                   </div>
-                   <h3 className="font-bold text-foreground mb-2">Executive Overview</h3>
-                   <p className="text-sm text-muted-foreground">"Dashboard eksekutif untuk performa finansial tahun ini..."</p>
-                 </motion.button>
-  
-                 <motion.button
-                   initial={{ opacity: 0, y: 20 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   transition={{ delay: 0.5 }}
-                   onClick={() => setPrompt("Analisis anomali data transaksi dan identifikasi bottleneck pada operasional")}
-                   className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
-                 >
-                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <Database className="w-16 h-16" />
-                   </div>
-                   <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
-                     <Database className="w-5 h-5" />
-                   </div>
-                   <h3 className="font-bold text-foreground mb-2">Anomaly Detection</h3>
-                   <p className="text-sm text-muted-foreground">"Analisis anomali data transaksi dan identifikasi bottleneck..."</p>
-                 </motion.button>
+           <div className="flex flex-col h-full space-y-12">
+             {/* New Professional Header (Top-Left) */}
+             <motion.div 
+               initial={{ opacity: 0, x: -20 }} 
+               animate={{ opacity: 1, x: 0 }} 
+               transition={{ duration: 0.5 }}
+               className="flex flex-col sm:flex-row sm:items-center gap-4 py-4"
+             >
+               <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
+                 <Sparkles className="w-6 h-6 text-primary-foreground" />
                </div>
+               <div>
+                 <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
+                   Agentic AI Dashboard Builder
+                 </h1>
+                 <p className="text-muted-foreground text-sm lg:text-base">Rancang dashboard profesional otomatis menggunakan otonomi AI.</p>
+               </div>
+             </motion.div>
+  
+             {/* Suggestion Cards Grid (Modern Grid) */}
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.2 }}
+                 onClick={() => setPrompt("Analisis growth sales per bulan dan kategori produk terlaris")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <BarChart3 className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <BarChart3 className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Growth Analytics</h3>
+                 <p className="text-sm text-muted-foreground">"Analisis growth sales per bulan dan kategori produk terlaris"</p>
+               </motion.button>
+  
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.3 }}
+                 onClick={() => setPrompt("Tampilkan peta sebaran kustomer dan tabel detail transaksi harian")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <MapPin className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <MapPin className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Customer Mapping</h3>
+                 <p className="text-sm text-muted-foreground">"Tampilkan peta sebaran kustomer dan tabel detail transaksi harian"</p>
+               </motion.button>
+  
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.4 }}
+                 onClick={() => setPrompt("Dashboard eksekutif untuk performa finansial tahun ini dengan perbandingan budget")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <LayoutGrid className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <LayoutGrid className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Executive Overview</h3>
+                 <p className="text-sm text-muted-foreground">"Dashboard eksekutif untuk performa finansial tahun ini..."</p>
+               </motion.button>
+  
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.5 }}
+                 onClick={() => setPrompt("Analisis anomali data transaksi dan identifikasi bottleneck pada operasional")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden h-full shadow-sm"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <Database className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <Database className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Anomaly Detection</h3>
+                 <p className="text-sm text-muted-foreground">"Analisis anomali data transaksi dan identifikasi bottleneck..."</p>
+               </motion.button>
              </div>
            </div>
 
