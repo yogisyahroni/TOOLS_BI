@@ -840,6 +840,8 @@ func autoMigrate(db *gorm.DB) error {
 		"ALTER TABLE saved_charts ALTER COLUMN dataset_id TYPE VARCHAR(255)",
 		"ALTER TABLE dashboards ALTER COLUMN id TYPE VARCHAR(255)",
 		"ALTER TABLE dashboards ALTER COLUMN user_id TYPE VARCHAR(255)",
+		"ALTER TABLE saved_charts ADD COLUMN IF NOT EXISTS config jsonb",
+		"ALTER TABLE saved_charts ADD COLUMN IF NOT EXISTS annotations jsonb DEFAULT '[]'",
 	}
 
 	for _, sql := range hardFixSQL {
