@@ -514,77 +514,146 @@ function AIDashboardBuilder() {
          )}
 
          {!stream.isStreaming && charts.length === 0 && (
-           <div className="flex flex-col items-center justify-center h-full text-center max-w-2xl mx-auto mt-20">
-             <div className="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center mb-8 rotate-3 hover:rotate-0 transition-transform duration-500">
-                <Sparkles className="w-12 h-12 text-primary" />
-             </div>
-             <h1 className="text-4xl font-bold tracking-tight mb-4 bg-gradient-to-br from-foreground to-foreground/60 bg-clip-text text-transparent">
-                Agentic AI Dashboard Builder
-             </h1>
-             <p className="text-muted-foreground text-lg mb-10 leading-relaxed max-w-lg">
-                Rancang dashboard profesional dalam hitungan detik. Cukup pilih dataset dan biarkan otonomi AI bekerja untuk Anda.
-             </p>
-             <div className="flex gap-4">
-                <div className="bg-card border border-border p-4 rounded-2xl text-left hover:border-primary/40 transition-colors">
-                   <p className="text-xs text-primary font-bold uppercase tracking-wider mb-1">Coba Contoh:</p>
-                   <p className="text-sm text-foreground/80 cursor-pointer" onClick={() => setPrompt("Analisis growth sales per bulan dan kategori produk terlaris")}>"Analisis growth sales per bulan..."</p>
-                </div>
-                <div className="bg-card border border-border p-4 rounded-2xl text-left hover:border-primary/40 transition-colors">
-                   <p className="text-xs text-primary font-bold uppercase tracking-wider mb-1">Coba Contoh:</p>
-                   <p className="text-sm text-foreground/80 cursor-pointer" onClick={() => setPrompt("Tampilkan peta sebaran kustomer dan tabel detail transaksi harian")}>"Tampilkan peta sebaran kustomer..."</p>
-                </div>
+           <div className="flex flex-col h-full space-y-12">
+             {/* New Professional Header (Top-Left) */}
+             <motion.div 
+               initial={{ opacity: 0, x: -20 }} 
+               animate={{ opacity: 1, x: 0 }} 
+               transition={{ duration: 0.5 }}
+               className="flex flex-col sm:flex-row sm:items-center gap-4 py-4"
+             >
+               <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
+                 <Sparkles className="w-6 h-6 text-primary-foreground" />
+               </div>
+               <div>
+                 <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
+                   Agentic AI Dashboard Builder
+                 </h1>
+                 <p className="text-muted-foreground text-sm lg:text-base">Rancang dashboard profesional otomatis menggunakan otonomi AI.</p>
+               </div>
+             </motion.div>
+
+             {/* Suggestion Cards Grid (Replacing simple buttons) */}
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.2 }}
+                 onClick={() => setPrompt("Analisis growth sales per bulan dan kategori produk terlaris")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <BarChart3 className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <BarChart3 className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Growth Analytics</h3>
+                 <p className="text-sm text-muted-foreground">"Analisis growth sales per bulan dan kategori produk terlaris"</p>
+               </motion.button>
+
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.3 }}
+                 onClick={() => setPrompt("Tampilkan peta sebaran kustomer dan tabel detail transaksi harian")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <MapPin className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <MapPin className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Customer Mapping</h3>
+                 <p className="text-sm text-muted-foreground">"Tampilkan peta sebaran kustomer dan tabel detail transaksi harian"</p>
+               </motion.button>
+
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.4 }}
+                 onClick={() => setPrompt("Dashboard eksekutif untuk performa finansial tahun ini dengan perbandingan budget")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <LayoutGrid className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <LayoutGrid className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Executive Overview</h3>
+                 <p className="text-sm text-muted-foreground">"Dashboard eksekutif untuk performa finansial tahun ini..."</p>
+               </motion.button>
+
+               <motion.button
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.5 }}
+                 onClick={() => setPrompt("Analisis anomali data transaksi dan identifikasi bottleneck pada operasional")}
+                 className="flex flex-col text-left p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all group relative overflow-hidden"
+               >
+                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <Database className="w-16 h-16" />
+                 </div>
+                 <div className="bg-primary/10 w-10 h-10 rounded-xl flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                   <Database className="w-5 h-5" />
+                 </div>
+                 <h3 className="font-bold text-foreground mb-2">Anomaly Detection</h3>
+                 <p className="text-sm text-muted-foreground">"Analisis anomali data transaksi dan identifikasi bottleneck..."</p>
+               </motion.button>
              </div>
            </div>
          )}
-      </div>
+       </div>
 
-      {/* Floating Chat Input Area */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 z-10">
-        <div className="bg-card/70 backdrop-blur-3xl border border-border/80 shadow-[0_20px_50px_rgba(0,0,0,0.2)] rounded-[2rem] overflow-hidden flex flex-col p-1.5 transition-all duration-300 focus-within:shadow-primary/10">
-           <div className="px-5 py-2.5 border-b border-border/40 flex items-center gap-3">
-              <Database className="w-4 h-4 text-primary" />
-              <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId}>
-                <SelectTrigger className="w-full h-8 text-sm focus:ring-0 border-none bg-transparent hover:bg-muted/30 transition-colors px-0">
-                  <SelectValue placeholder="Pilih Dataset untuk dianalisis oleh AI..." />
-                </SelectTrigger>
-                <SelectContent className="rounded-2xl border-border/60">
-                  {datasets.map((d) => (
-                    <SelectItem key={d.id} value={d.id} className="rounded-xl m-1 cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-nowrap">{d.name}</span>
-                        <span className="text-[10px] text-muted-foreground opacity-60">({d.rowCount} baris)</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-           </div>
-           <div className="flex items-end gap-2 p-1">
-              <Textarea
-                ref={textareaRef}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleGenerate();
-                  }
-                }}
-                disabled={stream.isStreaming}
-                placeholder="Rancang dashboard impian Anda..."
-                className="min-h-[60px] max-h-[180px] border-none focus-visible:ring-0 resize-none bg-transparent placeholder:text-muted-foreground/50 text-foreground py-4 px-4 text-base"
-              />
-              <Button 
-                size="icon" 
-                className="h-14 w-14 rounded-3xl mb-1 shrink-0 shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all" 
-                disabled={!prompt.trim() || !selectedDatasetId || stream.isStreaming}
-                onClick={handleGenerate}
-              >
-                  {stream.isStreaming ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6 ml-0.5" />}
-              </Button>
-           </div>
-        </div>
-      </div>
+       {/* Floating Chat Input Area */}
+       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 z-10">
+         <div className="bg-card/70 backdrop-blur-3xl border border-border/80 shadow-[0_20px_50px_rgba(0,0,0,0.2)] rounded-[2rem] overflow-hidden flex flex-col p-1.5 transition-all duration-300 focus-within:shadow-primary/10">
+            <div className="px-5 py-2.5 border-b border-border/40 flex items-center gap-3">
+               <Database className="w-4 h-4 text-primary" />
+               <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId}>
+                 <SelectTrigger className="w-full h-8 text-sm focus:ring-0 border-none bg-transparent hover:bg-muted/30 transition-colors px-0">
+                   <SelectValue placeholder="Pilih Dataset untuk dianalisis oleh AI..." />
+                 </SelectTrigger>
+                 <SelectContent className="rounded-2xl border-border/60">
+                   {datasets.map((d) => (
+                     <SelectItem key={d.id} value={d.id} className="rounded-xl m-1 cursor-pointer">
+                       <div className="flex items-center gap-2">
+                         <span className="font-medium text-nowrap">{d.name}</span>
+                         <span className="text-[10px] text-muted-foreground opacity-60">({d.rowCount} baris)</span>
+                       </div>
+                     </SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+            </div>
+            <div className="flex items-end gap-2 p-1">
+               <Textarea
+                 ref={textareaRef}
+                 value={prompt}
+                 onChange={(e) => setPrompt(e.target.value)}
+                 onKeyDown={(e) => {
+                   if (e.key === 'Enter' && !e.shiftKey) {
+                     e.preventDefault();
+                     handleGenerate();
+                   }
+                 }}
+                 disabled={stream.isStreaming}
+                 placeholder="Rancang dashboard impian Anda..."
+                 className="min-h-[60px] max-h-[180px] border-none focus-visible:ring-0 resize-none bg-transparent placeholder:text-muted-foreground/50 text-foreground py-4 px-4 text-base"
+               />
+               <Button 
+                 size="icon" 
+                 className="h-14 w-14 rounded-3xl mb-1 shrink-0 shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all" 
+                 disabled={!prompt.trim() || !selectedDatasetId || stream.isStreaming}
+                 onClick={handleGenerate}
+               >
+                   {stream.isStreaming ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6 ml-0.5" />}
+               </Button>
+            </div>
+         </div>
+       </div>
     </div>
   );
 }
