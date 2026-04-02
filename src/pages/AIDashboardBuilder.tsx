@@ -192,6 +192,25 @@ function AIDashboardBuilder() {
     try {
       // 1. Save each chart to the Chart Library (tabel charts) first
       // This ensures they appear in the Sidebar > Charts Library
+      const activeDataset = datasets.find(ds => ds.id === selectedDatasetId);
+      const dbColumns = activeDataset?.columns || [];
+
+      const getMatchingFieldName = (aiKey: string) => {
+        if (!aiKey || !dbColumns.length) return aiKey;
+        
+        // Search in original database columns (case-insensitive)
+        const match = dbColumns.find((col: any) => {
+          // In our types/data.ts, DataColumn has a 'name' property
+          const colName = typeof col === 'string' ? col : (col.name || '');
+          return String(colName).toLowerCase() === aiKey.toLowerCase();
+        });
+        
+        if (match) {
+          return typeof match === 'string' ? match : match.name;
+        }
+        return aiKey;
+      };
+
       const savedChartIds: Record<number, string> = {};
       
       for (let i = 0; i < charts.length; i++) {
@@ -199,9 +218,14 @@ function AIDashboardBuilder() {
         
         // Find numeric and categorical columns for the chart config
         const firstRow = c.data[0] || {};
-        const keys = Object.keys(firstRow);
-        const yAxis = keys.find(k => typeof firstRow[k] === 'number') || '';
-        const xAxis = keys.find(k => typeof firstRow[k] === 'string' && k !== 'map_key') || keys[0] || '';
+        const keys = Object.keys(firstRow).filter(k => k !== 'map_key');
+        
+        const rawY = keys.find(k => typeof firstRow[k] === 'number') || '';
+        const rawX = keys.find(k => typeof firstRow[k] === 'string') || keys[0] || '';
+
+        // Sync with actual DB column names
+        const yAxis = getMatchingFieldName(rawY);
+        const xAxis = getMatchingFieldName(rawX);
 
         const chartPayload = {
           title: `AI - ${c.title}`,

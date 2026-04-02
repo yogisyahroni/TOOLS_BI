@@ -97,21 +97,33 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   showLegend = true,
   isPreAggregated = false,
 }) => {
+  const findColumnValue = (row: any, columnName: string) => {
+    if (!row || !columnName) return undefined;
+    if (row[columnName] !== undefined) return row[columnName];
+    // Case-insensitive search for the column
+    const lowerCol = columnName.toLowerCase();
+    const actualKey = Object.keys(row).find(k => k.toLowerCase() === lowerCol);
+    return actualKey ? row[actualKey] : undefined;
+  };
+
   const chartData = useMemo(() => {
     if (!dataset || !xAxis || !yAxis) return [];
     
     // If data is already aggregated by the AI/Backend, just return it mapped to name/value
     if (isPreAggregated) {
       return dataset.data.map((row: any) => ({
-        name: formatValue(row[xAxis]),
-        value: Number(row[yAxis]) || 0
+        name: formatValue(findColumnValue(row, xAxis)),
+        value: Number(findColumnValue(row, yAxis)) || 0
       }));
     }
 
     const aggregated = new Map<string, number>();
     dataset.data.forEach(row => {
-      const key = formatValue(row[xAxis] || 'Unknown');
-      const val = Number(row[yAxis]) || 0;
+      const xVal = findColumnValue(row, xAxis);
+      const yVal = findColumnValue(row, yAxis);
+      
+      const key = formatValue(xVal || 'Unknown');
+      const val = Number(yVal) || 0;
       aggregated.set(key, (aggregated.get(key) || 0) + val);
     });
     let result = Array.from(aggregated.entries()).map(([name, value]) => ({ name, value }));
@@ -143,9 +155,9 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     const ySet = new Set<string>();
     const map = new Map<string, number>();
     dataset.data.forEach(row => {
-      const x = formatValue(row[xAxis] || '');
-      const y = formatValue(row[groupBy] || '');
-      const v = Number(row[yAxis]) || 0;
+      const x = formatValue(findColumnValue(row, xAxis) || '');
+      const y = formatValue(findColumnValue(row, groupBy) || '');
+      const v = Number(findColumnValue(row, yAxis)) || 0;
       xSet.add(x); ySet.add(y);
       const key = `${y}__${x}`;
       map.set(key, (map.get(key) || 0) + v);
@@ -161,8 +173,10 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     if (chartType !== 'boxplot' || !dataset || !xAxis || !yAxis) return [];
     const groups = new Map<string, number[]>();
     dataset.data.forEach(row => {
-      const key = formatValue(row[xAxis] || 'Unknown');
-      const val = Number(row[yAxis]);
+      const xVal = findColumnValue(row, xAxis);
+      const yVal = findColumnValue(row, yAxis);
+      const key = formatValue(xVal || 'Unknown');
+      const val = Number(yVal);
       if (!isNaN(val)) {
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key)!.push(val);
@@ -199,10 +213,16 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     const map = new Map<string, number>();
 
     dataset.data.forEach(row => {
-      const x = formatValue(row[xAxis] || 'Unknown');
-      const g = formatValue(row[groupBy] || 'Unknown');
-      const v = Number(row[yAxis]) || 0;
-      xSet.add(x); gSet.add(g);
+      const xVal = findColumnValue(row, xAxis);
+      const gVal = findColumnValue(row, groupBy);
+      const yVal = findColumnValue(row, yAxis);
+      
+      const x = formatValue(xVal || '');
+      const g = formatValue(gVal || '');
+      const v = Number(yVal) || 0;
+      
+      if (x) xSet.add(x);
+      if (g) gSet.add(g);
       const key = `${x}__${g}`;
       map.set(key, (map.get(key) || 0) + v);
     });
