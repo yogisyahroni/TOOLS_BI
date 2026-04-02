@@ -839,6 +839,7 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+		httpReq.Header.Set("ngrok-skip-browser-warning", "true") // Bypass Ngrok warning page
 
 		resp, err := client.Do(httpReq)
 		if err != nil {
@@ -972,6 +973,7 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 		httpReq.Header.Set("Accept", "text/event-stream")
+		httpReq.Header.Set("ngrok-skip-browser-warning", "true") // Bypass Ngrok warning page
 
 		resp, err := client.Do(httpReq)
 		if err != nil {
