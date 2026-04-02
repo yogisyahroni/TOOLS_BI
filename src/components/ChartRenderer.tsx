@@ -109,21 +109,32 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   const chartData = useMemo(() => {
     if (!dataset || !xAxis || !yAxis) return [];
     
+    // Pre-map actual column names to avoid O(N*M) lookup inside the loop
+    const firstRow = dataset.data[0] || {};
+    const rowKeys = Object.keys(firstRow);
+    
+    const getActualKey = (target: string) => {
+      if (!target) return target;
+      if (firstRow[target] !== undefined) return target;
+      const lower = target.toLowerCase();
+      return rowKeys.find(k => k.toLowerCase() === lower) || target;
+    };
+
+    const actualXAxis = getActualKey(xAxis);
+    const actualYAxis = getActualKey(yAxis);
+
     // If data is already aggregated by the AI/Backend, just return it mapped to name/value
     if (isPreAggregated) {
       return dataset.data.map((row: any) => ({
-        name: formatValue(findColumnValue(row, xAxis)),
-        value: Number(findColumnValue(row, yAxis)) || 0
+        name: formatValue(row[actualXAxis]),
+        value: Number(row[actualYAxis]) || 0
       }));
     }
 
     const aggregated = new Map<string, number>();
     dataset.data.forEach(row => {
-      const xVal = findColumnValue(row, xAxis);
-      const yVal = findColumnValue(row, yAxis);
-      
-      const key = formatValue(xVal || 'Unknown');
-      const val = Number(yVal) || 0;
+      const key = formatValue(row[actualXAxis] || 'Unknown');
+      const val = Number(row[actualYAxis]) || 0;
       aggregated.set(key, (aggregated.get(key) || 0) + val);
     });
     let result = Array.from(aggregated.entries()).map(([name, value]) => ({ name, value }));
@@ -151,13 +162,26 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   // Heatmap data
   const heatmapData = useMemo(() => {
     if (chartType !== 'heatmap' || !dataset || !xAxis || !yAxis || !groupBy) return { data: [], xLabels: [], yLabels: [] };
+    const firstRow = dataset.data[0] || {};
+    const rowKeys = Object.keys(firstRow);
+    const getActualKey = (target: string) => {
+      if (!target) return target;
+      if (firstRow[target] !== undefined) return target;
+      const lower = target.toLowerCase();
+      return rowKeys.find(k => k.toLowerCase() === lower) || target;
+    };
+
+    const actualX = getActualKey(xAxis);
+    const actualGroup = getActualKey(groupBy);
+    const actualValue = getActualKey(yAxis);
+
     const xSet = new Set<string>();
     const ySet = new Set<string>();
     const map = new Map<string, number>();
     dataset.data.forEach(row => {
-      const x = formatValue(findColumnValue(row, xAxis) || '');
-      const y = formatValue(findColumnValue(row, groupBy) || '');
-      const v = Number(findColumnValue(row, yAxis)) || 0;
+      const x = formatValue(row[actualX] || '');
+      const y = formatValue(row[actualGroup] || '');
+      const v = Number(row[actualValue]) || 0;
       xSet.add(x); ySet.add(y);
       const key = `${y}__${x}`;
       map.set(key, (map.get(key) || 0) + v);
@@ -171,10 +195,22 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   // Boxplot data
   const boxplotData = useMemo(() => {
     if (chartType !== 'boxplot' || !dataset || !xAxis || !yAxis) return [];
+    const firstRow = dataset.data[0] || {};
+    const rowKeys = Object.keys(firstRow);
+    const getActualKey = (target: string) => {
+      if (!target) return target;
+      if (firstRow[target] !== undefined) return target;
+      const lower = target.toLowerCase();
+      return rowKeys.find(k => k.toLowerCase() === lower) || target;
+    };
+
+    const actualX = getActualKey(xAxis);
+    const actualY = getActualKey(yAxis);
+
     const groups = new Map<string, number[]>();
     dataset.data.forEach(row => {
-      const xVal = findColumnValue(row, xAxis);
-      const yVal = findColumnValue(row, yAxis);
+      const xVal = row[actualX];
+      const yVal = row[actualY];
       const key = formatValue(xVal || 'Unknown');
       const val = Number(yVal);
       if (!isNaN(val)) {
@@ -208,14 +244,27 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     if (!supportedTypes.includes(chartType) || !dataset || !xAxis || !yAxis || !groupBy) {
       return { categories: [] as string[], groups: [] as string[], matrix: [] as any[] };
     }
+    const firstRow = dataset.data[0] || {};
+    const rowKeys = Object.keys(firstRow);
+    const getActualKey = (target: string) => {
+      if (!target) return target;
+      if (firstRow[target] !== undefined) return target;
+      const lower = target.toLowerCase();
+      return rowKeys.find(k => k.toLowerCase() === lower) || target;
+    };
+
+    const actualX = getActualKey(xAxis);
+    const actualG = getActualKey(groupBy);
+    const actualY = getActualKey(yAxis);
+
     const xSet = new Set<string>();
     const gSet = new Set<string>();
     const map = new Map<string, number>();
 
     dataset.data.forEach(row => {
-      const xVal = findColumnValue(row, xAxis);
-      const gVal = findColumnValue(row, groupBy);
-      const yVal = findColumnValue(row, yAxis);
+      const xVal = row[actualX];
+      const gVal = row[actualG];
+      const yVal = row[actualY];
       
       const x = formatValue(xVal || '');
       const g = formatValue(gVal || '');
