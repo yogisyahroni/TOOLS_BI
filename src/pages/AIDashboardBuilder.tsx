@@ -218,6 +218,12 @@ function AIDashboardBuilder() {
           }
         };
 
+        console.log(`[DEBUG] Saving chart ${i+1}/${charts.length}:`, chartPayload);
+
+        if (!selectedDatasetId) {
+          throw new Error("Dataset ID is missing. Please select a dataset first.");
+        }
+
         const res = await chartApi.create(chartPayload);
         
         // AxiosResponse<SavedChart> -> res.data is the SavedChart object
