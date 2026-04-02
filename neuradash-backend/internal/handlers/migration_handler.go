@@ -261,10 +261,14 @@ func cleanPowerBIJson(jsonStr string) string {
 	reFilters := regexp.MustCompile(`"filters"\s*:\s*"[^"]*"`)
 	cleaned = reFilters.ReplaceAllString(cleaned, `"filters": "[]"`)
 
-	// 3. Optional: Strip visual query metadata if it's too large and has escaped quotes
-	// We keep query for now as it helps AI identify columns, 
-	// but we can strip it later if 413 persists.
+	// 3. Selective Query Stripping: Only if the query block is also massive
+	// We keep small queries, but if they contain thousands of chars of escaped JSON, strip them.
+	reQuery := regexp.MustCompile(`"query"\s*:\s*"[^"]{500,}"`)
+	cleaned = reQuery.ReplaceAllString(cleaned, `"query": "{}"`)
 	
+	// 4. Strip Visual Title/Name if too long (rare but possible)
+	// (keep it for now)
+
 	return cleaned
 }
 
@@ -282,27 +286,34 @@ func (h *MigrationHandler) processMigrationJob(templateID string, pages []string
 	tokensUsedThisMinute := 0
 	minuteStart := time.Now()
 
-	modelTPM := 10000 // Safer threshold for Groq 'on_demand' tier
+	modelTPM := 8000 // Even lower threshold for Groq 'on_demand' (was 10k)
 	if strings.Contains(strings.ToLower(cfg.Model), "gpt-4") || strings.Contains(strings.ToLower(cfg.Model), "claude-3") {
-		modelTPM = 40000 // Higher limit for paid models
+		modelTPM = 40000 
 	}
 
 	for i, pageContent := range pages {
-		// 1. TPM Guard check
-		estimatedTokens := len(pageContent) / 3 // Conservative: 3 chars per token for dense metadata
+		// 1. Forced Cooling Period: Always wait 10s between pages 
+		// This prevents rolling window accumulation errors (429)
+		if i > 0 {
+			fmt.Printf("Cooling down for 10s before Page %d...\n", i+1)
+			time.Sleep(10 * time.Second)
+		}
+
+		// 2. TPM Guard check
+		estimatedTokens := len(pageContent) / 2 // More conservative (2 chars per token)
 		if tokensUsedThisMinute+estimatedTokens > modelTPM {
-			sleepDur := time.Until(minuteStart.Add(61 * time.Second))
-			fmt.Printf("TPM Limit reached for job %s. Sleeping for %v...\n", templateID, sleepDur)
+			sleepDur := time.Until(minuteStart.Add(65 * time.Second))
+			fmt.Printf("TPM Limit close for job %s. Sleeping for %v...\n", templateID, sleepDur)
 			time.Sleep(sleepDur)
 			tokensUsedThisMinute = 0
 			minuteStart = time.Now()
 		}
 
-		// 2. Call AI for this chunk
-		// Safety Hard Truncation: Never exceed 30,000 chars per request (~10k tokens)
-		if len(pageContent) > 30000 {
-			fmt.Printf("Warning: Page %d is too large (%d chars). Truncating to 30k chars.\n", i+1, len(pageContent))
-			pageContent = pageContent[:30000]
+		// 3. Call AI for this chunk
+		// Safety Hard Truncation: Never exceed 20,000 chars per request (~8-10k tokens)
+		if len(pageContent) > 20000 {
+			fmt.Printf("Warning: Page %d still too large (%d chars). Hard truncation to 20k.\n", i+1, len(pageContent))
+			pageContent = pageContent[:20000]
 		}
 
 		prompt := BuildTemplateMigrationPrompt(fileExt, pageContent)
