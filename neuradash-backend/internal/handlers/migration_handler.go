@@ -299,11 +299,14 @@ func cleanPowerBIJson(jsonStr string) string {
 
 	// 3. Selective Query Stripping: Only if the query block is also massive
 	// We keep small queries, but if they contain thousands of chars of escaped JSON, strip them.
-	reQuery := regexp.MustCompile(`"query"\s*:\s*"[^"]{500,}"`)
+	reQuery := regexp.MustCompile(`"query"\s*:\s*"[^"]{1000,}"`)
 	cleaned = reQuery.ReplaceAllString(cleaned, `"query": "{}"`)
 	
-	// 4. Strip Visual Title/Name if too long (rare but possible)
-	// (keep it for now)
+	// 4. Aggressive Visual Property Stripping (Advanced Bloat)
+	// Some PowerBI files embed massive binary strings or SVG paths in "config" tags that are not caught by simple regex.
+	// We'll strip anything that looks like a huge escaped string block.
+	reLargeData := regexp.MustCompile(`"([^"]{5000,})"`)
+	cleaned = reLargeData.ReplaceAllString(cleaned, `"OMITTED_LARGE_DATA"`)
 
 	return cleaned
 }
@@ -623,45 +626,71 @@ func (h *MigrationHandler) callOpenAIMigrate(cfg resolvedConfig, prompt string) 
 	}
 
 	reqBody := map[string]interface{}{
-		"model":      cfg.Model,
-		"messages":   []map[string]string{{"role": "user", "content": prompt}},
-		"max_tokens": cfg.MaxTokens,
-		// Lower temp so we get strict JSON outputs
+		"model":       cfg.Model,
+		"messages":    []map[string]string{{"role": "user", "content": prompt}},
+		"max_tokens":  cfg.MaxTokens,
 		"temperature": 0.1,
 	}
 	data, _ := json.Marshal(reqBody)
-	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
-	if err != nil {
-		return "", err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	resp, err := (&http.Client{}).Do(httpReq)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
+	// Pre-defined HTTP Client with explicitly managed Timeout
+	httpClient := &http.Client{
+		Timeout: 120 * time.Second, // Max 2 mins per page
 	}
 
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	// Retry Logic: max 3 attempts with exponential backoff
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if attempt > 1 {
+			backoff := time.Duration(attempt*attempt) * 5 * time.Second
+			fmt.Printf("Retry attempt %d/3 after %v backoff...\n", attempt, backoff)
+			time.Sleep(backoff)
+		}
+
+		httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+		if err != nil {
+			return "", err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+
+		resp, err := httpClient.Do(httpReq)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			lastErr = fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
+			
+			// Only retry on rate labels (429) or server errors (5xx)
+			if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+				continue
+			}
+			return "", lastErr
+		}
+
+		var result struct {
+			Choices []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			lastErr = fmt.Errorf("failed to decode AI response: %w", err)
+			continue
+		}
+		if len(result.Choices) == 0 {
+			lastErr = fmt.Errorf("AI returned no choices")
+			continue
+		}
+		return result.Choices[0].Message.Content, nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("failed to decode AI response: %w", err)
-	}
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("AI returned no choices")
-	}
-	return result.Choices[0].Message.Content, nil
+
+	return "", fmt.Errorf("exhausted retries: %v", lastErr)
 }
 
 // cleanTableauXML removes the huge <datasources> block and <style>/<format> blocks
