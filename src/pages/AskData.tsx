@@ -287,6 +287,7 @@ export default function AskData() {
           question: result.question,
           sql: result.sql,
           explanation: result.explanation,
+          interpretation: result.interpretation,
           chartType: result.chartType,
           chartData: result.chartData,
           xKey: result.xKey,
@@ -334,6 +335,7 @@ export default function AskData() {
     securityWarnings: [],
     queryType: 'SELECT',
     executedAt: item.createdAt || item.executedAt || new Date().toISOString(),
+    interpretation: item.interpretation || '',
   });
 
   const restoreFromHistory = (item: any) => {
