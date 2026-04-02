@@ -25,6 +25,7 @@ We've evolved far beyond a simple dashboarding tool. Neuradash  is equipped with
 - **Automated Follow-up Suggestions**: Predictive "Suggestion Pills" that appear after every AI response, guiding users toward deeper analysis or alternate visualization styles.
 - **AI-Powered Reports & Data Stories**: Otomatis menghasilkan ringkasan eksekutif dan narasi penjelasan dari dataset mentah. Kini mendukung **Mode Presentasi Interaktif** (Tableau-style) yang dapat dibagikan secara publik.
 - **Async AI Report Migration (✨)**: Konversi asinkron file Power BI (`.pbix`), Tableau (`.twbx`), dan PowerPoint (`.pptx`) ke dalam template NeuraDash yang sepenuhnya fungsional. Proses ini berjalan di latar belakang (background) sehingga tidak menghambat produktivitas pengguna.
+- **Persistence & Resume (✨)**: Mekanisme ketahanan migrasi yang menyimpan status kemajuan (checkpoint) secara atomik. Jika terjadi kegagalan AI atau gangguan infrastruktur, NeuraDash menyediakan opsi **"Resume"** sekali klik untuk melanjutkan proses dari titik terakhir yang berhasil, mencegah kehilangan data dan redundansi pemrosesan.
 - **Enterprise Data Assistant**: Asisten AI yang sadar konteks, terintegrasi langsung ke dalam Editor Query SQL dan pipeline ETL untuk membantu formulasi logika kompleks dan debugging.
 
 ### 🛠️ Data Engineering & Modeling
@@ -122,6 +123,7 @@ This project is built using 2024-standard modern web primitives:
 | POST | `/connections/query` | Secure Read-only SQL Execution |
 | GET  | `/templates` | Sync templates and migration status |
 | POST | `/templates/import` | Start async BI file migration |
+| POST | `/templates/resume/:id` | Resume failed or interrupted migration |
 
 ---
 
