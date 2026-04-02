@@ -11,6 +11,7 @@ import {
 import { lazy, Suspense } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 // ─── Page Skeleton Loader ─────────────────────────────────────────────────────
 function PageFallback() {
@@ -145,29 +146,31 @@ function ProtectedLayout() {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Suspense fallback={<PageFallback />}>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login"               element={<Login />} />
-              <Route path="/register"            element={<Register />} />
-              <Route path="/stories/view/:storyId" element={<StoryPresentation />} />
-              <Route path="/embed/view/:token"   element={<EmbedViewer />} />
-              {/* Standalone 404 */}
-              <Route path="/not-found"           element={<NotFound />} />
-              {/* Protected — nested inside auth guard */}
-              <Route path="/*"                   element={<ProtectedLayout />} />
-              {/* Top-level catch-all */}
-              <Route path="*"                    element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
+    <ThemeProvider defaultTheme="system" enableSystem>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login"               element={<Login />} />
+                <Route path="/register"            element={<Register />} />
+                <Route path="/stories/view/:storyId" element={<StoryPresentation />} />
+                <Route path="/embed/view/:token"   element={<EmbedViewer />} />
+                {/* Standalone 404 */}
+                <Route path="/not-found"           element={<NotFound />} />
+                {/* Protected — nested inside auth guard */}
+                <Route path="/*"                   element={<ProtectedLayout />} />
+                {/* Top-level catch-all */}
+                <Route path="*"                    element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

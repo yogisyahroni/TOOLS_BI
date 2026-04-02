@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/hooks/use-sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useState } from 'react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 // ─── Menu structure with groups ───────────────────────────────────────────────
 interface MenuItem { icon: React.ElementType; label: string; path: string; badge?: string }
@@ -299,6 +300,7 @@ export function Sidebar() {
                   </p>
                   <p className="text-xs text-muted-foreground truncate text-[10px]">{user?.email}</p>
                 </div>
+                <ThemeToggle />
                 <button
                   onClick={handleLogout}
                   title="Logout"
@@ -309,7 +311,8 @@ export function Sidebar() {
               </motion.div>
             )}
             {isCollapsed && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3 justify-center items-center">
+                <ThemeToggle />
                 <button
                   onClick={handleLogout}
                   title="Logout"

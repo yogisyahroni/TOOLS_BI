@@ -5,6 +5,7 @@ import { Menu, X } from 'lucide-react';
 import { useSidebar } from '@/hooks/use-sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -32,12 +33,15 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
             <span className="font-bold text-foreground">NeuraDash</span>
           </div>
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 rounded-lg bg-muted text-foreground touch-target"
-          >
-            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="p-2 rounded-lg bg-muted text-foreground touch-target"
+            >
+              {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
         </header>
 
         <Sidebar />
