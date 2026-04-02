@@ -174,6 +174,7 @@ func (h *MigrationHandler) ImportBIFile(c *fiber.Ctx) error {
 		IsDefault:       false,
 		SourceMetadata:  json.RawMessage(pagesJSON),
 		ProcessedCount:  0,
+		MigrationStatus: json.RawMessage(`{"status":"processing","current_page":0,"total_pages":` + fmt.Sprint(len(pages)) + `,"message":"Initializing migration...","updated_at":"` + time.Now().Format(time.RFC3339) + `"}`),
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 	}
@@ -378,8 +379,9 @@ func (h *MigrationHandler) processMigrationJob(templateID string, pages []string
 				colorScheme = chunkTemplate.ColorScheme
 			}
 			var chunkPages []json.RawMessage
-			json.Unmarshal(chunkTemplate.Pages, &chunkPages)
-			allPages = append(allPages, chunkPages...)
+			if err := json.Unmarshal(chunkTemplate.Pages, &chunkPages); err == nil && len(chunkPages) > 0 {
+				allPages = append(allPages, chunkPages...)
+			}
 		}
 
 		// 4. Update Progress in DB

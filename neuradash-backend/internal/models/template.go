@@ -18,6 +18,7 @@ type ReportTemplate struct {
 	IsDefault   bool            `json:"isDefault" gorm:"default:false"`
 	SourceMetadata  json.RawMessage `json:"sourceMetadata" gorm:"type:jsonb;default:'[]'"`
 	ProcessedCount  int             `json:"processedCount" gorm:"default:0"`
+	MigrationStatus json.RawMessage `json:"migrationStatus" gorm:"type:jsonb;default:null"`
 	CreatedAt       time.Time       `json:"createdAt"`
 	UpdatedAt       time.Time       `json:"updatedAt"`
 }

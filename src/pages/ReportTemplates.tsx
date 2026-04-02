@@ -71,15 +71,31 @@ export default function ReportTemplates() {
       category: (t.category as TemplateCategory) || 'custom',
       source: (t.source as TemplateSource) || 'custom',
       isDefault: t.isDefault,
-      pages: (typeof t.pages === 'string' ? JSON.parse(t.pages) : (t.pages || [])) as TemplatePage[],
+      pages: (() => {
+        try {
+          const parsed = typeof t.pages === 'string' ? JSON.parse(t.pages) : (t.pages || []);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          console.error("Failed to parse pages for template", t.id, e);
+          return [];
+        }
+      })() as TemplatePage[],
       colorScheme: (t.colorScheme as ReportTemplate['colorScheme']) || { primary: '#2c3e50', secondary: '#3498db', accent: '#e74c3c', background: '#ffffff' },
       createdAt: new Date(t.createdAt),
       migrationStatus,
     };
   });
 
-  const activeMigrations = userTemplatesFormatted.filter(t => t.migrationStatus && t.migrationStatus.status !== 'completed');
-  const readyUserTemplates = userTemplatesFormatted.filter(t => !t.migrationStatus || t.migrationStatus.status === 'completed');
+  const activeMigrations = userTemplatesFormatted.filter(
+    (t) => t.migrationStatus?.status === 'processing' || 
+           t.migrationStatus?.status === 'failed' ||
+           (t.migrationStatus === null && t.name.startsWith('Importing:'))
+  );
+  
+  const readyUserTemplates = userTemplatesFormatted.filter(
+    (t) => t.migrationStatus?.status === 'completed' || 
+           (!t.migrationStatus && !t.name.startsWith('Importing:'))
+  );
 
   const allReadyTemplates: ReportTemplate[] = [
     ...builtinTemplates,
