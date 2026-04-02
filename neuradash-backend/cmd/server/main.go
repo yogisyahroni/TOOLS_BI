@@ -829,6 +829,25 @@ func initRedis(cfg *config.Config) *redis.Client {
 
 // autoMigrate runs GORM auto-migration for all models.
 func autoMigrate(db *gorm.DB) error {
+	log.Info().Msg("Executing Hard-Fix SQL Migrations (UUID to VARCHAR)...")
+	
+	// Force column type changes that GORM AutoMigrate often skips
+	hardFixSQL := []string{
+		"ALTER TABLE datasets ALTER COLUMN id TYPE VARCHAR(255)",
+		"ALTER TABLE datasets ALTER COLUMN user_id TYPE VARCHAR(255)",
+		"ALTER TABLE saved_charts ALTER COLUMN id TYPE VARCHAR(255)",
+		"ALTER TABLE saved_charts ALTER COLUMN user_id TYPE VARCHAR(255)",
+		"ALTER TABLE saved_charts ALTER COLUMN dataset_id TYPE VARCHAR(255)",
+		"ALTER TABLE dashboards ALTER COLUMN id TYPE VARCHAR(255)",
+		"ALTER TABLE dashboards ALTER COLUMN user_id TYPE VARCHAR(255)",
+	}
+
+	for _, sql := range hardFixSQL {
+		if err := db.Exec(sql).Error; err != nil {
+			log.Warn().Err(err).Str("sql", sql).Msg("Hard-fix migration warning (possible if column is already varchar)")
+		}
+	}
+
 	if err := db.AutoMigrate(
 		&models.User{},
 		&models.Dataset{},

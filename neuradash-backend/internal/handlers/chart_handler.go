@@ -108,10 +108,10 @@ func (h *ChartHandler) CreateChart(c *fiber.Ctx) error {
 		Config    json.RawMessage `json:"config"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body: " + err.Error()})
 	}
 	if req.Title == "" || req.DatasetID == "" || req.Type == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "title, datasetId, and type are required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing required fields: title, datasetId, and type are all required"})
 	}
 
 	chart := models.SavedChart{
