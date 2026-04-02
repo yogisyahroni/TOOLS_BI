@@ -322,10 +322,63 @@ function AIDashboardBuilder() {
       );
     }
 
-    if (chart.type === 'geo') {
+    if (chart.type === 'geo' || chart.type === 'map') {
       return (
-        <div className="flex bg-muted/20 items-center justify-center h-64 rounded-lg text-muted-foreground text-sm">
-          Peta Geo-Spasial: <span className="font-mono text-xs ml-2 text-primary">{chart.data.length} area</span>
+        <div className="flex flex-col gap-4 h-64 overflow-hidden border border-border/20 rounded-xl bg-muted/5 p-4">
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground border-b border-border/20 pb-2">
+            <span>Location / Area</span>
+            <span>Value Contribution</span>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+            {chart.data.length > 0 ? chart.data.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between group hover:bg-muted/10 p-1.5 rounded-lg transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
+                  <span className="text-sm font-medium">{item[strKey || keys[0]] as any}</span>
+                </div>
+                <span className="text-sm font-mono text-primary/80">
+                   {typeof (item as any)[numKey || keys[1]] === 'number' 
+                     ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item as any)[numKey || keys[1]])
+                     : (item as any)[numKey || keys[1]] as any}
+                </span>
+              </div>
+            )) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground/50 italic">
+                Data lokasi tidak tersedia
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (chart.type === 'table' || chart.type === 'pivot') {
+      return (
+        <div className="h-64 overflow-hidden border border-border/20 rounded-xl bg-card shadow-inner flex flex-col">
+          <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="sticky top-0 bg-muted/80 backdrop-blur-md z-10">
+                <tr>
+                  {keys.map((k) => (
+                    <th key={k} className="px-4 py-3 font-semibold text-muted-foreground border-b border-border/30 first:rounded-tl-lg last:rounded-tr-lg capitalize">
+                      {k.replace(/_/g, ' ')}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/20">
+                {chart.data.map((row, i) => (
+                  <tr key={i} className="hover:bg-muted/5 transition-colors group">
+                    {keys.map((k) => (
+                      <td key={k} className="px-4 py-3 text-foreground/80 group-hover:text-foreground">
+                        {typeof (row as any)[k] === 'number' ? ((row as any)[k] as number).toLocaleString() : String((row as any)[k])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       );
     }
