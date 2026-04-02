@@ -113,6 +113,7 @@ export interface Widget {
 
   // AI Persistence
   chartId?: string; // Reference to SavedChart ID
+  config?: Record<string, any>; // Arbitrary metadata (AI flags, original query, etc.)
 }
 
 export interface DashboardConfig {

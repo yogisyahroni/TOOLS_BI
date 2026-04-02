@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useSearchParams } from 'react-router-dom';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -134,6 +135,7 @@ export default function DashboardBuilder() {
   const { data: dataSets = [] } = useDatasets();
   const { data: savedCharts = [] } = useCharts(); // Load Saved Charts
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
 
   const [containerWidth, setContainerWidth] = useState(1200);
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -151,6 +153,15 @@ export default function DashboardBuilder() {
   }, []);
 
   const [activeDashboardId, setActiveDashboardId] = useState('');
+
+  // Handle deep-linking from URL (?id=...)
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (id && id !== activeDashboardId) {
+      setActiveDashboardId(id);
+    }
+  }, [searchParams, activeDashboardId]);
+
   const [editingTextWidgetId, setEditingTextWidgetId] = useState<string | null>(null);
 
   // ── GraphQL cache-warmer (Phase 38) ─────────────────────────────────────────
@@ -591,6 +602,7 @@ export default function DashboardBuilder() {
           numericColumns={numericColumns}
           categoricalColumns={categoricalColumns}
           sortOrder={widget.sortOrder || 'none'}
+          isPreAggregated={!!widget.config?.isAiGenerated}
         />
       </div>
     );

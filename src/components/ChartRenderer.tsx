@@ -80,6 +80,7 @@ export interface ChartRendererProps {
   categoricalColumns: any[];
   sortOrder?: 'asc' | 'desc' | 'none';
   showLegend?: boolean;
+  isPreAggregated?: boolean;
 }
 
 export const ChartRenderer: React.FC<ChartRendererProps> = ({
@@ -94,9 +95,19 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
   categoricalColumns,
   sortOrder = 'none',
   showLegend = true,
+  isPreAggregated = false,
 }) => {
   const chartData = useMemo(() => {
     if (!dataset || !xAxis || !yAxis) return [];
+    
+    // If data is already aggregated by the AI/Backend, just return it mapped to name/value
+    if (isPreAggregated) {
+      return dataset.data.map((row: any) => ({
+        name: formatValue(row[xAxis]),
+        value: Number(row[yAxis]) || 0
+      }));
+    }
+
     const aggregated = new Map<string, number>();
     dataset.data.forEach(row => {
       const key = formatValue(row[xAxis] || 'Unknown');
@@ -112,7 +123,7 @@ export const ChartRenderer: React.FC<ChartRendererProps> = ({
     if (limit > 0) result = result.slice(0, limit);
 
     return result;
-  }, [dataset, xAxis, yAxis, sortOrder, dataLimit]);
+  }, [dataset, xAxis, yAxis, sortOrder, dataLimit, isPreAggregated]);
 
   // Waterfall data: compute running total
   const waterfallData = useMemo(() => {

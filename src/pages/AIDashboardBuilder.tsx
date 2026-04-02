@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
@@ -55,6 +56,7 @@ interface StreamState {
 }
 
 function AIDashboardBuilder() {
+  const navigate = useNavigate();
   const { data: datasets = [] } = useDatasets();
   const { toast } = useToast();
 
@@ -188,40 +190,121 @@ function AIDashboardBuilder() {
     setIsSaving(true);
 
     try {
-      // Map AI Charts to Standard Dashboard Widgets
-      const widgets = charts.map((c, i) => ({
-        id: `widget-${i}`,
-        title: c.title,
-        type: c.type,
-        width: c.width,
-        query: c.query,
-        config: {
-          isAiGenerated: true,
-          datasetId: selectedDatasetId,
-          // Store chart metadata for reuse in regular builder
-          chartConfig: {
-            type: c.type,
-            title: c.title,
+      // 1. Save each chart to the Chart Library (tabel charts) first
+      // This ensures they appear in the Sidebar > Charts Library
+      const savedChartIds: Record<number, string> = {};
+      
+      for (let i = 0; i < charts.length; i++) {
+        const c = charts[i];
+        
+        // Find numeric and categorical columns for the chart config
+        const firstRow = c.data[0] || {};
+        const keys = Object.keys(firstRow);
+        const yAxis = keys.find(k => typeof firstRow[k] === 'number') || '';
+        const xAxis = keys.find(k => typeof firstRow[k] === 'string' && k !== 'map_key') || keys[0] || '';
+
+        const chartPayload = {
+          title: `AI - ${c.title}`,
+          type: c.type,
+          dataset_id: selectedDatasetId,
+          x_axis: xAxis,
+          y_axis: yAxis,
+          group_by: '',
+          config: JSON.stringify({
+            query: c.query,
+            isAiGenerated: true,
+            width: c.width
+          })
+        };
+
+        const response = await fetch(`${API_BASE}/charts`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getAccessToken()}`,
+          },
+          body: JSON.stringify(chartPayload),
+        });
+
+        if (!response.ok) throw new Error(`Failed to save chart: ${c.title}`);
+        const result = await response.json();
+        savedChartIds[i] = result.data.id;
+      }
+
+      // 2. Calculate Layout (x, y, w, h) for Grid Compatibility
+      // We want to match the visual order in AI Builder (usually stacked or side-by-side)
+      let currentX = 0;
+      let currentY = 0;
+      const ROW_HEIGHT = 4;
+
+      const widgets = charts.map((c, i) => {
+        const w = Number(c.width) || 12;
+        const h = c.type === 'stat' ? 2 : ROW_HEIGHT;
+
+        // Find numeric and categorical columns for the widget config (redundant but helpful)
+        const firstRow = c.data[0] || {};
+        const keys = Object.keys(firstRow);
+        const yAxis = keys.find(k => typeof firstRow[k] === 'number') || '';
+        const xAxis = keys.find(k => typeof firstRow[k] === 'string' && k !== 'map_key') || keys[0] || '';
+
+        // If it doesn't fit in current row, move to next
+        if (currentX + w > 12) {
+          currentX = 0;
+          currentY += ROW_HEIGHT;
+        }
+
+        const widget = {
+          id: `widget-${Date.now()}-${i}`,
+          title: c.title,
+          type: c.type,
+          dataSetId: selectedDatasetId,
+          chartId: savedChartIds[i],
+          x: currentX,
+          y: currentY,
+          w: w,
+          h: h,
+          xAxis: xAxis,
+          yAxis: yAxis,
+          width: w === 12 ? 'full' : 'half',
+          config: {
+            isAiGenerated: true,
             query: c.query
           }
+        };
+
+        // Advance X for next widget
+        currentX += w;
+        if (currentX >= 12) {
+          currentX = 0;
+          currentY += h;
         }
-      }));
 
-      await dashboardApi.create({
+        return widget;
+      });
+
+      const selectedDataset = datasets.find(d => d.id === selectedDatasetId);
+      const finalName = dashboardName.trim() || `AI Dashboard - ${selectedDataset?.name || 'New'}`;
+
+      // Step 3: Create Dashboard with these widgets
+      const response = await dashboardApi.create({
         name: finalName,
-        widgets: widgets,
-        isPublic: false
+        widgets: widgets
       });
 
-      setIsSaved(true);
+      const newDash = response.data;
+
       toast({
-        title: 'Dashboard Tersimpan!',
-        description: `"${finalName}" telah ditambahkan ke daftar Dashboard Anda.`,
+        title: "Success!",
+        description: "Dashboard has been created and saved to your library.",
       });
+
+      // Navigate to the Dashboard Builder to edit the result
+      navigate(`/dashboard-builder?id=${newDash.id}`);
     } catch (err) {
+      const error = err as Error;
       toast({
         title: 'Gagal Menyimpan',
-        description: 'Terjadi kesalahan sistem saat mencoba menyimpan dashboard.',
+        description: error.message || 'Terjadi kesalahan sistem saat mencoba menyimpan dashboard.',
         variant: 'destructive',
       });
     } finally {
