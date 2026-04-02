@@ -7,8 +7,8 @@ import (
 
 // Dataset represents metadata for an uploaded data file.
 type Dataset struct {
-	ID            string          `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID        string          `json:"userId" gorm:"type:uuid;not null;index"`
+	ID            string          `json:"id" gorm:"size:255;primaryKey"`
+	UserID        string          `json:"userId" gorm:"size:255;not null;index"`
 	Name          string          `json:"name" gorm:"not null"`
 	FileName      string          `json:"fileName"`
 	Columns       json.RawMessage `json:"columns" gorm:"type:jsonb;default:'[]'"`

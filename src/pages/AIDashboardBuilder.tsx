@@ -210,7 +210,6 @@ function AIDashboardBuilder() {
           xAxis: xAxis || 'category',
           yAxis: yAxis || 'value',
           groupBy: '',
-          dataLimit: 100,
           config: {
             query: c.query,
             isAiGenerated: true,
@@ -218,13 +217,14 @@ function AIDashboardBuilder() {
           }
         };
 
-        console.log(`[DEBUG] Saving chart ${i+1}/${charts.length}:`, chartPayload);
+        console.log(`[DEBUG] Attempting to save chart ${i+1}/${charts.length}:`, chartPayload);
 
         if (!selectedDatasetId) {
           throw new Error("Dataset ID is missing. Please select a dataset first.");
         }
 
         const res = await chartApi.create(chartPayload);
+        console.log(`[DEBUG] Chart ${i+1} saved successfully:`, res.data);
         
         // AxiosResponse<SavedChart> -> res.data is the SavedChart object
         if (res.data && res.data.id) {

@@ -7,8 +7,8 @@ import (
 
 // Dashboard represents a user-created analytics dashboard.
 type Dashboard struct {
-	ID         string          `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID     string          `json:"userId" gorm:"type:uuid;not null;index"`
+	ID         string          `json:"id" gorm:"size:255;primaryKey"`
+	UserID     string          `json:"userId" gorm:"size:255;not null;index"`
 	Name       string          `json:"name" gorm:"not null"`
 	Widgets    json.RawMessage `json:"widgets" gorm:"type:jsonb;default:'[]'"`
 	IsPublic   bool            `json:"isPublic" gorm:"default:false"`
