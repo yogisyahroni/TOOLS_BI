@@ -236,14 +236,36 @@ func (h *MigrationHandler) extractPagesPowerBI(data []byte, size int64) ([]strin
 
 	var pages []string
 	for _, s := range layoutObj.Sections {
-		pages = append(pages, string(s))
+		// Clean each page before adding to the queue to prevent TPM limit issues.
+		// We remove large visual "config" and "filters" blocks as the user only needs:
+		// Narrative, Chart Type, and General Layout. Color/logos are ignored.
+		cleanedPage := cleanPowerBIJson(string(s))
+		pages = append(pages, cleanedPage)
 	}
 	
 	if len(pages) == 0 {
-		return []string{string(cleaned)}, nil
+		return []string{cleanPowerBIJson(string(cleaned))}, nil
 	}
 
 	return pages, nil
+}
+
+// cleanPowerBIJson strips out massive "config" and "filters" strings from the Layout JSON.
+// These strings contain huge amounts of styling metadata that is irrelevant for structural migration.
+func cleanPowerBIJson(jsonStr string) string {
+	// 1. Strip visualContainer config (80% of bloat)
+	reConfig := regexp.MustCompile(`"config"\s*:\s*"[^"]*"`)
+	cleaned := reConfig.ReplaceAllString(jsonStr, `"config": "{}"`)
+
+	// 2. Strip filters (often very large)
+	reFilters := regexp.MustCompile(`"filters"\s*:\s*"[^"]*"`)
+	cleaned = reFilters.ReplaceAllString(cleaned, `"filters": "[]"`)
+
+	// 3. Optional: Strip visual query metadata if it's too large and has escaped quotes
+	// We keep query for now as it helps AI identify columns, 
+	// but we can strip it later if 413 persists.
+	
+	return cleaned
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,7 +282,7 @@ func (h *MigrationHandler) processMigrationJob(templateID string, pages []string
 	tokensUsedThisMinute := 0
 	minuteStart := time.Now()
 
-	modelTPM := 11000 // Default for free models like Lyria
+	modelTPM := 10000 // Safer threshold for Groq 'on_demand' tier
 	if strings.Contains(strings.ToLower(cfg.Model), "gpt-4") || strings.Contains(strings.ToLower(cfg.Model), "claude-3") {
 		modelTPM = 40000 // Higher limit for paid models
 	}
@@ -277,6 +299,12 @@ func (h *MigrationHandler) processMigrationJob(templateID string, pages []string
 		}
 
 		// 2. Call AI for this chunk
+		// Safety Hard Truncation: Never exceed 30,000 chars per request (~10k tokens)
+		if len(pageContent) > 30000 {
+			fmt.Printf("Warning: Page %d is too large (%d chars). Truncating to 30k chars.\n", i+1, len(pageContent))
+			pageContent = pageContent[:30000]
+		}
+
 		prompt := BuildTemplateMigrationPrompt(fileExt, pageContent)
 		aiOutput, err := h.callOpenAIMigrate(*cfg, prompt)
 		if err != nil {
@@ -576,10 +604,20 @@ func (h *MigrationHandler) callOpenAIMigrate(cfg resolvedConfig, prompt string) 
 	return result.Choices[0].Message.Content, nil
 }
 
-// cleanTableauXML removes the huge <datasources> block from a .twb file
-// as it contains metadata irrelevant to the visual layout, allowing more "signal"
-// (worksheets and dashboards) to fit within AI context limits.
+// cleanTableauXML removes the huge <datasources> block and <style>/<format> blocks
+// as they contain metadata irrelevant to the visual layout.
 func cleanTableauXML(xml string) string {
-	re := regexp.MustCompile(`(?s)<datasources>.*?</datasources>`)
-	return re.ReplaceAllString(xml, "<datasources>[OMITTED_FOR_LAYOUT_MIGRATION]</datasources>")
+	// Strip datasources
+	reDS := regexp.MustCompile(`(?s)<datasources>.*?</datasources>`)
+	xml = reDS.ReplaceAllString(xml, "<datasources>[OMITTED]</datasources>")
+
+	// Strip style blocks (visual appearance only)
+	reStyle := regexp.MustCompile(`(?s)<style>.*?</style>`)
+	xml = reStyle.ReplaceAllString(xml, "<style>[OMITTED]</style>")
+
+	// Strip format blocks
+	reFormat := regexp.MustCompile(`(?s)<format\s+.*?/>`)
+	xml = reFormat.ReplaceAllString(xml, "")
+
+	return xml
 }
