@@ -146,7 +146,7 @@ function ProtectedLayout() {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="system" enableSystem>
+    <ThemeProvider defaultTheme="system" enableSystem attribute="class">
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
