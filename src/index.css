@@ -238,3 +238,47 @@
     @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
   }
 }
+
+/* Recharts Global Theme Styling */
+.recharts-default-tooltip {
+  background-color: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+}
+
+.recharts-tooltip-item-list {
+  color: hsl(var(--foreground)) !important;
+}
+
+.recharts-tooltip-label {
+  color: hsl(var(--muted-foreground)) !important;
+  font-weight: 600 !important;
+  margin-bottom: 4px !important;
+}
+
+.recharts-legend-item-text {
+  color: hsl(var(--foreground)) !important;
+  font-size: 12px !important;
+  vertical-align: middle !important;
+}
+
+.recharts-cartesian-axis-tick-value {
+  fill: hsl(var(--muted-foreground)) !important;
+  font-size: 12px !important;
+}
+
+.dark .recharts-cartesian-axis-tick-value {
+  fill: hsl(var(--foreground)) !important;
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: hsl(var(--border)) !important;
+  opacity: 0.5 !important;
+}
+
+.recharts-pie-label-text {
+  fill: hsl(var(--foreground)) !important;
+  font-size: 12px !important;
+}

@@ -300,8 +300,8 @@ function AIDashboardBuilder() {
       return (
          <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-               <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }} />
-               <Legend verticalAlign="bottom" height={36} />
+                <Tooltip />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
                <Pie 
                  data={chart.data} 
                  cx="50%" cy="50%" 
@@ -389,13 +389,14 @@ function AIDashboardBuilder() {
     return (
        <ResponsiveContainer width="100%" height={250}>
          {chart.type === 'line' ? (
-           <LineChart data={chart.data}>
-             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-             <XAxis dataKey={xKeyUsed} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => typeof v === 'number' && v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
-             <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }} />
-             <Line type="monotone" dataKey={yKeyUsed} stroke={COLORS[0]} strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
-           </LineChart>
+            <LineChart data={chart.data}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+              <XAxis dataKey={xKeyUsed} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--foreground))' }} />
+              <YAxis tickFormatter={(v) => typeof v === 'number' && v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+              <Legend iconType="circle" />
+              <Line type="monotone" dataKey={yKeyUsed} stroke={COLORS[0]} strokeWidth={3} dot={{ strokeWidth: 2, r: 4, fill: 'hsl(var(--background))' }} activeDot={{ r: 6 }} />
+            </LineChart>
          ) : chart.type === 'area' ? (
            <AreaChart data={chart.data}>
              <defs>
@@ -404,20 +405,22 @@ function AIDashboardBuilder() {
                    <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0}/>
                 </linearGradient>
              </defs>
-             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-             <XAxis dataKey={xKeyUsed} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => typeof v === 'number' && v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
-             <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }} />
-             <Area type="monotone" dataKey={yKeyUsed} stroke={COLORS[0]} fill="url(#colorY)" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+              <XAxis dataKey={xKeyUsed} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--foreground))' }} />
+              <YAxis tickFormatter={(v) => typeof v === 'number' && v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+              <Tooltip />
+              <Legend iconType="circle" />
+              <Area type="monotone" dataKey={yKeyUsed} stroke={COLORS[0]} fill="url(#colorY)" fillOpacity={1} />
            </AreaChart>
          ) : (
-           <BarChart data={chart.data}>
-             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-             <XAxis dataKey={xKeyUsed} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => typeof v === 'number' && v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
-             <Tooltip cursor={{ fill: 'hsl(var(--muted)/0.5)' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }} />
-             <Bar dataKey={yKeyUsed} fill={COLORS[0]} radius={[4, 4, 0, 0]} />
-           </BarChart>
+            <BarChart data={chart.data}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+              <XAxis dataKey={xKeyUsed} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--foreground))' }} />
+              <YAxis tickFormatter={(v) => typeof v === 'number' && v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+              <Tooltip cursor={{ fill: 'hsl(var(--muted)/0.2)' }} />
+              <Legend iconType="circle" />
+              <Bar dataKey={yKeyUsed} fill={COLORS[0]} radius={[4, 4, 0, 0]} />
+            </BarChart>
          )}
        </ResponsiveContainer>
     );
