@@ -25,7 +25,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { useDatasets } from '@/hooks/useApi';
-import { API_BASE, getAccessToken, dashboardApi, chartApi, datasetApi, authApi } from '@/lib/api';
+import { API_BASE, getAccessToken, dashboardApi, chartApi, datasetApi, authApi, type BatchAIGenerateRequest } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 
@@ -223,27 +223,31 @@ function AIDashboardBuilder() {
 
       const savedChartIds: Record<number, string> = {};
       const syncedAxes: Record<number, { xAxis: string; yAxis: string; datasetId: string }> = {};
-      
-      for (let i = 0; i < charts.length; i++) {
-        const c = charts[i];
-        
-        // 1a. Register the AI Query as a formal Dataset (PostgreSQL View)
-        // This makes the AI findings permanent data assets in the platform
-        const dsResponse = await datasetApi.aiGenerate({
-          sourceDatasetId: selectedDatasetId,
+
+      // 1. Register ALL AI Queries as formal Datasets in ONE BATCH
+      // This prevents "Resource Exhaustion" on Supabase by processing DDL sequentially in the backend
+      const batchReq: BatchAIGenerateRequest = {
+        sourceDatasetId: selectedDatasetId,
+        datasets: charts.map(c => ({
           name: c.title,
           description: `AI Generated data for chart: ${c.title}`,
           query: c.query
-        });
+        }))
+      };
 
-        if (!dsResponse.data || !dsResponse.data.id) {
-          throw new Error(`Failed to create AI dataset for: ${c.title}`);
-        }
+      const newDatasets = await datasetApi.aiGenerateBatch(batchReq);
+      
+      if (!newDatasets || newDatasets.length !== charts.length) {
+        throw new Error("Gagal mendaftarkan dataset hasil AI secara batch.");
+      }
 
-        const newDatasetId = dsResponse.data.id;
-        
+      // 2. Create individual Charts for each new Dataset
+      for (let i = 0; i < charts.length; i++) {
+        const c = charts[i];
+        const newDataset = newDatasets[i];
+        const newDatasetId = newDataset.id;
+
         // 1b. Identify Axis from the NEW dataset columns
-        // Since it's a View, we use the raw keys from AI response as they are the view's actual columns
         const firstRow = c.data[0] || {};
         const keys = Object.keys(firstRow).filter(k => k !== 'map_key');
         
@@ -256,7 +260,7 @@ function AIDashboardBuilder() {
         const chartPayload = {
           title: `AI - ${c.title}`,
           type: c.type as any,
-          datasetId: newDatasetId, // Link to the new AI-generated dataset
+          datasetId: newDatasetId,
           xAxis: xAxis || 'category',
           yAxis: yAxis || 'value',
           groupBy: '',
@@ -271,7 +275,7 @@ function AIDashboardBuilder() {
         if (res.data && res.data.id) {
           savedChartIds[i] = res.data.id;
         } else {
-          throw new Error(`Invalid response from server when saving chart: ${c.title}`);
+          throw new Error(`Gagal menyimpan konfigurasi chart: ${c.title}`);
         }
       }
 

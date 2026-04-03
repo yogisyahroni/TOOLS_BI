@@ -180,6 +180,8 @@ export const datasetApi = {
         api.put(`/datasets/${id}/refresh-config`, config),
     aiGenerate: (payload: { sourceDatasetId: string; name: string; description: string; query: string }) =>
         api.post<DatasetItem>('/datasets/ai-generate', payload),
+  aiGenerateBatch: (payload: BatchAIGenerateRequest) =>
+    api.post<DatasetItem[]>('/datasets/ai-generate-batch', payload).then(res => res.data),
 };
 
 // Dashboards
@@ -403,7 +405,16 @@ export interface DatasetItem {
 export interface ColumnDef {
     name: string;
     type: 'string' | 'number' | 'date' | 'boolean';
-    nullable: boolean;
+    nullable?: boolean;
+}
+
+export interface BatchAIGenerateRequest {
+    sourceDatasetId: string;
+    datasets: {
+        name: string;
+        description: string;
+        query: string;
+    }[];
 }
 
 export interface DataQueryParams {

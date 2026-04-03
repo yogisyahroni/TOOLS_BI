@@ -810,6 +810,11 @@ type AIGenerateRequest struct {
 	Query           string `json:"query"`
 }
 
+type AIBatchGenerateRequest struct {
+	SourceDatasetID string              `json:"sourceDatasetId"`
+	Datasets        []AIGenerateRequest `json:"datasets"`
+}
+
 // AIGenerateDataset interprets AI SQL to create a View and register it as a new Dataset.
 // POST /api/v1/datasets/ai-generate
 func (h *DatasetHandler) AIGenerateDataset(c *fiber.Ctx) error {
@@ -999,14 +1004,113 @@ func (h *DatasetHandler) AIGenerateDataset(c *fiber.Ctx) error {
 	}
 
 	if err := h.db.Create(&datasetRecord).Error; err != nil {
-		if !isExternal {
-			// Attempt to cleanup view if record creation fails
-			h.db.Exec(fmt.Sprintf("DROP VIEW IF EXISTS %s", viewName))
-		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save dataset record: " + err.Error()})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(datasetRecord)
+	return c.JSON(datasetRecord)
+}
+
+// AIBatchGenerateDatasets handles multiple AI dataset registrations in one go.
+// This prevents resource exhaustion on Supabase Free Tier by avoiding parallel DDL hits.
+// POST /api/v1/datasets/ai-generate-batch
+func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	var req AIBatchGenerateRequest
+	if err := c.BodyParser(&req); err != nil || len(req.Datasets) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid batch request payload"})
+	}
+
+	results := make([]models.Dataset, 0, len(req.Datasets))
+
+	// Process sequentially to keep DB load stable
+	for _, dsReq := range req.Datasets {
+		// reuse logic by calling internal helper if needed, or inline for now as it's small
+		// but let's add a "Smart Limit" to the query if it's missing and looks like raw data
+		dsReq.Query = applySmartLimit(dsReq.Query)
+
+		// Verification logic (simplified from AIGenerateDataset)
+		var source models.Dataset
+		if err := h.db.Where("id = ? AND user_id = ?", req.SourceDatasetID, userID).First(&source).Error; err != nil {
+			continue // Skip failed source lookups in batch
+		}
+
+		newDatasetID := uuid.New().String()
+		viewName := sanitizeTableName(newDatasetID) + "_view"
+
+		// Create the PostgreSQL VIEW (DDL)
+		createViewSQL := fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, dsReq.Query)
+		if err := h.db.Exec(createViewSQL).Error; err != nil {
+			log.Error().Err(err).Str("query", dsReq.Query).Msg("Failed to create Batch AI View")
+			continue
+		}
+
+		// Calculate columns (extract schema)
+		limitQuery := fmt.Sprintf("SELECT * FROM %s LIMIT 1", viewName)
+		rows, _ := h.db.Raw(limitQuery).Rows()
+		var newCols []models.ColumnDef
+		if rows != nil {
+			colTypes, _ := rows.ColumnTypes()
+			for _, ct := range colTypes {
+				dbType := strings.ToUpper(ct.DatabaseTypeName())
+				genericType := "string"
+				if strings.Contains(dbType, "INT") || strings.Contains(dbType, "NUMERIC") || strings.Contains(dbType, "FLOAT") {
+					genericType = "number"
+				} else if strings.Contains(dbType, "TIME") || strings.Contains(dbType, "DATE") {
+					genericType = "date"
+				} else if strings.Contains(dbType, "BOOL") {
+					genericType = "boolean"
+				}
+				newCols = append(newCols, models.ColumnDef{Name: ct.Name(), Type: genericType})
+			}
+			rows.Close()
+		}
+
+		colJSON, _ := encodeColumns(newCols)
+		var rowCount int64
+		h.db.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", viewName)).Scan(&rowCount)
+
+		datasetRecord := models.Dataset{
+			ID:            newDatasetID,
+			UserID:        userID,
+			Name:          dsReq.Name + " (AI)",
+			FileName:      dsReq.Name,
+			Columns:       colJSON,
+			RowCount:      int(rowCount),
+			StorageKey:    "AI_BATCH_VIEW::" + dsReq.Description,
+			DataTableName: viewName,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+		}
+
+		if err := h.db.Create(&datasetRecord).Error; err == nil {
+			results = append(results, datasetRecord)
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(results)
+}
+
+// applySmartLimit adds LIMIT 1000 to queries that don't have GROUP BY / Aggregation.
+// This ensures charts based on full results stay accurate, but raw data queries don't spike DB.
+func applySmartLimit(query string) string {
+	q := strings.TrimSpace(query)
+	upper := strings.ToUpper(q)
+	
+	// If it has aggregation keywords, let it scan (assuming business logic needs full data)
+	if strings.Contains(upper, "GROUP BY") || strings.Contains(upper, "SUM(") || strings.Contains(upper, "COUNT(") || strings.Contains(upper, "AVG(") {
+		return q
+	}
+
+	// If it already has a limit, don't override
+	if strings.Contains(upper, "LIMIT ") {
+		return q
+	}
+
+	return q + " LIMIT 1000"
 }
 
 

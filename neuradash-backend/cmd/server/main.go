@@ -356,6 +356,8 @@ func main() {
 	datasets.Put("/:id/refresh-config", datasetH.UpdateRefreshConfig)
 	datasets.Post("/:id/refresh", datasetH.RefreshDataset)
 	datasets.Post("/ai-generate", datasetH.AIGenerateDataset)
+	// BATCH-AI: Register multiple AI datasets in seq to prevent Supabase connection exhaustion
+	datasets.Post("/ai-generate-batch", datasetH.AIBatchGenerateDatasets)
 	datasets.Get("/:id/aggregate", datasetH.AggregateDataset)
 	datasets.Post("/simulate", datasetH.SimulateETL)
 
