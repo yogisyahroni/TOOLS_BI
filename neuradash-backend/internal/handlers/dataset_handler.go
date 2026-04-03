@@ -1024,27 +1024,28 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid batch request payload"})
 	}
 
+	// MOVE: Check Source ID once, not in loop
+	var source models.Dataset
+	if err := h.db.Where("id = ? AND user_id = ?", req.SourceDatasetID, userID).First(&source).Error; err != nil {
+		log.Error().Err(err).Str("sourceId", req.SourceDatasetID).Msg("Batch source dataset not found")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Source dataset not found"})
+	}
+
 	results := make([]models.Dataset, 0, len(req.Datasets))
 
 	// Process sequentially to keep DB load stable
 	for _, dsReq := range req.Datasets {
-		// reuse logic by calling internal helper if needed, or inline for now as it's small
-		// but let's add a "Smart Limit" to the query if it's missing and looks like raw data
-		dsReq.Query = applySmartLimit(dsReq.Query)
-
-		// Verification logic (simplified from AIGenerateDataset)
-		var source models.Dataset
-		if err := h.db.Where("id = ? AND user_id = ?", req.SourceDatasetID, userID).First(&source).Error; err != nil {
-			continue // Skip failed source lookups in batch
-		}
+		// Clean SQL: AI sometimes wraps in ```sql ... ```
+		finalQuery := cleanSQL(dsReq.Query)
+		finalQuery = applySmartLimit(finalQuery)
 
 		newDatasetID := uuid.New().String()
 		viewName := sanitizeTableName(newDatasetID) + "_view"
 
 		// Create the PostgreSQL VIEW (DDL)
-		createViewSQL := fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, dsReq.Query)
+		createViewSQL := fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, finalQuery)
 		if err := h.db.Exec(createViewSQL).Error; err != nil {
-			log.Error().Err(err).Str("query", dsReq.Query).Msg("Failed to create Batch AI View")
+			log.Error().Err(err).Str("query", finalQuery).Msg("Failed to create Batch AI View")
 			continue
 		}
 
@@ -1092,6 +1093,34 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(results)
+}
+
+func cleanSQL(q string) string {
+	q = strings.TrimSpace(q)
+	if strings.Contains(q, "```") {
+		// Extract content between ``` and ```
+		lines := strings.Split(q, "\n")
+		var sqlLines []string
+		inBlock := false
+		for _, line := range lines {
+			trimmedLine := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmedLine, "```") {
+				inBlock = !inBlock
+				continue
+			}
+			if inBlock {
+				sqlLines = append(sqlLines, line)
+			}
+		}
+		if len(sqlLines) > 0 {
+			q = strings.Join(sqlLines, "\n")
+		} else {
+			// Fallback: If AI didn't use lines properly, try regex-like strip
+			q = strings.ReplaceAll(q, "```sql", "")
+			q = strings.ReplaceAll(q, "```", "")
+		}
+	}
+	return strings.TrimSpace(q)
 }
 
 // applySmartLimit adds LIMIT 1000 to queries that don't have GROUP BY / Aggregation.

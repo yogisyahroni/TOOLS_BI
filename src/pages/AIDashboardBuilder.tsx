@@ -217,6 +217,10 @@ function AIDashboardBuilder() {
     }
   }, [prompt, selectedDatasetId, toast]);
 
+  const cleanSQL = (q: string) => {
+    return q.replace(/```sql|```/gi, '').trim();
+  };
+
   const handleSaveToLibrary = async () => {
     if (!charts.length || isSaving || isSaved) return;
 
@@ -232,7 +236,7 @@ function AIDashboardBuilder() {
         datasets: charts.map(c => ({
           name: c.title,
           description: `AI Generated data for chart: ${c.title}`,
-          query: c.query
+          query: cleanSQL(c.query)
         }))
       };
 
