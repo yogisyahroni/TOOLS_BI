@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"neuradash/internal/middleware"
 
@@ -93,22 +94,25 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 			return
 		}
 
-		sendSSEEvent(w, "progress", `{"stage":"executing","message":"⚡ Mengeksekusi SQL untuk setiap grafik..."}`)
+		sendSSEEvent(w, "progress", `{"stage":"executing","message":"⚡ Mengeksekusi SQL untuk setiap grafik secara paralel..."}`)
 		w.Flush()
 
-		// Execute SQL
-		for i, chart := range charts {
-			sendSSEEvent(w, "progress", fmt.Sprintf(`{"stage":"executing_sql","message":"Menyusun data untuk: %s"}`, chart.Title))
-			w.Flush()
-
-			results, dbErr := h.executeSQL(req.DatasetID, chart.Query)
-			if dbErr == nil {
-				charts[i].Data = results
-			} else {
-				// if query errors out, just inject empty data so the UI doesn't crash completely
-				charts[i].Data = make([]map[string]interface{}, 0)
-			}
+		// Execute SQL in parallel
+		var wg sync.WaitGroup
+		for i := range charts {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				results, dbErr := h.executeSQL(req.DatasetID, charts[idx].Query)
+				if dbErr == nil {
+					charts[idx].Data = results
+				} else {
+					charts[idx].Data = make([]map[string]interface{}, 0)
+				}
+			}(i)
 		}
+		wg.Wait()
+
 
 		sendSSEEvent(w, "progress", `{"stage":"layouting","message":"🎨 Menata grid visual..."}`)
 		w.Flush()

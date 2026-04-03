@@ -114,27 +114,29 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            // BUG-07 Fix: We no longer send refreshToken in the body.
-            // The browser sends it automatically in the 'refresh_token' httpOnly cookie
-            // because of 'withCredentials: true'.
             const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, {
                 withCredentials: true,
             });
             console.info('[API] Refresh successful. Retrying failed requests.');
             setAccessToken(data.accessToken);
-            // No need to setRefreshToken manually; backend will set it via cookie if rotated.
             processQueue(null, data.accessToken);
             original.headers.Authorization = `Bearer ${data.accessToken}`;
             return api(original);
         } catch (err) {
-            console.error('[API] Refresh failed. Clearing session.', err);
+            console.error('[API] Refresh failed. Hard clearing session.', err);
+            
+            // Critical: Close the queue with error BEFORE clearing/redirecting
             processQueue(err, null);
             clearTokens();
-            // Prevent infinite reload loops if loadMe fails while already on public auth pages
-            // Also bypass redirect for public embed views
+
             const currentPath = window.location.pathname;
-            if (currentPath !== '/login' && currentPath !== '/register' && !currentPath.startsWith('/embed/view/')) {
-                window.location.href = '/login';
+            const isPublicPage = currentPath === '/login' || 
+                                currentPath === '/register' || 
+                                currentPath.startsWith('/embed/view/');
+
+            if (!isPublicPage) {
+                console.warn('[API] Redirecting to login due to expired session.');
+                window.location.href = '/login?expired=true';
             }
             return Promise.reject(err);
         } finally {

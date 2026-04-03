@@ -103,18 +103,8 @@ function AIDashboardBuilder() {
     abortRef.current = abort;
 
     try {
-      // PRO-FIX: Refresh token check before manual fetch.
-      // Axios interceptors in 'api.ts' handle silent refresh automatically on 401.
-      // Calling authApi.me() ensures getAccessToken() returns a VALID token for the stream.
-      try {
-        await authApi.me();
-      } catch (authErr: any) {
-        if (authErr.response?.status === 401 || authErr.response?.status === 403) {
-          throw new Error('Sesi Anda berakhir. Silakan login ulang.');
-        }
-        // Continue anyway if it's another error, native fetch will catch 401 if it fails.
-      }
-
+      console.info('[AI] Starting stream connection with token:', getAccessToken() ? 'Present' : 'Missing');
+      
       const response = await fetch(`${API_BASE}/ai-dashboard/stream`, {
         method: 'POST',
         headers: {
@@ -126,8 +116,15 @@ function AIDashboardBuilder() {
         signal: abort.signal,
       });
 
-      if (!response.ok || !response.body) {
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Sesi Anda berakhir. Silakan muat ulang halaman.');
+        }
         throw new Error(`Server error: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is empty');
       }
 
       const reader = response.body.getReader();
@@ -157,6 +154,7 @@ function AIDashboardBuilder() {
             const parsed = JSON.parse(dataStr);
 
             if (currentEvent === 'progress') {
+              console.log(`[AI-BUILDER] Stage: ${parsed.stage} - ${parsed.message}`);
               setStream(prev => {
                 let p = prev.progress;
                 if (parsed.stage === 'planning') p = 15;
@@ -184,6 +182,7 @@ function AIDashboardBuilder() {
       if (error.name === 'AbortError') {
         toast({ title: 'Dibatalkan' });
       } else {
+        console.error('[AI-BUILDER] Stream Error:', error);
         toast({
           title: 'Error generating dashboard',
           description: error.message,
