@@ -178,6 +178,8 @@ export const datasetApi = {
     delete: (id: string) => api.delete(`/datasets/${id}`),
     updateRefreshConfig: (id: string, config: RefreshConfig) =>
         api.put(`/datasets/${id}/refresh-config`, config),
+    aiGenerate: (payload: { sourceDatasetId: string; name: string; description: string; query: string }) =>
+        api.post<DatasetItem>('/datasets/ai-generate', payload),
 };
 
 // Dashboards

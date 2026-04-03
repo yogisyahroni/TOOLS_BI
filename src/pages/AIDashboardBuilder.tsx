@@ -25,7 +25,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { useDatasets } from '@/hooks/useApi';
-import { API_BASE, getAccessToken, dashboardApi, chartApi } from '@/lib/api';
+import { API_BASE, getAccessToken, dashboardApi, chartApi, datasetApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 
@@ -210,30 +210,41 @@ function AIDashboardBuilder() {
       };
 
       const savedChartIds: Record<number, string> = {};
-      const syncedAxes: Record<number, { xAxis: string; yAxis: string }> = {};
+      const syncedAxes: Record<number, { xAxis: string; yAxis: string; datasetId: string }> = {};
       
       for (let i = 0; i < charts.length; i++) {
         const c = charts[i];
         
-        // Find numeric and categorical columns for the chart config
+        // 1a. Register the AI Query as a formal Dataset (PostgreSQL View)
+        // This makes the AI findings permanent data assets in the platform
+        const dsResponse = await datasetApi.aiGenerate({
+          sourceDatasetId: selectedDatasetId,
+          name: c.title,
+          description: `AI Generated data for chart: ${c.title}`,
+          query: c.query
+        });
+
+        if (!dsResponse.data || !dsResponse.data.id) {
+          throw new Error(`Failed to create AI dataset for: ${c.title}`);
+        }
+
+        const newDatasetId = dsResponse.data.id;
+        
+        // 1b. Identify Axis from the NEW dataset columns
+        // Since it's a View, we use the raw keys from AI response as they are the view's actual columns
         const firstRow = c.data[0] || {};
         const keys = Object.keys(firstRow).filter(k => k !== 'map_key');
         
-        // Detect typical numeric and categorical candidates from AI response
-        const rawY = keys.find(k => typeof firstRow[k] === 'number') || (keys.length > 1 ? keys[1] : keys[0]);
-        const rawX = keys.find(k => typeof firstRow[k] === 'string') || keys[0] || '';
+        const yAxis = keys.find(k => typeof firstRow[k] === 'number') || (keys.length > 1 ? keys[1] : keys[0]);
+        const xAxis = keys.find(k => typeof firstRow[k] === 'string') || keys[0] || '';
 
-        // Sync with actual DB column names using the helper
-        const yAxis = getMatchingFieldName(rawY);
-        const xAxis = getMatchingFieldName(rawX);
-
-        // Store for widget mapping consistentcy
-        syncedAxes[i] = { xAxis, yAxis };
+        // Store for widget mapping consistency
+        syncedAxes[i] = { xAxis, yAxis, datasetId: newDatasetId };
 
         const chartPayload = {
           title: `AI - ${c.title}`,
           type: c.type as any,
-          datasetId: selectedDatasetId,
+          datasetId: newDatasetId, // Link to the new AI-generated dataset
           xAxis: xAxis || 'category',
           yAxis: yAxis || 'value',
           groupBy: '',
@@ -261,8 +272,8 @@ function AIDashboardBuilder() {
         const w = Number(c.width) || 12;
         const h = c.type === 'stat' ? 2 : ROW_HEIGHT;
         
-        // Use the EXACT same axes that were normalized and saved for the chart
-        const { xAxis, yAxis } = syncedAxes[i];
+        // Use the EXACT same axes and dataset that were normalized and saved for the chart
+        const { xAxis, yAxis, datasetId } = syncedAxes[i];
 
         // If it doesn't fit in current row, move to next
         if (currentX + w > 12) {
@@ -274,7 +285,7 @@ function AIDashboardBuilder() {
           id: `widget-${Date.now()}-${i}`,
           title: c.title,
           type: c.type,
-          dataSetId: selectedDatasetId,
+          dataSetId: datasetId,
           chartId: savedChartIds[i],
           x: currentX,
           y: currentY,
