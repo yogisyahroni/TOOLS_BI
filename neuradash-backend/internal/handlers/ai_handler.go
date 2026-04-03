@@ -525,14 +525,20 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 // executeSQL executes the generated SQL either locally or via an external connection.
 func (h *AIHandler) executeSQL(datasetID, sqlQuery string) ([]map[string]interface{}, error) {
 	var ds struct {
+		Name          string
 		DataTableName string
 		StorageKey    string
 		UserID        string
 	}
-	if err := h.db.Table("datasets").Select("data_table_name, storage_key, user_id").
+	if err := h.db.Table("datasets").Select("name, data_table_name, storage_key, user_id").
 		Where("id = ?", datasetID).Scan(&ds).Error; err != nil {
 		return nil, fmt.Errorf("dataset not found: %w", err)
 	}
+
+	// S++ SQL Rewriting Engine: 
+	// Pastikan kueri AI yang mungkin merujuk ke nama logis ("belajar_data") 
+	// dipetakan kembali ke tabel fisik ("ds_xxx") sebelum eksekusi.
+	sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, ds.Name, ds.DataTableName)
 
 	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(ds.DataTableName)), "(SELECT") {
 		parts := strings.Split(ds.DataTableName, " AS ")

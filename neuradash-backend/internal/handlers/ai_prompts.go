@@ -419,10 +419,12 @@ You must follow these strict rules to ensure a premium UI/UX (12-column grid sys
 2. **Main Trends**: Use "line", "bar", or "area" charts (width: 8) coupled with "pie", "donut", or "radar" charts (width: 4) to maintain layout harmony.
 3. **Geo-Spatial Data**: If you detect geo-spatial columns (Country, City, Lat, Lng), you MUST include a "geo" map chart (width: 6 or 8).
 4. **Deep-Dive Data**: Your very last object MUST be a "pivot" or "table" chart (width: 12) showing detailed aggregations so users can drill down.
+5. **TABLE NAME STRICTNESS (CRITICAL)**: You MUST use the exact Table Name provided below in your SQL FROM clause. NEVER use generic names like "data" or "sales" unless explicitly seen in the schema.
+6. **NO MARKDOWN IN SQL**: The "query" field MUST contain raw SQL only. Never wrap it in backticks (type: "bar", query: "SELECT...").
 
-For each chart, you must provide the precise PostgreSQL query needed to fetch its data.
+For each chart, you must provide the precise PostgreSQL query needed to fetch its data. Use aliases for readability and "LIMIT 1000" for non-aggregate queries.
 
-### Schema:
+### Target Table Context:
 %s
 
 ### Output Format (STRICT JSON ONLY, no markdown):
@@ -431,19 +433,7 @@ For each chart, you must provide the precise PostgreSQL query needed to fetch it
     "title": "Total Revenue",
     "type": "stat",
     "width": 3,
-    "query": "SELECT SUM(amount) AS value FROM sales"
-  },
-  {
-    "title": "Revenue by Region",
-    "type": "geo",
-    "width": 8,
-    "query": "SELECT region AS map_key, SUM(amount) AS value FROM sales GROUP BY region"
-  },
-  {
-    "title": "Regional Breakdown",
-    "type": "pivot",
-    "width": 12,
-    "query": "SELECT region, product_category, SUM(amount) AS value FROM sales GROUP BY region, product_category"
+    "query": "SELECT SUM(\"amount\") AS \"value\" FROM \"TABLE_NAME_HERE\""
   }
 ]
 `

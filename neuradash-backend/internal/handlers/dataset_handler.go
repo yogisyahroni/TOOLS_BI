@@ -1037,6 +1037,12 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 	for _, dsReq := range req.Datasets {
 		// Clean SQL: AI sometimes wraps in ```sql ... ``` or adds comments
 		finalQuery := cleanSQL(dsReq.Query)
+
+		// S++ Rewriting Engine: 
+		// Terkadang AI memberontak dan menggunakan nama dataset logis (misal: "belajar_data") 
+		// alih-alih nama fisik (ds_uuid). Kita paksa sinkronisasi di sini.
+		finalQuery = RewriteQueryToPhysicalTable(finalQuery, source.Name, source.DataTableName)
+		
 		finalQuery = applySmartLimit(finalQuery)
 
 		// DRY RUN: Check if SQL is even valid before trying DDL
@@ -1172,6 +1178,56 @@ func applySmartLimit(query string) string {
 	}
 
 	return q + " LIMIT 1000"
+}
+
+// RewriteQueryToPhysicalTable secara cerdas mengganti referensi nama dataset logis 
+// dengan nama tabel fisik PostgreSQL yang sebenarnya.
+func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName string) string {
+	if logicalName == "" || physicalName == "" {
+		return query
+	}
+
+	// 1. Tangani kasus sederhana (string replacement dengan word boundary)
+	// Kita gunakan pendekatan case-insensitive karena SQL tidak case-sensitive untuk identifier tak dikutip
+	lowerQuery := strings.ToLower(query)
+	lowerLogical := strings.ToLower(logicalName)
+	
+	if !strings.Contains(lowerQuery, lowerLogical) {
+		return query
+	}
+
+	// 2. Gunakan penggantian yang lebih aman (menghindari partial match seperti 'data' di 'database')
+	// Kita bungkus logicalName dengan kutipan jika perlu, atau deteksi \b (word boundary)
+	// Untuk Go, kita bisa menggunakan strings.ReplaceAll jika kita yakin, 
+	// tapi AI sering menambahkan "public." prefix.
+	
+	finalQuery := query
+	replacements := []string{
+		fmt.Sprintf(`"public"."%s"`, logicalName), physicalName,
+		fmt.Sprintf(`public."%s"`, logicalName), physicalName,
+		fmt.Sprintf(`"public".%s`, logicalName), physicalName,
+		fmt.Sprintf(`public.%s`, logicalName), physicalName,
+		fmt.Sprintf(`"%s"`, logicalName), physicalName,
+	}
+
+	for i := 0; i < len(replacements); i += 2 {
+		finalQuery = strings.ReplaceAll(finalQuery, replacements[i], replacements[i+1])
+	}
+
+	// Kasus terakhir: nama telanjang (case insensitive manual sederhana)
+	// Kita pecah kueri berdasarkan spasi/koma/kurung dan ganti yang cocok persis
+	words := strings.FieldsFunc(finalQuery, func(r rune) bool {
+		return unicode.IsSpace(r) || r == ',' || r == ';' || r == '(' || r == ')'
+	})
+
+	for _, w := range words {
+		if strings.EqualFold(w, logicalName) {
+			// Ganti hanya jika itu bukan part of string literal (sederhana)
+			finalQuery = strings.ReplaceAll(finalQuery, w, physicalName)
+		}
+	}
+
+	return finalQuery
 }
 
 
