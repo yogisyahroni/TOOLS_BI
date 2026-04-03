@@ -307,6 +307,14 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	var ds struct {
+		DataTableName string
+	}
+	if err := h.db.Table("datasets").Select("data_table_name").
+		Where("id = ? AND user_id = ?", req.DatasetID, userID).Scan(&ds).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
+	}
+
 	tableName, schemaStr, sampleData, columnValues, ok := h.extractDatasetContext(req.DatasetID)
 	if !ok {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
@@ -320,15 +328,11 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed: " + err.Error()})
 	}
 
-	sqlQuery = strings.TrimSpace(sqlQuery)
-	// Strip markdown fences if model added them despite instructions
-	sqlQuery = strings.TrimPrefix(sqlQuery, "```sql")
-	sqlQuery = strings.TrimPrefix(sqlQuery, "```postgresql")
-	sqlQuery = strings.TrimPrefix(sqlQuery, "```")
-	sqlQuery = strings.TrimSuffix(sqlQuery, "```")
-	sqlQuery = strings.TrimSpace(sqlQuery)
+	sqlQuery = cleanAISQL(sqlQuery)
+	// S++: Apply table rewriting BEFORE security check to ensure physical accuracy
+	sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, tableName, ds.DataTableName)
 
-	if !strings.HasPrefix(strings.ToUpper(sqlQuery), "SELECT") {
+	if !isSafeSelect(sqlQuery) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "AI generated a non-SELECT query. Rejected for safety."})
 	}
 
@@ -664,6 +668,15 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	var ds struct {
+		Name          string
+		DataTableName string
+	}
+	if err := h.db.Table("datasets").Select("name, data_table_name").
+		Where("id = ? AND user_id = ?", req.DatasetID, userID).Scan(&ds).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
+	}
+
 	tableName, schemaStr, sampleData, columnValues, ok := h.extractDatasetContext(req.DatasetID)
 	if !ok {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
@@ -699,19 +712,16 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 			return
 		}
 
-		sqlQuery := strings.TrimSpace(sqlBuf.String())
-		// Strip markdown fences if model added them despite instructions
-		sqlQuery = strings.TrimPrefix(sqlQuery, "```sql")
-		sqlQuery = strings.TrimPrefix(sqlQuery, "```postgresql")
-		sqlQuery = strings.TrimPrefix(sqlQuery, "```")
-		sqlQuery = strings.TrimSuffix(sqlQuery, "```")
-		sqlQuery = strings.TrimSpace(sqlQuery)
+		sqlQuery := cleanAISQL(sqlBuf.String())
+		
+		// S++: Resolve physical table name BEFORE validation
+		sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, ds.Name, ds.DataTableName)
 
 		sqlJSON, _ := json.Marshal(map[string]string{"sql": sqlQuery})
 		sendSSEEvent(w, "sql", string(sqlJSON))
 		w.Flush()
 
-		if !strings.HasPrefix(strings.ToUpper(sqlQuery), "SELECT") {
+		if !isSafeSelect(sqlQuery) {
 			sendSSEEvent(w, "error", jsonEscape("Non-SELECT query rejected for safety."))
 			sendSSEEvent(w, "done", "{}")
 			w.Flush()
@@ -1216,4 +1226,34 @@ func (h *AIHandler) DeleteAskDataHistory(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(204)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S++ SQL Security & Normalization Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// cleanAISQL extracts the raw SQL from markdown and trims noise.
+func cleanAISQL(raw string) string {
+	res := strings.TrimSpace(raw)
+	
+	// Regex: Match content between triple backticks (optional lang identifier)
+	// (?is) makes it case-insensitive and allows '.' to match newlines
+	re := regexp.MustCompile(`(?is)[\s\r\n]*` + "```" + `(?:sql|postgresql|)?\s*(.*?)\s*` + "```")
+	matches := re.FindStringSubmatch(res)
+	if len(matches) > 1 {
+		res = matches[1]
+	}
+	
+	// Final aggressive trim
+	return strings.TrimSpace(res)
+}
+
+// isSafeSelect validates that the query is a read-only SELECT or WITH statement.
+// It explicitly ignores SQL comments and leading whitespace.
+func isSafeSelect(query string) bool {
+	// Standardized check for SELECT or WITH (CTEs)
+	// (?is) case-insensitive, s-flag for dot-all
+	// ^\s*(?:--.*[\r\n]+\s*)* matches any number of leading comments and spaces
+	re := regexp.MustCompile(`(?is)^\s*(?:--.*[\r\n]+\s*)*(?:SELECT|WITH)\b`)
+	return re.MatchString(query)
 }
