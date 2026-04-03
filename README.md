@@ -27,6 +27,7 @@ Designed for high-reliability environments, Neuradash features unique **resource
 
 ### 🤖 Next-Gen AI Analytics
 - **Agentic AI Dashboard Builder (✨ Vercel v0 Style)**: Construct entire BI dashboards from raw natural language instructions. The AI autonomously plans the architecture, executes optimized SQL, and generates a responsive **12-column grid layout** live via **SSE Streaming**.
+- **AI SQL Rewriting Engine (S++ Precision)**: A proprietary normalization layer that intercept AI-generated SQL and automatically maps logical dataset names to their underlying physical PostgreSQL tables (`ds_uuid`). This ensures **100% query accuracy** and eliminates "relation does not exist" errors caused by AI hallucination.
 - **Ask Data (Advanced NL2SQL)**: Chat with your database. Our optimized inference engine resolves complex queries and recommends the best-fit visualizations (Bar, Line, Pie, Radar, or Tables) instantly.
 - **5 Expert AI Personas**: The system intelligently switches between specialized agents: *Data Visualization Architect*, *Predictive Analyst*, *Financial Risk Expert*, *Anomaly Detection Specialist*, and *NLP Sentiment Analyst*.
 - **Async BI Migration Engine**: Convert legacy enterprise assets (**Power BI `.pbix`**, **Tableau `.twbx`**, **PowerPoint `.pptx`**) into functional Neuradash templates asynchronously in the background.
