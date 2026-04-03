@@ -1263,11 +1263,23 @@ func cleanAISQL(raw string) string {
 }
 
 // isSafeSelect validates that the query is a read-only SELECT or WITH statement.
-// It explicitly ignores SQL comments and leading whitespace.
+// It strips all comments (inline and block) before validation for maximum reliability.
 func isSafeSelect(query string) bool {
-	// Standardized check for SELECT or WITH (CTEs)
-	// (?is) case-insensitive, s-flag for dot-all
-	// ^\s*(?:--.*[\r\n]+\s*)* matches any number of leading comments and spaces
-	re := regexp.MustCompile(`(?is)^\s*(?:--.*[\r\n]+\s*)*(?:SELECT|WITH)\b`)
-	return re.MatchString(query)
+	clean := query
+	
+	// 1. Strip Block Comments /* ... */
+	reBlock := regexp.MustCompile(`(?is)/\*.*?\*/`)
+	clean = reBlock.ReplaceAllString(clean, "")
+	
+	// 2. Strip Inline Comments -- ...
+	reInline := regexp.MustCompile(`(?m)--.*$`)
+	clean = reInline.ReplaceAllString(clean, "")
+	
+	// 3. Final Trim and Check
+	clean = strings.TrimSpace(clean)
+	
+	// We allow SELECT and WITH (for CTEs)
+	// We use case-insensitive check at the start of the "stripped" query
+	upperClean := strings.ToUpper(clean)
+	return strings.HasPrefix(upperClean, "SELECT") || strings.HasPrefix(upperClean, "WITH")
 }
