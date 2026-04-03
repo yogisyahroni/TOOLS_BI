@@ -218,7 +218,13 @@ function AIDashboardBuilder() {
   }, [prompt, selectedDatasetId, toast]);
 
   const cleanSQL = (q: string) => {
-    return q.replace(/```sql|```/gi, '').trim();
+    // 1. Remove markdown
+    let cleaned = q.replace(/```sql|```/gi, '').trim();
+    // 2. Remove SQL comments and join lines (Single line for safe DDL)
+    return cleaned.split('\n')
+      .map(line => line.split('--')[0].trim())
+      .filter(line => line.length > 0)
+      .join(' ');
   };
 
   const handleSaveToLibrary = async () => {
@@ -243,7 +249,7 @@ function AIDashboardBuilder() {
       const newDatasets = await datasetApi.aiGenerateBatch(batchReq);
       
       if (!newDatasets || newDatasets.length !== charts.length) {
-        throw new Error("Gagal mendaftarkan dataset hasil AI secara batch.");
+        throw new Error("Respons server tidak konsisten dengan jumlah widget.");
       }
 
       for (let i = 0; i < charts.length; i++) {

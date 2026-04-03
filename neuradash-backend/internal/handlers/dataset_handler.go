@@ -1035,9 +1035,18 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 
 	// Process sequentially to keep DB load stable
 	for _, dsReq := range req.Datasets {
-		// Clean SQL: AI sometimes wraps in ```sql ... ```
+		// Clean SQL: AI sometimes wraps in ```sql ... ``` or adds comments
 		finalQuery := cleanSQL(dsReq.Query)
 		finalQuery = applySmartLimit(finalQuery)
+
+		// DRY RUN: Check if SQL is even valid before trying DDL
+		explainSQL := "EXPLAIN " + finalQuery
+		if err := h.db.Exec(explainSQL).Error; err != nil {
+			log.Warn().Err(err).Str("chart", dsReq.Name).Str("query", finalQuery).Msg("SQL Validation (EXPLAIN) failed for AI chart")
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Kueri untuk '%s' tidak valid: %v", dsReq.Name, err),
+			})
+		}
 
 		newDatasetID := uuid.New().String()
 		viewName := sanitizeTableName(newDatasetID) + "_view"
@@ -1046,7 +1055,9 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 		createViewSQL := fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, finalQuery)
 		if err := h.db.Exec(createViewSQL).Error; err != nil {
 			log.Error().Err(err).Str("query", finalQuery).Msg("Failed to create Batch AI View")
-			continue
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": fmt.Sprintf("Gagal membuat view untuk '%s': %v", dsReq.Name, err),
+			})
 		}
 
 		// Calculate columns (extract schema)
@@ -1072,6 +1083,7 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 
 		colJSON, _ := encodeColumns(newCols)
 		var rowCount int64
+		// Don't scan entire table for AI batch if it's huge, but needed for dataset metadata
 		h.db.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", viewName)).Scan(&rowCount)
 
 		datasetRecord := models.Dataset{
@@ -1087,9 +1099,11 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 			UpdatedAt:     time.Now(),
 		}
 
-		if err := h.db.Create(&datasetRecord).Error; err == nil {
-			results = append(results, datasetRecord)
+		if err := h.db.Create(&datasetRecord).Error; err != nil {
+			log.Error().Err(err).Msg("Failed to save dataset record in AI batch")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to register AI dataset record"})
 		}
+		results = append(results, datasetRecord)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(results)
@@ -1097,8 +1111,9 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 
 func cleanSQL(q string) string {
 	q = strings.TrimSpace(q)
+	
+	// Remove markdown code blocks
 	if strings.Contains(q, "```") {
-		// Extract content between ``` and ```
 		lines := strings.Split(q, "\n")
 		var sqlLines []string
 		inBlock := false
@@ -1115,11 +1130,28 @@ func cleanSQL(q string) string {
 		if len(sqlLines) > 0 {
 			q = strings.Join(sqlLines, "\n")
 		} else {
-			// Fallback: If AI didn't use lines properly, try regex-like strip
 			q = strings.ReplaceAll(q, "```sql", "")
 			q = strings.ReplaceAll(q, "```", "")
 		}
 	}
+
+	// S++ SQL Comments Stripping: 
+	// AI often adds -- comments that break logic when concatenated 
+	lines := strings.Split(q, "\n")
+	var cleanedLines []string
+	for _, line := range lines {
+		// Remove row comments like -- or // (PostgreSQL support --)
+		if strings.Contains(line, "--") {
+			parts := strings.Split(line, "--")
+			line = parts[0]
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			cleanedLines = append(cleanedLines, line)
+		}
+	}
+	q = strings.Join(cleanedLines, " ")
+
 	return strings.TrimSpace(q)
 }
 
