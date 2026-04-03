@@ -25,7 +25,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { useDatasets } from '@/hooks/useApi';
-import { API_BASE, getAccessToken, dashboardApi, chartApi, datasetApi } from '@/lib/api';
+import { API_BASE, getAccessToken, dashboardApi, chartApi, datasetApi, authApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 
@@ -103,6 +103,18 @@ function AIDashboardBuilder() {
     abortRef.current = abort;
 
     try {
+      // PRO-FIX: Refresh token check before manual fetch.
+      // Axios interceptors in 'api.ts' handle silent refresh automatically on 401.
+      // Calling authApi.me() ensures getAccessToken() returns a VALID token for the stream.
+      try {
+        await authApi.me();
+      } catch (authErr: any) {
+        if (authErr.response?.status === 401 || authErr.response?.status === 403) {
+          throw new Error('Sesi Anda berakhir. Silakan login ulang.');
+        }
+        // Continue anyway if it's another error, native fetch will catch 401 if it fails.
+      }
+
       const response = await fetch(`${API_BASE}/ai-dashboard/stream`, {
         method: 'POST',
         headers: {
