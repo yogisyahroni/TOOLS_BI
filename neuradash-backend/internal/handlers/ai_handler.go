@@ -23,6 +23,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -323,12 +324,13 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 	// Use expert prompt: Data Engineer (schema fidelity) + Data Scientist (anti-hallucination)
 	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, columnValues, req.Question)
 
-	sqlQuery, err := h.callOpenAI(cfg, prompt)
+	sqlRaw, err := h.callOpenAI(cfg, prompt)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed: " + err.Error()})
 	}
 
-	sqlQuery = cleanAISQL(sqlQuery)
+	sqlQuery := cleanAISQL(sqlRaw)
+	log.Info().Str("dataset_id", req.DatasetID).Str("raw", sqlRaw).Str("cleaned", sqlQuery).Msg("AskData (Non-SSE) Debug")
 	// S++: Apply table rewriting BEFORE security check to ensure physical accuracy
 	sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, tableName, ds.DataTableName)
 
@@ -712,7 +714,9 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 			return
 		}
 
-		sqlQuery := cleanAISQL(sqlBuf.String())
+		sqlRaw := sqlBuf.String()
+		sqlQuery := cleanAISQL(sqlRaw)
+		log.Info().Str("dataset_id", req.DatasetID).Str("raw", sqlRaw).Str("cleaned", sqlQuery).Msg("AskData (SSE) Debug")
 		
 		// S++: Resolve physical table name BEFORE validation
 		sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, ds.Name, ds.DataTableName)
@@ -1236,16 +1240,26 @@ func (h *AIHandler) DeleteAskDataHistory(c *fiber.Ctx) error {
 func cleanAISQL(raw string) string {
 	res := strings.TrimSpace(raw)
 	
+	// 1. Try Markdown Extraction
 	// Regex: Match content between triple backticks (optional lang identifier)
 	// (?is) makes it case-insensitive and allows '.' to match newlines
-	re := regexp.MustCompile(`(?is)[\s\r\n]*` + "```" + `(?:sql|postgresql|)?\s*(.*?)\s*` + "```")
-	matches := re.FindStringSubmatch(res)
+	reMarkdown := regexp.MustCompile(`(?is)[\s\r\n]*` + "```" + `(?:sql|postgresql|)?\s*(.*?)\s*` + "```")
+	matches := reMarkdown.FindStringSubmatch(res)
 	if len(matches) > 1 {
-		res = matches[1]
+		return strings.TrimSpace(matches[1])
 	}
 	
-	// Final aggressive trim
-	return strings.TrimSpace(res)
+	// 2. Heuristic Extraction (Fallback)
+	// If no markdown, find the FIRST instance of SELECT or WITH and extract until the end.
+	// This helps if AI says "Sure, here is the query: SELECT * FROM ..."
+	// We look for SELECT and WITH as separate captures to be safe.
+	reHeuristic := regexp.MustCompile(`(?is)\b(SELECT|WITH)\b.*`)
+	heuristicMatch := reHeuristic.FindString(res)
+	if heuristicMatch != "" {
+		return strings.TrimSpace(heuristicMatch)
+	}
+
+	return res
 }
 
 // isSafeSelect validates that the query is a read-only SELECT or WITH statement.
