@@ -191,7 +191,6 @@ function AIDashboardBuilder() {
 
     try {
       // 1. Save each chart to the Chart Library (tabel charts) first
-      // This ensures they appear in the Sidebar > Charts Library
       const activeDataset = datasets.find(ds => ds.id === selectedDatasetId);
       const dbColumns = activeDataset?.columns || [];
 
@@ -200,7 +199,6 @@ function AIDashboardBuilder() {
         
         // Search in original database columns (case-insensitive)
         const match = dbColumns.find((col: any) => {
-          // In our types/data.ts, DataColumn has a 'name' property
           const colName = typeof col === 'string' ? col : (col.name || '');
           return String(colName).toLowerCase() === aiKey.toLowerCase();
         });
@@ -212,6 +210,7 @@ function AIDashboardBuilder() {
       };
 
       const savedChartIds: Record<number, string> = {};
+      const syncedAxes: Record<number, { xAxis: string; yAxis: string }> = {};
       
       for (let i = 0; i < charts.length; i++) {
         const c = charts[i];
@@ -220,12 +219,16 @@ function AIDashboardBuilder() {
         const firstRow = c.data[0] || {};
         const keys = Object.keys(firstRow).filter(k => k !== 'map_key');
         
-        const rawY = keys.find(k => typeof firstRow[k] === 'number') || '';
+        // Detect typical numeric and categorical candidates from AI response
+        const rawY = keys.find(k => typeof firstRow[k] === 'number') || (keys.length > 1 ? keys[1] : keys[0]);
         const rawX = keys.find(k => typeof firstRow[k] === 'string') || keys[0] || '';
 
-        // Sync with actual DB column names
+        // Sync with actual DB column names using the helper
         const yAxis = getMatchingFieldName(rawY);
         const xAxis = getMatchingFieldName(rawX);
+
+        // Store for widget mapping consistentcy
+        syncedAxes[i] = { xAxis, yAxis };
 
         const chartPayload = {
           title: `AI - ${c.title}`,
@@ -241,16 +244,7 @@ function AIDashboardBuilder() {
           }
         };
 
-        console.log(`[DEBUG] Attempting to save chart ${i+1}/${charts.length}:`, chartPayload);
-
-        if (!selectedDatasetId) {
-          throw new Error("Dataset ID is missing. Please select a dataset first.");
-        }
-
         const res = await chartApi.create(chartPayload);
-        console.log(`[DEBUG] Chart ${i+1} saved successfully:`, res.data);
-        
-        // AxiosResponse<SavedChart> -> res.data is the SavedChart object
         if (res.data && res.data.id) {
           savedChartIds[i] = res.data.id;
         } else {
@@ -259,7 +253,6 @@ function AIDashboardBuilder() {
       }
 
       // 2. Calculate Layout (x, y, w, h) for Grid Compatibility
-      // We want to match the visual order in AI Builder (usually stacked or side-by-side)
       let currentX = 0;
       let currentY = 0;
       const ROW_HEIGHT = 4;
@@ -267,12 +260,9 @@ function AIDashboardBuilder() {
       const widgets = charts.map((c, i) => {
         const w = Number(c.width) || 12;
         const h = c.type === 'stat' ? 2 : ROW_HEIGHT;
-
-        // Find numeric and categorical columns for the widget config (redundant but helpful)
-        const firstRow = c.data[0] || {};
-        const keys = Object.keys(firstRow);
-        const yAxis = keys.find(k => typeof firstRow[k] === 'number') || '';
-        const xAxis = keys.find(k => typeof firstRow[k] === 'string' && k !== 'map_key') || keys[0] || '';
+        
+        // Use the EXACT same axes that were normalized and saved for the chart
+        const { xAxis, yAxis } = syncedAxes[i];
 
         // If it doesn't fit in current row, move to next
         if (currentX + w > 12) {
