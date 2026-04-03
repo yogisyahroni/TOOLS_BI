@@ -1029,3 +1029,12 @@ export interface AIConfig {
     maxTokens: number;
     streamingEnabled: boolean;
 }
+
+export interface BatchAIGenerateRequest {
+    sourceDatasetId: string;
+    datasets: {
+        name: string;
+        description: string;
+        query: string;
+    }[];
+}
