@@ -1096,11 +1096,11 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 		datasetRecord := models.Dataset{
 			ID:            newDatasetID,
 			UserID:        userID,
-			Name:          dsReq.Name + " (AI)",
+			Name:          dsReq.Name, // S++ Align: Use pure chart name from AI as Dataset Name
 			FileName:      dsReq.Name,
 			Columns:       colJSON,
 			RowCount:      int(rowCount),
-			StorageKey:    "AI_BATCH_VIEW::" + dsReq.Description,
+			StorageKey:    source.StorageKey, // S++ Inherit: Ensure connection key is passed from source
 			DataTableName: viewName,
 			CreatedAt:     time.Now(),
 			UpdatedAt:     time.Now(),
