@@ -191,7 +191,7 @@ func Load() (*Config, error) {
 			APIKey:    v.GetString("AI_API_KEY"),
 			Model:     v.GetString("AI_MODEL"),
 			MaxTokens: v.GetInt("AI_MAX_TOKENS"),
-			BaseURL:   v.GetString("AI_BASE_URL"),
+			BaseURL:   strings.TrimSpace(v.GetString("AI_BASE_URL")),
 		},
 		Cron: CronConfig{
 			Enabled:  v.GetBool("CRON_ENABLED"),
