@@ -1044,10 +1044,11 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 		// Clean SQL: AI sometimes wraps in ```sql ... ``` or adds comments
 		finalQuery := cleanSQL(dsReq.Query)
 
-		// S++ Multi-Target Rewriting Engine: 
+		// S++ Multi-Identity Rewriting Engine: 
 		// Kita ganti SEMUA kemungkinan nama yang diketahui AI:
-		// 1. Nama Alias (belajar_data)
-		// 2. Nama Asli/Project (dataset_logistic / source.FileName)
+		// 1. Nama Alias di App (misal: "belajar_data")
+		// 2. Nama Asli Tabel/Project (misal: "dataset_logistic")
+		// Ini menjamin kueri tidak bocor meskipun AI bingung memakai nama yang mana.
 		finalQuery = RewriteQueryToPhysicalTable(finalQuery, source.Name, source.DataTableName)
 		finalQuery = RewriteQueryToPhysicalTable(finalQuery, source.FileName, source.DataTableName)
 		
