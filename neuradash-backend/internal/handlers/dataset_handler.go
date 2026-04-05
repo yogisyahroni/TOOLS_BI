@@ -1197,6 +1197,12 @@ func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName 
 	// AI sering memberontak dan menambahkan prefix "public." atau tanda kutip.
 	// Kita gunakan strategi "Clean-then-Map" yang dioptimasi (Pre-compiled).
 
+	// S++ Hardening: Bersihkan logicalName dari spasi luar atau karakter aneh yang mungkin datang dari UI.
+	logicalName = strings.TrimSpace(logicalName)
+	if logicalName == "" {
+		return query
+	}
+
 	finalQuery := query
 
 	// 1. TAHAP PEMBERSIHAN SKEMA (Brute Force Stripping)
