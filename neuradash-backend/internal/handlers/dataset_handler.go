@@ -1200,6 +1200,13 @@ func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName 
 		return query
 	}
 
+	// S++ High-Speed Short-Circuit: 
+	// Jika query bahkan tidak mengandung kata kunci dataset ini (case-insensitive), 
+	// langsung return agar tidak membebani Regex Engine yang berat.
+	if !strings.Contains(strings.ToLower(query), strings.ToLower(logicalName)) {
+		return query
+	}
+
 	finalQuery := query
 
 	// S++ "The Ultimate Black Hole" Rewriting Engine:
