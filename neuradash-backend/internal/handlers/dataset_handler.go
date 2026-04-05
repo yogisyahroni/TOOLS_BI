@@ -1190,48 +1190,43 @@ func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName 
 
 	// S++ SQL Rewriting Engine: 
 	// AI sering memberontak dan menambahkan prefix "public." atau tanda kutip.
-	// Kami menangani berbagai variasi penulisan oleh AI untuk memastikan validitas query.
+	// Kita gunakan strategi "Clean-then-Map" yang lebih brutal namun aman.
 
 	finalQuery := query
 
-	// 1. Tangani Quoted Identifier (e.g. "public"."belajar_data" atau "belajar_data")
-	// Kita buat pola regex yang fleksibel untuk menangkap kemungkinan kutipan dan skema
-	// Pattern: (?i)(?:(?:"?public"?|"?schema"?)\.)?"?LOGICAL_NAME"?
-	
-	escapedLogical := regexp.QuoteMeta(logicalName)
-	// Pola ini menangkap:
-	// - public.logicalName
-	// - "public".logicalName
-	// - "public"."logicalName"
-	// - "logicalName"
-	// - logicalName
-	pattern := fmt.Sprintf(`(?i)(?:"?[a-zA-Z0-9_]+"?\.)?"?%s"?`, escapedLogical)
-	re, err := regexp.Compile(pattern)
-	
-	if err == nil {
-		// Ganti semua kecocokan dengan physicalName (yang biasanya tidak butuh kutip karena internal)
-		finalQuery = re.ReplaceAllString(finalQuery, physicalName)
-	} else {
-		// Fallback ke string replacement manual jika regex gagal kompiliasi (unlikely)
-		replacements := []string{
-			fmt.Sprintf(`"public"."%s"`, logicalName), physicalName,
-			fmt.Sprintf(`public."%s"`, logicalName), physicalName,
-			fmt.Sprintf(`"public".%s`, logicalName), physicalName,
-			fmt.Sprintf(`public.%s`, logicalName), physicalName,
-			fmt.Sprintf(`"%s"`, logicalName), physicalName,
-		}
-		for i := 0; i < len(replacements); i += 2 {
-			finalQuery = strings.ReplaceAll(finalQuery, replacements[i], replacements[i+1])
+	// 1. TAHAP PEMBERSIHAN SKEMA (Brute Force Stripping)
+	// Kita hapus semua variasi "public." atau "schema." yang mungkin ada spasi di antaranya.
+	// Pola ini menangkap: public. , "public". , "public" . , dll (case-insensitive)
+	schemaPatterns := []string{
+		`(?i)"?public"?\s*\.\s*`,
+		`(?i)"?schema"?\s*\.\s*`,
+	}
+	for _, p := range schemaPatterns {
+		if re, err := regexp.Compile(p); err == nil {
+			finalQuery = re.ReplaceAllString(finalQuery, "")
 		}
 	}
 
-	// 2. Kasus Terakhir: Word Boundary Check (Case Insensitive)
-	// Memastikan kita tidak mengganti 'data' di dalam kata 'database'.
-	// Kita gunakan regex dengan boundary \b
+	// 2. TAHAP PEMETAAN (Precise Mapping)
+	// Sekarang query seharusnya bersih dari skema. Kita ganti "logicalName" atau logicalName.
+	escapedLogical := regexp.QuoteMeta(logicalName)
+	
+	// Ganti yang ber-tanda kutip: "belajar_data" -> physicalName
+	quotedPattern := fmt.Sprintf(`(?i)"%s"`, escapedLogical)
+	if re, err := regexp.Compile(quotedPattern); err == nil {
+		finalQuery = re.ReplaceAllString(finalQuery, physicalName)
+	}
+
+	// Ganti yang telanjang dengan word boundary: belajar_data -> physicalName
+	// Ini mencegah penggantian parsial (misal: 'data' di 'database')
 	boundaryPattern := fmt.Sprintf(`(?i)\b%s\b`, escapedLogical)
-	reBoundary, err := regexp.Compile(boundaryPattern)
-	if err == nil {
-		finalQuery = reBoundary.ReplaceAllString(finalQuery, physicalName)
+	if re, err := regexp.Compile(boundaryPattern); err == nil {
+		finalQuery = re.ReplaceAllString(finalQuery, physicalName)
+	}
+
+	// DEBUG LOG (Akan muncul di Render Logs)
+	if finalQuery != query {
+		log.Info().Str("original", query).Str("rewritten", finalQuery).Msg("SQL Rewrite Successful")
 	}
 
 	return finalQuery
