@@ -1044,10 +1044,15 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 		// Clean SQL: AI sometimes wraps in ```sql ... ``` or adds comments
 		finalQuery := cleanSQL(dsReq.Query)
 
-		// S++ Rewriting Engine: 
-		// Terkadang AI memberontak dan menggunakan nama dataset logis (misal: "belajar_data") 
-		// alih-alih nama fisik (ds_uuid). Kita paksa sinkronisasi di sini.
+		// S++ Multi-Target Rewriting Engine: 
+		// Kita ganti SEMUA kemungkinan nama yang diketahui AI:
+		// 1. Nama Alias (belajar_data)
+		// 2. Nama Asli/Project (dataset_logistic / source.FileName)
 		finalQuery = RewriteQueryToPhysicalTable(finalQuery, source.Name, source.DataTableName)
+		finalQuery = RewriteQueryToPhysicalTable(finalQuery, source.FileName, source.DataTableName)
+		
+		// S++ Bonus: Jika AI menggunakan "public.dataset_logistic", "public." akan di-strip dulu
+		// baru kemudian "dataset_logistic" diganti.
 		
 		finalQuery = applySmartLimit(finalQuery)
 
