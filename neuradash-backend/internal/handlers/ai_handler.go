@@ -744,7 +744,19 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 			return
 		}
 
-		// 2026: Generate Business Interpretation
+		// S++ IMMEDIATE DATA DELIVERY: 
+		// Send raw results BEFORE starting the (potentially slow) AI interpretation phase.
+		// This prevents the 90% hang because the UI gets the data and can render it immediately.
+		initialResultJSON, _ := json.Marshal(map[string]interface{}{
+			"question": req.Question,
+			"sql":      sqlQuery,
+			"data":     results,
+			"rowCount": len(results),
+		})
+		sendSSEEvent(w, "result", string(initialResultJSON))
+		w.Flush()
+
+		// 2026: Generate Business Interpretation (Optional/Bonus)
 		interpretation := ""
 		if len(results) > 0 {
 			sendSSEEvent(w, "progress", `{"stage":"interpreting","message":"AI is interpreting the data insights..."}`)
@@ -759,20 +771,22 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 			interpPrompt := BuildAskDataInterpretationPrompt(req.Question, sqlQuery, string(subsetJSON), len(results))
 
 			// We use callOpenAI (non-streaming) for interpretation to get it as a single block
+			// S++: Wrapped in a recover/timeout-safe check implicitly via callOpenAI
 			interpResult, err := h.callOpenAI(cfg, interpPrompt)
 			if err == nil {
 				interpretation = interpResult
+				// Send updated result with interpretation
+				finalResultJSON, _ := json.Marshal(map[string]interface{}{
+					"question":       req.Question,
+					"sql":            sqlQuery,
+					"data":           results,
+					"rowCount":       len(results),
+					"interpretation": interpretation,
+				})
+				sendSSEEvent(w, "result", string(finalResultJSON))
 			}
 		}
 
-		resultJSON, _ := json.Marshal(map[string]interface{}{
-			"question":       req.Question,
-			"sql":            sqlQuery,
-			"data":           results,
-			"rowCount":       len(results),
-			"interpretation": interpretation, // New field for 2026
-		})
-		sendSSEEvent(w, "result", string(resultJSON))
 		sendSSEEvent(w, "done", "{}")
 		w.Flush()
 	})
