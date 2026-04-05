@@ -1195,46 +1195,42 @@ func applySmartLimit(query string) string {
 // RewriteQueryToPhysicalTable secara cerdas mengganti referensi nama dataset logis 
 // dengan nama tabel fisik PostgreSQL yang sebenarnya.
 func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName string) string {
-	if logicalName == "" || physicalName == "" {
-		return query
-	}
-
-	// S++ SQL Rewriting Engine: 
-	// AI sering memberontak dan menambahkan prefix "public." atau tanda kutip.
-	// Kita gunakan strategi "Clean-then-Map" yang dioptimasi (Pre-compiled).
-
-	// S++ Hardening: Bersihkan logicalName dari spasi luar atau karakter aneh yang mungkin datang dari UI.
 	logicalName = strings.TrimSpace(logicalName)
-	if logicalName == "" {
+	if logicalName == "" || physicalName == "" {
 		return query
 	}
 
 	finalQuery := query
 
-	// 1. TAHAP PEMBERSIHAN SKEMA (Brute Force Stripping)
-	// Kita hapus semua variasi "public." atau "schema." yang mungkin ada spasi di antaranya.
-	// Menggunakan reSchemaPrefix yang sudah di-MustCompile di level global agar kencang.
-	finalQuery = reSchemaPrefix.ReplaceAllString(finalQuery, "")
+	// S++ "The Ultimate Black Hole" Rewriting Engine:
+	// AI seringkali sangat kreatif dalam menulis SQL:
+	// - "public"."belajar_data"
+	// - public.belajar_data
+	// - "belajar_data"
+	// - BELAJAR_DATA
+	// - dataset_logistic (nama asli)
+	
+	// Kita gunakan strategi "Keyword-Based Forced Mapping":
+	// Cari pola: [Optional Schema + Dot] + [Optional Quotes] + [LogicalName] + [Optional Quotes]
+	// Dan ganti semuanya menjadi physicalName.
 
-	// 2. TAHAP PEMETAAN (Precise Mapping)
-	// Sekarang query seharusnya bersih dari skema. Kita ganti "logicalName" atau logicalName.
 	escapedLogical := regexp.QuoteMeta(logicalName)
 	
-	// Ganti yang ber-tanda kutip: "belajar_data" -> physicalName
-	quotedPattern := fmt.Sprintf(`(?i)"%s"`, escapedLogical)
-	if reQuoted, err := regexp.Compile(quotedPattern); err == nil {
-		finalQuery = reQuoted.ReplaceAllString(finalQuery, physicalName)
-	}
-
-	// Ganti yang telanjang dengan word boundary: belajar_data -> physicalName
-	boundaryPattern := fmt.Sprintf(`(?i)\b%s\b`, escapedLogical)
-	if reBoundary, err := regexp.Compile(boundaryPattern); err == nil {
-		finalQuery = reBoundary.ReplaceAllString(finalQuery, physicalName)
+	// Pola Agresif: Menangkap (apapun_skema.)?"?logicalName"?(word_boundary)
+	// (?i) = case-insensitive
+	// ([a-zA-Z0-9_"]+\s*\.\s*)? = Opsional skema dengan titik (misal: "public" .)
+	// "? = Opsional tanda kutip pembuka
+	// %s = Nama logical kita
+	// "? = Opsional tanda kutip penutup
+	aggressivePattern := fmt.Sprintf(`(?i)([a-zA-Z0-9_"]+\s*\.\s*)?"?%s"?`, escapedLogical)
+	
+	if re, err := regexp.Compile(aggressivePattern); err == nil {
+		finalQuery = re.ReplaceAllString(finalQuery, physicalName)
 	}
 
 	// DEBUG LOG (Hanya muncul jika ada perubahan)
 	if finalQuery != query {
-		log.Trace().Str("original", query).Str("rewritten", finalQuery).Msg("SQL Rewrite Executed")
+		log.Info().Str("original", query).Str("rewritten", finalQuery).Msg("SQL Aggressive Rewrite Executed")
 	}
 
 	return finalQuery
