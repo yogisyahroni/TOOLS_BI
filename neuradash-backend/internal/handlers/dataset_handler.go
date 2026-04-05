@@ -31,6 +31,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// S++ SQL Optimizers: Pre-compiled RegEx for lightning speed
+var (
+	reSchemaPrefix = regexp.MustCompile(`(?i)"?(public|schema)"?\s*\.\s*`)
+)
+
 // DatasetHandler handles dataset upload, query, and management.
 type DatasetHandler struct {
 	db      *gorm.DB
@@ -1190,22 +1195,14 @@ func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName 
 
 	// S++ SQL Rewriting Engine: 
 	// AI sering memberontak dan menambahkan prefix "public." atau tanda kutip.
-	// Kita gunakan strategi "Clean-then-Map" yang lebih brutal namun aman.
+	// Kita gunakan strategi "Clean-then-Map" yang dioptimasi (Pre-compiled).
 
 	finalQuery := query
 
 	// 1. TAHAP PEMBERSIHAN SKEMA (Brute Force Stripping)
 	// Kita hapus semua variasi "public." atau "schema." yang mungkin ada spasi di antaranya.
-	// Pola ini menangkap: public. , "public". , "public" . , dll (case-insensitive)
-	schemaPatterns := []string{
-		`(?i)"?public"?\s*\.\s*`,
-		`(?i)"?schema"?\s*\.\s*`,
-	}
-	for _, p := range schemaPatterns {
-		if re, err := regexp.Compile(p); err == nil {
-			finalQuery = re.ReplaceAllString(finalQuery, "")
-		}
-	}
+	// Menggunakan reSchemaPrefix yang sudah di-MustCompile di level global agar kencang.
+	finalQuery = reSchemaPrefix.ReplaceAllString(finalQuery, "")
 
 	// 2. TAHAP PEMETAAN (Precise Mapping)
 	// Sekarang query seharusnya bersih dari skema. Kita ganti "logicalName" atau logicalName.
@@ -1213,20 +1210,19 @@ func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName 
 	
 	// Ganti yang ber-tanda kutip: "belajar_data" -> physicalName
 	quotedPattern := fmt.Sprintf(`(?i)"%s"`, escapedLogical)
-	if re, err := regexp.Compile(quotedPattern); err == nil {
-		finalQuery = re.ReplaceAllString(finalQuery, physicalName)
+	if reQuoted, err := regexp.Compile(quotedPattern); err == nil {
+		finalQuery = reQuoted.ReplaceAllString(finalQuery, physicalName)
 	}
 
 	// Ganti yang telanjang dengan word boundary: belajar_data -> physicalName
-	// Ini mencegah penggantian parsial (misal: 'data' di 'database')
 	boundaryPattern := fmt.Sprintf(`(?i)\b%s\b`, escapedLogical)
-	if re, err := regexp.Compile(boundaryPattern); err == nil {
-		finalQuery = re.ReplaceAllString(finalQuery, physicalName)
+	if reBoundary, err := regexp.Compile(boundaryPattern); err == nil {
+		finalQuery = reBoundary.ReplaceAllString(finalQuery, physicalName)
 	}
 
-	// DEBUG LOG (Akan muncul di Render Logs)
+	// DEBUG LOG (Hanya muncul jika ada perubahan)
 	if finalQuery != query {
-		log.Info().Str("original", query).Str("rewritten", finalQuery).Msg("SQL Rewrite Successful")
+		log.Trace().Str("original", query).Str("rewritten", finalQuery).Msg("SQL Rewrite Executed")
 	}
 
 	return finalQuery
