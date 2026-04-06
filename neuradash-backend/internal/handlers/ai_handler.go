@@ -565,7 +565,7 @@ func (h *AIHandler) executeSQL(ctx context.Context, datasetID, sqlQuery string) 
 		}
 		
 		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		dbConn, err := connectors.Open(opts)

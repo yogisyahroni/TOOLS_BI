@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"neuradash/internal/middleware"
@@ -100,33 +99,59 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 		sendSSEEvent(w, "progress", `{"stage":"executing","message":"⚡ Mengeksekusi SQL untuk setiap grafik secara paralel..."}`)
 		w.Flush()
 
-		// Execute SQL in parallel with STRICT Timeout (preventing 40% hang)
-		var wg sync.WaitGroup
+		// S++ Streaming & Pulse Engine:
+		// 1. Result Channel to avoid blocking
+		// 2. Pulse generator to avoid proxy timeouts
+		type result struct {
+			idx  int
+			data []map[string]interface{}
+			err  error
+		}
+		resChan := make(chan result, len(charts))
+		
+		// Heartbeat: Send pulse every 5 seconds while executing
+		stopPulse := make(chan bool)
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					sendSSEEvent(w, "pulse", `{"message":"executing..."}`)
+					w.Flush()
+				case <-stopPulse:
+					return
+				}
+			}
+		}()
+
+		// Execute SQL in parallel
 		for i := range charts {
-			wg.Add(1)
 			go func(idx int) {
-				defer wg.Done()
-				
-				// S++ Watchdog: Each chart execution must finish within 15 seconds.
-				// This ensures the dashboard renders even if one SQL is extremely slow/broken.
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
 
-				// We use a channel or just rely on executeSQL being context-aware (if it is)
-				// or simply letting it run while we proceed after timeout.
 				results, dbErr := h.executeSQL(ctx, req.DatasetID, charts[idx].Query)
-				if dbErr == nil {
-					charts[idx].Data = results
-				} else {
-					log.Error().Err(dbErr).Str("query", charts[idx].Query).Msg("Chart SQL Execution Failed or Timed Out")
-					charts[idx].Data = make([]map[string]interface{}, 0)
-				}
-				
-				// Dummy use of ctx to avoid unused variable if executeSQL doesn't take context yet
-				_ = ctx
+				resChan <- result{idx: idx, data: results, err: dbErr}
 			}(i)
 		}
-		wg.Wait()
+
+		// Collect results and update UI in real-time
+		for i := 0; i < len(charts); i++ {
+			res := <-resChan
+			if res.err == nil {
+				charts[res.idx].Data = res.data
+			} else {
+				log.Error().Err(res.err).Str("query", charts[res.idx].Query).Msg("Chart SQL Execution Failed or Timed Out")
+				charts[res.idx].Data = make([]map[string]interface{}, 0)
+			}
+			
+			// Optional: Send incremental progress
+			progressMsg := fmt.Sprintf(`{"stage":"executing","message":"⚡ Berhasil memproses %d dari %d grafik..."}`, i+1, len(charts))
+			sendSSEEvent(w, "progress", progressMsg)
+			w.Flush()
+		}
+		close(stopPulse) // Stop heartbeats
 
 
 		sendSSEEvent(w, "progress", `{"stage":"layouting","message":"🎨 Menata grid visual..."}`)
