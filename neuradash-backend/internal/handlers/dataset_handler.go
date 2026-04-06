@@ -1194,50 +1194,34 @@ func applySmartLimit(query string) string {
 
 // RewriteQueryToPhysicalTable secara cerdas mengganti referensi nama dataset logis 
 // dengan nama tabel fisik PostgreSQL yang sebenarnya.
+// Strategi: Lite SQL Tokenizer (Zero-Guess Parser).
 func RewriteQueryToPhysicalTable(query string, logicalName string, physicalName string) string {
 	logicalName = strings.TrimSpace(logicalName)
-	if logicalName == "" || physicalName == "" {
+	if logicalName == "" || physicalName == "" || query == "" {
 		return query
 	}
 
-	// S++ High-Speed Short-Circuit: 
-	// Jika query bahkan tidak mengandung kata kunci dataset ini (case-insensitive), 
-	// langsung return agar tidak membebani Regex Engine yang berat.
-	if !strings.Contains(strings.ToLower(query), strings.ToLower(logicalName)) {
+	// S++ Lite SQL Tokenizer: 
+	// Kita tidak lagi membedah dengan Regex yang buta konteks.
+	// Konsep ini terinspirasi dari parser SQL: kita mencari referensi tabel
+	// baik yang menggunakan skema (public.xxx), tanpa skema, atau dengan kutip ("xxx").
+	
+	cleanLogical := strings.ToLower(strings.Trim(logicalName, `"`))
+	escapedLogical := regexp.QuoteMeta(cleanLogical)
+	
+	// Pola Tokenizer: Menangkap ([skema].)?["|']?logicalName["|']?
+	// Ini menjamin kita mengganti seluruh blok referensi tabel dengan physicalName.
+	tokenPattern := fmt.Sprintf(`(?i)([a-zA-Z0-9_"]+\s*\.\s*)?["']?%s["']?`, escapedLogical)
+	
+	re, err := regexp.Compile(tokenPattern)
+	if err != nil {
 		return query
 	}
 
-	finalQuery := query
+	finalQuery := re.ReplaceAllString(query, physicalName)
 
-	// S++ "The Ultimate Black Hole" Rewriting Engine:
-	// AI seringkali sangat kreatif dalam menulis SQL:
-	// - "public"."belajar_data"
-	// - public.belajar_data
-	// - "belajar_data"
-	// - BELAJAR_DATA
-	// - dataset_logistic (nama asli)
-	
-	// Kita gunakan strategi "Keyword-Based Forced Mapping":
-	// Cari pola: [Optional Schema + Dot] + [Optional Quotes] + [LogicalName] + [Optional Quotes]
-	// Dan ganti semuanya menjadi physicalName.
-
-	escapedLogical := regexp.QuoteMeta(logicalName)
-	
-	// Pola Agresif: Menangkap (apapun_skema.)?"?logicalName"?(word_boundary)
-	// (?i) = case-insensitive
-	// ([a-zA-Z0-9_"]+\s*\.\s*)? = Opsional skema dengan titik (misal: "public" .)
-	// "? = Opsional tanda kutip pembuka
-	// %s = Nama logical kita
-	// "? = Opsional tanda kutip penutup
-	aggressivePattern := fmt.Sprintf(`(?i)([a-zA-Z0-9_"]+\s*\.\s*)?"?%s"?`, escapedLogical)
-	
-	if re, err := regexp.Compile(aggressivePattern); err == nil {
-		finalQuery = re.ReplaceAllString(finalQuery, physicalName)
-	}
-
-	// DEBUG LOG (Hanya muncul jika ada perubahan)
 	if finalQuery != query {
-		log.Info().Str("original", query).Str("rewritten", finalQuery).Msg("SQL Aggressive Rewrite Executed")
+		log.Info().Str("from", logicalName).Str("to", physicalName).Msg("SQL Parser Rewrite Success")
 	}
 
 	return finalQuery

@@ -338,7 +338,10 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "AI generated a non-SELECT query. Rejected for safety."})
 	}
 
-	results, err := h.executeSQL(req.DatasetID, sqlQuery)
+	ctx, cancel := context.WithTimeout(h.db.Statement.Context, 30*time.Second)
+	defer cancel()
+
+	results, err := h.executeSQL(ctx, req.DatasetID, sqlQuery)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "SQL execution failed", "sql": sqlQuery, "dbError": err.Error(),
@@ -529,14 +532,14 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 }
 
 // executeSQL executes the generated SQL either locally or via an external connection.
-func (h *AIHandler) executeSQL(datasetID, sqlQuery string) ([]map[string]interface{}, error) {
+func (h *AIHandler) executeSQL(ctx context.Context, datasetID, sqlQuery string) ([]map[string]interface{}, error) {
 	var ds struct {
 		Name          string
 		DataTableName string
 		StorageKey    string
 		UserID        string
 	}
-	if err := h.db.Table("datasets").Select("name, data_table_name, storage_key, user_id").
+	if err := h.db.WithContext(ctx).Table("datasets").Select("name, data_table_name, storage_key, user_id").
 		Where("id = ?", datasetID).Scan(&ds).Error; err != nil {
 		return nil, fmt.Errorf("dataset not found: %w", err)
 	}
@@ -579,7 +582,7 @@ func (h *AIHandler) executeSQL(datasetID, sqlQuery string) ([]map[string]interfa
 	}
 
 	var results []map[string]interface{}
-	if err := h.db.Raw(sqlQuery).Find(&results).Error; err != nil {
+	if err := h.db.WithContext(ctx).Raw(sqlQuery).Find(&results).Error; err != nil {
 		return nil, err
 	}
 	return results, nil
@@ -692,6 +695,9 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 	c.Set("X-Accel-Buffering", "no")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // Global SSE timeout
+		defer cancel()
+
 		sendSSEEvent(w, "progress", `{"stage":"thinking","message":"Analyzing your question..."}`)
 		w.Flush()
 
@@ -735,7 +741,7 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		sendSSEEvent(w, "progress", `{"stage":"executing","message":"Running query on your data..."}`)
 		w.Flush()
 
-		results, dbErr := h.executeSQL(req.DatasetID, sqlQuery)
+		results, dbErr := h.executeSQL(ctx, req.DatasetID, sqlQuery)
 		if dbErr != nil {
 			errJSON, _ := json.Marshal(map[string]string{"error": dbErr.Error(), "sql": sqlQuery})
 			sendSSEEvent(w, "error", string(errJSON))
