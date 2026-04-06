@@ -1037,6 +1037,27 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Source dataset not found"})
 	}
 
+	// BUGFIX: Detect external connections. If source is from an external DB (Supabase, MySQL, etc.),
+	// we cannot EXPLAIN or CREATE VIEW in local DB. We must route to the external connector.
+	isExternal := strings.HasPrefix(source.StorageKey, "EXTERNAL_CONN::")
+	var extConnector connectors.DBConnector
+	if isExternal {
+		connID := strings.TrimPrefix(source.StorageKey, "EXTERNAL_CONN::")
+		var dbConnRecord models.DBConnection
+		if err := h.db.Where("id = ? AND user_id = ?", connID, userID).First(&dbConnRecord).Error; err != nil {
+			log.Error().Err(err).Str("connID", connID).Msg("External DB connection record not found for batch save")
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "External database connection not found"})
+		}
+		opts := connectors.FromDBConnection(&dbConnRecord, dbConnRecord.PasswordEncrypted)
+		rawConn, err := connectors.Open(opts)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to open external connection for batch save validation")
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Gagal membuka koneksi database eksternal: " + err.Error()})
+		}
+		defer rawConn.Close()
+		extConnector = rawConn
+	}
+
 	results := make([]models.Dataset, 0, len(req.Datasets))
 
 	// Process sequentially to keep DB load stable
@@ -1044,20 +1065,54 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 		// Clean SQL: AI sometimes wraps in ```sql ... ``` or adds comments
 		finalQuery := cleanSQL(dsReq.Query)
 
-		// S++ Multi-Identity Rewriting Engine: 
-		// Kita ganti SEMUA kemungkinan nama yang diketahui AI:
-		// 1. Nama Alias di App (misal: "belajar_data")
-		// 2. Nama Asli Tabel/Project (misal: "dataset_logistic")
-		// Ini menjamin kueri tidak bocor meskipun AI bingung memakai nama yang mana.
+		// S++ Multi-Identity Rewriting Engine:
+		// Replace all known logical names the AI may have used.
 		finalQuery = RewriteQueryToPhysicalTable(finalQuery, source.Name, source.DataTableName)
 		finalQuery = RewriteQueryToPhysicalTable(finalQuery, source.FileName, source.DataTableName)
-		
-		// S++ Bonus: Jika AI menggunakan "public.dataset_logistic", "public." akan di-strip dulu
-		// baru kemudian "dataset_logistic" diganti.
-		
+
 		finalQuery = applySmartLimit(finalQuery)
 
-		// DRY RUN: Check if SQL is even valid before trying DDL
+		if isExternal {
+			// ── EXTERNAL CONNECTION PATH ──────────────────────────────────────────────
+			// Cannot use local DB for EXPLAIN or CREATE VIEW. Validate via external connector.
+			// Use Query with EXPLAIN — same pattern as executeSQL in ai_handler.go.
+			explainCtx, explainCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			_, explainErr := extConnector.Query(explainCtx, "EXPLAIN "+finalQuery, 1)
+			explainCancel()
+			if explainErr != nil {
+				log.Warn().Err(explainErr).Str("chart", dsReq.Name).Str("query", finalQuery).Msg("External SQL Validation (EXPLAIN) failed")
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": fmt.Sprintf("Kueri untuk '%s' tidak valid: %v", dsReq.Name, explainErr),
+				})
+			}
+
+			newDatasetID := uuid.New().String()
+			// Store finalQuery as a virtual table expression. The reader (executeSQL + chart renderer)
+			// already knows how to handle DataTableName that starts with "(SELECT ...) AS alias".
+			virtualAlias := "t_" + strings.ReplaceAll(newDatasetID[:8], "-", "_")
+			virtualTableExpr := fmt.Sprintf("(%s) AS %s", finalQuery, virtualAlias)
+
+			datasetRecord := models.Dataset{
+				ID:            newDatasetID,
+				UserID:        userID,
+				Name:          dsReq.Name,
+				FileName:      dsReq.Name,
+				Columns:       source.Columns, // inherit schema from parent
+				RowCount:      0,              // skip expensive COUNT on external DB
+				StorageKey:    source.StorageKey, // inherit external connection key
+				DataTableName: virtualTableExpr,
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
+			}
+			if err := h.db.Create(&datasetRecord).Error; err != nil {
+				log.Error().Err(err).Msg("Failed to save external AI dataset record")
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to register AI dataset record"})
+			}
+			results = append(results, datasetRecord)
+			continue // skip local VIEW creation
+		}
+
+		// ── LOCAL DB PATH ─────────────────────────────────────────────────────────
 		explainSQL := "EXPLAIN " + finalQuery
 		if err := h.db.Exec(explainSQL).Error; err != nil {
 			log.Warn().Err(err).Str("chart", dsReq.Name).Str("query", finalQuery).Msg("SQL Validation (EXPLAIN) failed for AI chart")
