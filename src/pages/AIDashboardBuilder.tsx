@@ -473,6 +473,120 @@ function AIDashboardBuilder() {
     }
 
     if (chart.type === 'geo' || chart.type === 'map') {
+      // ── Tier 1: Real coordinate columns → Scatter dot map ─────────────────
+      const latKey = keys.find(k => /^(lat|latitude|geolat|coord_lat)$/i.test(k));
+      const lngKey = keys.find(k => /^(lng|lon|longitude|geolng|coord_lng|coord_lon)$/i.test(k));
+      const nameKey = keys.find(k => typeof firstRow[k] === 'string');
+      const valKey  = keys.find(k => typeof firstRow[k] === 'number' && k !== latKey && k !== lngKey);
+
+      if (latKey && lngKey) {
+        // Bounding box
+        const lats = chart.data.map(r => Number(r[latKey])).filter(v => !isNaN(v));
+        const lngs = chart.data.map(r => Number(r[lngKey])).filter(v => !isNaN(v));
+        const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+        const padLat = (maxLat - minLat) * 0.15 || 1;
+        const padLng = (maxLng - minLng) * 0.15 || 1;
+        const W = 100, H = 60; // viewBox units
+
+        const toX = (lng: number) => ((lng - (minLng - padLng)) / ((maxLng + padLng) - (minLng - padLng))) * W;
+        const toY = (lat: number) => H - ((lat - (minLat - padLat)) / ((maxLat + padLat) - (minLat - padLat))) * H;
+
+        const maxVal = valKey ? Math.max(...chart.data.map(r => Number(r[valKey]) || 0)) : 1;
+
+        return (
+          <div className="w-full h-64 border border-border/20 rounded-xl bg-muted/5 overflow-hidden relative">
+            <div className="absolute top-2 left-2 text-xs font-semibold text-muted-foreground opacity-60 uppercase tracking-widest">
+              Geo Map · {chart.data.length} points
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full">
+              {/* Grid lines */}
+              {[0.25, 0.5, 0.75].map(f => (
+                <line key={f} x1={W * f} y1={0} x2={W * f} y2={H}
+                  stroke="hsl(var(--border))" strokeWidth={0.3} strokeDasharray="1 1" opacity={0.4} />
+              ))}
+              {[0.25, 0.5, 0.75].map(f => (
+                <line key={f + 'h'} x1={0} y1={H * f} x2={W} y2={H * f}
+                  stroke="hsl(var(--border))" strokeWidth={0.3} strokeDasharray="1 1" opacity={0.4} />
+              ))}
+              {/* Data points */}
+              {chart.data.map((row, i) => {
+                const x = toX(Number(row[lngKey]));
+                const y = toY(Number(row[latKey]));
+                const r = valKey ? 0.8 + (Number(row[valKey]) / maxVal) * 2.2 : 1.2;
+                const color = COLORS[i % COLORS.length];
+                return (
+                  <g key={i}>
+                    <circle cx={x} cy={y} r={r * 1.8} fill={color} opacity={0.15} />
+                    <circle cx={x} cy={y} r={r} fill={color} opacity={0.9} />
+                    {nameKey && (
+                      <text x={x} y={y - r - 0.5} textAnchor="middle"
+                        fontSize={1.8} fill="hsl(var(--foreground))" opacity={0.7}>
+                        {String(row[nameKey]).slice(0, 12)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        );
+      }
+
+      // ── Tier 2: Location name column exists but NO coordinates ─────────────
+      // Render as horizontal bar chart (geographic ranking) — far more useful than a blank map
+      if (nameKey && numKey) {
+        const sorted = [...chart.data]
+          .sort((a, b) => Number(b[numKey]) - Number(a[numKey]))
+          .slice(0, 10);
+
+        return (
+          <div className="w-full" style={{ height: Math.min(300, 40 + sorted.length * 36) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={sorted}
+                layout="vertical"
+                margin={{ top: 4, right: 60, left: 8, bottom: 4 }}
+              >
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
+                <XAxis
+                  type="number"
+                  dataKey={numKey}
+                  fontSize={11}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => typeof v === 'number' && v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                />
+                <YAxis
+                  type="category"
+                  dataKey={nameKey}
+                  width={90}
+                  fontSize={11}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={(v: string) => v.length > 12 ? v.slice(0, 12) + '…' : v}
+                />
+                <Tooltip
+                  cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                  formatter={(val: any) =>
+                    typeof val === 'number'
+                      ? new Intl.NumberFormat('id-ID').format(val)
+                      : String(val)
+                  }
+                />
+                <Bar dataKey={numKey} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  {sorted.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      }
+
+      // ── Tier 3: Fallback — original list view ─────────────────────────────
       return (
         <div className="flex flex-col gap-4 h-64 overflow-hidden border border-border/20 rounded-xl bg-muted/5 p-4">
           <div className="flex items-center justify-between text-xs font-bold text-muted-foreground border-b border-border/20 pb-2 uppercase tracking-widest opacity-60">
@@ -487,9 +601,9 @@ function AIDashboardBuilder() {
                   <span className="text-sm font-medium">{String(item[strKey || keys[0]])}</span>
                 </div>
                 <span className="text-sm font-mono font-bold text-primary">
-                   {typeof (item as any)[numKey || keys[1]] === 'number' 
-                     ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item as any)[numKey || keys[1]])
-                     : String((item as any)[numKey || keys[1]])}
+                  {typeof (item as any)[numKey || keys[1]] === 'number'
+                    ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format((item as any)[numKey || keys[1]])
+                    : String((item as any)[numKey || keys[1]])}
                 </span>
               </div>
             ))}
@@ -497,6 +611,7 @@ function AIDashboardBuilder() {
         </div>
       );
     }
+
 
     const xKeyUsed = strKey || keys[0];
     const yKeyUsed = numKey || keys[1] || keys[0];

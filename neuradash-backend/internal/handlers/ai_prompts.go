@@ -417,7 +417,11 @@ Your task is to respond with a JSON array of chart configurations that build a h
 You must follow these strict rules to ensure a premium UI/UX (12-column grid system):
 1. **Top Level KPIs (width: 3 or 4)**: The first 3 or 4 objects in your JSON array MUST be "stat" charts (KPI Cards) summarizing key numbers.
 2. **Main Trends**: Use "line", "bar", or "area" charts (width: 8) coupled with "pie", "donut", or "radar" charts (width: 4) to maintain layout harmony.
-3. **Geo-Spatial Data**: If you detect geo-spatial columns (Country, City, Lat, Lng), you MUST include a "geo" map chart (width: 6 or 8).
+3. **Geo-Spatial Data (STRICT RULES)**:
+   - Use chart type "geo" ONLY IF the schema contains ACTUAL latitude AND longitude coordinate columns (e.g. columns named: lat, lng, latitude, longitude, geolat, geolng, coord_lat, coord_lng, or similar).
+   - The "geo" query MUST select both the coordinate columns (aliased as "lat" and "lng") AND the location name AND the numeric value. Example: SELECT "city" AS "name", "lat" AS "lat", "lng" AS "lng", SUM("revenue") AS "value" FROM ...
+   - If the schema ONLY has city/region/country NAME columns (text) but NO coordinate columns → DO NOT use "geo". Use "bar" (horizontal bar chart) instead to show the geographic ranking. Never use "geo" for text-only location data.
+   - If the user prompt explicitly requests a "map" but no coordinate columns exist, use "bar" and add "(by Location)" to the title.
 4. **Deep-Dive Data**: Your very last object MUST be a "pivot" or "table" chart (width: 12) showing detailed aggregations so users can drill down.
 5. **TABLE NAME STRICTNESS (CRITICAL)**: You MUST use the exact Table Name provided below in your SQL FROM clause. NEVER use generic names like "data" or "sales" unless explicitly seen in the schema.
 6. **NO MARKDOWN IN SQL**: The "query" field MUST contain raw SQL only. Never wrap it in backticks (type: "bar", query: "SELECT...").
