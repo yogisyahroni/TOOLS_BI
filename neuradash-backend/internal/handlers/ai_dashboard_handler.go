@@ -96,7 +96,13 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 			return
 		}
 
-		sendSSEEvent(w, "progress", `{"stage":"executing","message":"⚡ Mengeksekusi SQL untuk setiap grafik secara paralel..."}`)
+		// Send initial executing event with totalCharts so frontend can calculate incremental progress
+		initExecPayload, _ := json.Marshal(map[string]interface{}{
+			"stage":       "executing",
+			"message":     "⚡ Mengeksekusi SQL untuk setiap grafik secara paralel...",
+			"totalCharts": len(charts),
+		})
+		sendSSEEvent(w, "progress", string(initExecPayload))
 		w.Flush()
 
 		// S++ Streaming & Pulse Engine:
@@ -146,12 +152,14 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 			}(i)
 		}
 
-		// S++ Collection Watchdog: The entire phase must finish within 45 seconds total
-		// to ensure the SSE stream actually finishes.
-		collectionCtx, collectionCancel := context.WithTimeout(context.Background(), 45*time.Second)
+		// S++ Collection Watchdog: Allow 120s total for SQL collection on Render free tier.
+		// Render free has shared CPU; cold queries can be slow. 45s was too short.
+		collectionCtx, collectionCancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer collectionCancel()
 
-		// Collect results and update UI in real-time
+		// Collect results and update UI in real-time.
+		// BUGFIX: Use stage "executing_sql" (not "executing") so frontend progress
+		// state machine increments correctly instead of resetting to 40% each time.
 	collectLoop:
 		for i := 0; i < len(charts); i++ {
 			select {
@@ -162,11 +170,15 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 					log.Error().Err(res.err).Int("chart_idx", res.idx).Str("query", charts[res.idx].Query).Msg("Chart SQL Execution Failed")
 					charts[res.idx].Data = make([]map[string]interface{}, 0)
 				}
-				
-				// Optional: Send incremental progress
+
+				// CRITICAL FIX: stage must be "executing_sql" not "executing".
+				// Frontend checks for "executing_sql" to increment progress.
+				// Sending "executing" again would reset p=40 on every event.
 				progressData := map[string]interface{}{
-					"stage":   "executing",
-					"message": fmt.Sprintf("⚡ Berhasil memproses %d dari %d grafik...", i+1, len(charts)),
+					"stage":      "executing_sql",
+					"message":    fmt.Sprintf("⚡ Berhasil memproses %d dari %d grafik...", i+1, len(charts)),
+					"done":       i + 1,
+					"total":      len(charts),
 				}
 				pBytes, _ := json.Marshal(progressData)
 				sendSSEEvent(w, "progress", string(pBytes))

@@ -239,9 +239,13 @@ func main() {
 
 	// --- Fiber App ---
 	app := fiber.New(fiber.Config{
-		AppName:      "DataLens API v1.0",
+		AppName:  "DataLens API v1.0",
+		// BUGFIX: ReadTimeout/WriteTimeout of 30s kills SSE streams (AI dashboard takes 60-120s).
+		// IdleTimeout governs keepalive; WriteTimeout governs how long we can write response bytes.
+		// For SSE streaming endpoints, we need a much longer window.
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: 5 * time.Minute,  // SSE streams need long-lived connections
+		IdleTimeout:  5 * time.Minute,  // prevent Render proxy from killing idle SSE
 		BodyLimit:    110 * 1024 * 1024, // 110MB for file uploads
 		ErrorHandler: globalErrorHandler,
 	})

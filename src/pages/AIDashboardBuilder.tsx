@@ -77,6 +77,9 @@ function AIDashboardBuilder() {
   });
 
   const abortRef = useRef<AbortController | null>(null);
+  // Total charts ref untuk menghitung increment progress yang proporsional
+  const totalChartsRef = useRef<number>(0);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -94,6 +97,7 @@ function AIDashboardBuilder() {
     setCharts([]);
     setIsSaved(false);
     setDashboardName('');
+    totalChartsRef.current = 0; // reset for new generation
     setStream({
       isStreaming: true,
       stage: 'init',
@@ -169,18 +173,36 @@ function AIDashboardBuilder() {
             if (currentEvent === 'progress') {
               setStream(prev => {
                 let p = prev.progress;
-                if (parsed.stage === 'planning') p = 15;
-                if (parsed.stage === 'executing') p = 40;
-                if (parsed.stage === 'executing_sql') p += 5;
-                if (parsed.stage === 'layouting') p = 90;
-                if (parsed.stage === 'success') p = 100;
-                
-                return { 
-                  ...prev, 
-                  stage: parsed.stage, 
-                  message: parsed.message, 
+
+                if (parsed.stage === 'planning') {
+                  // AI is thinking: 5% → 15%
+                  p = Math.max(p, 15);
+                } else if (parsed.stage === 'executing') {
+                  // SQL phase starting: store total charts for proportional increment
+                  // CRITICAL FIX: do NOT reset p to 40 if already > 40.
+                  // This event fires once at the start of SQL execution.
+                  if (parsed.totalCharts) {
+                    totalChartsRef.current = parsed.totalCharts;
+                  }
+                  p = Math.max(p, 40);
+                } else if (parsed.stage === 'executing_sql') {
+                  // Per-chart SQL result: increment proportionally from 40% → 88%
+                  // Formula: 40 + (done / total) * 48
+                  const done = parsed.done ?? 1;
+                  const total = totalChartsRef.current > 0 ? totalChartsRef.current : (parsed.total ?? 8);
+                  p = Math.max(p, Math.round(40 + (done / total) * 48));
+                } else if (parsed.stage === 'layouting') {
+                  p = Math.max(p, 90);
+                } else if (parsed.stage === 'success') {
+                  p = 99;
+                }
+
+                return {
+                  ...prev,
+                  stage: parsed.stage,
+                  message: parsed.message,
                   progress: Math.min(p, 99),
-                  error: null 
+                  error: null,
                 };
               });
             } else if (currentEvent === 'layout') {

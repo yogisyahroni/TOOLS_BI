@@ -105,8 +105,11 @@ func Load() (*Config, error) {
 	v.SetDefault("ENV", "development")
 	v.SetDefault("DATABASE_URL", "")
 	v.SetDefault("SUPABASE_DB_URL", "")
-	v.SetDefault("DB_MAX_CONNECTIONS", 50)
-	v.SetDefault("DB_MAX_IDLE", 10)
+	// BUGFIX: Supabase free tier has max 60 connections (including system).
+	// Setting 50 exhausts the pool causing AI Dashboard SQL goroutines to hang.
+	// Safe values for free tier: 15 open / 5 idle.
+	v.SetDefault("DB_MAX_CONNECTIONS", 15)
+	v.SetDefault("DB_MAX_IDLE", 5)
 	v.SetDefault("JWT_EXPIRY", "15m")
 	v.SetDefault("JWT_REFRESH_EXPIRY", "168h")
 	v.SetDefault("S3_USE_SSL", false)
