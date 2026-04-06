@@ -1074,13 +1074,17 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 
 		if isExternal {
 			// ── EXTERNAL CONNECTION PATH ──────────────────────────────────────────────
-			// Cannot use local DB for EXPLAIN or CREATE VIEW. Validate via external connector.
-			// Use Query with EXPLAIN — same pattern as executeSQL in ai_handler.go.
+			// SQL already proved valid when dashboard rendered successfully.
+			// We skip EXPLAIN here because execQuery() would wrap it as:
+			//   SELECT * FROM (EXPLAIN SELECT ...) __q LIMIT 1  ← invalid syntax!
+			// Instead, run a lightweight SELECT with LIMIT 1 to validate.
+			// Use limit=0 to bypass the automatic wrapping in execQuery.
+			validateQuery := fmt.Sprintf("SELECT * FROM (%s) __validate LIMIT 1", finalQuery)
 			explainCtx, explainCancel := context.WithTimeout(context.Background(), 15*time.Second)
-			_, explainErr := extConnector.Query(explainCtx, "EXPLAIN "+finalQuery, 1)
+			_, explainErr := extConnector.Query(explainCtx, validateQuery, 0)
 			explainCancel()
 			if explainErr != nil {
-				log.Warn().Err(explainErr).Str("chart", dsReq.Name).Str("query", finalQuery).Msg("External SQL Validation (EXPLAIN) failed")
+				log.Warn().Err(explainErr).Str("chart", dsReq.Name).Str("query", finalQuery).Msg("External SQL Validation failed")
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": fmt.Sprintf("Kueri untuk '%s' tidak valid: %v", dsReq.Name, explainErr),
 				})
