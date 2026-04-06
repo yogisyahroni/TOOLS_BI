@@ -109,10 +109,10 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 		}
 		resChan := make(chan result, len(charts))
 		
-		// Heartbeat: Send pulse every 5 seconds while executing
+		// Heartbeat: Send pulse every 3 seconds while executing
 		stopPulse := make(chan bool)
 		go func() {
-			ticker := time.NewTicker(5 * time.Second)
+			ticker := time.NewTicker(3 * time.Second)
 			defer ticker.Stop()
 			for {
 				select {
@@ -146,9 +146,13 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 				charts[res.idx].Data = make([]map[string]interface{}, 0)
 			}
 			
-			// Optional: Send incremental progress
-			progressMsg := fmt.Sprintf(`{"stage":"executing","message":"⚡ Berhasil memproses %d dari %d grafik..."}`, i+1, len(charts))
-			sendSSEEvent(w, "progress", progressMsg)
+			// S++ Safety: Encode progress as strict JSON
+			progressData := map[string]interface{}{
+				"stage":   "executing",
+				"message": fmt.Sprintf("⚡ Berhasil memproses %d dari %d grafik...", i+1, len(charts)),
+			}
+			pBytes, _ := json.Marshal(progressData)
+			sendSSEEvent(w, "progress", string(pBytes))
 			w.Flush()
 		}
 		close(stopPulse) // Stop heartbeats
