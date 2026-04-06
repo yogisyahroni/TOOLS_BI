@@ -294,22 +294,35 @@ func (h *DatasetHandler) QueryDatasetData(c *fiber.Ctx) error {
 		}
 		defer dbConn.Close()
 
-		// SECURITY: Never SELECT * on external without LIMIT
-		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, QuoteIdentifier(ds.DataTableName))
+		// BUGFIX: For AI-generated virtual datasets, DataTableName is a full SQL expression
+		// like "(SELECT status, COUNT(*) as total FROM table GROUP BY status) AS t_xxxx".
+		// QuoteIdentifier() would wrap this whole string in quotes making invalid SQL.
+		// We must detect virtual expressions and use them as-is (no quoting).
+		var fromExpr string
+		trimmedTableName := strings.TrimSpace(ds.DataTableName)
+		if strings.HasPrefix(strings.ToUpper(trimmedTableName), "(SELECT") {
+			// Virtual subquery expression — use directly without quoting
+			fromExpr = trimmedTableName
+		} else {
+			// Regular physical table name — apply quoting for safety
+			fromExpr = QuoteIdentifier(ds.DataTableName)
+		}
+
+		sqlQuery := fmt.Sprintf(`SELECT * FROM %s`, fromExpr)
 		if sortCol != "" {
 			sqlQuery += fmt.Sprintf(` ORDER BY %s %s`, QuoteIdentifier(sortCol), sortDir)
 		}
-		// PostgreSQL offset/limit syntax
 		sqlQuery += fmt.Sprintf(` LIMIT %d OFFSET %d`, limit, offset)
 
 		res, err := dbConn.Query(ctx, sqlQuery, limit)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query external dataset: " + err.Error()})
+			log.Error().Err(err).Str("dataset_id", id).Str("sql", sqlQuery).Msg("Failed to query external dataset")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query dataset: " + err.Error()})
 		}
 
 		return c.JSON(fiber.Map{
 			"data":  res.Rows,
-			"total": ds.RowCount, // Use cached row count for now
+			"total": ds.RowCount,
 			"page":  page,
 			"limit": limit,
 		})
@@ -1074,15 +1087,14 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 
 		if isExternal {
 			// ── EXTERNAL CONNECTION PATH ──────────────────────────────────────────────
-			// SQL already proved valid when dashboard rendered successfully.
-			// We skip EXPLAIN here because execQuery() would wrap it as:
-			//   SELECT * FROM (EXPLAIN SELECT ...) __q LIMIT 1  ← invalid syntax!
-			// Instead, run a lightweight SELECT with LIMIT 1 to validate.
-			// Use limit=0 to bypass the automatic wrapping in execQuery.
+			// Run lightweight SELECT LIMIT 1 to:
+			//   1) Validate the query syntax on the external DB
+			//   2) Extract actual column names/types from the AI query result
+			//      (NOT from source.Columns which reflects the original table schema)
 			validateQuery := fmt.Sprintf("SELECT * FROM (%s) __validate LIMIT 1", finalQuery)
-			explainCtx, explainCancel := context.WithTimeout(context.Background(), 15*time.Second)
-			_, explainErr := extConnector.Query(explainCtx, validateQuery, 0)
-			explainCancel()
+			valCtx, valCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			sampleRes, explainErr := extConnector.Query(valCtx, validateQuery, 1)
+			valCancel()
 			if explainErr != nil {
 				log.Warn().Err(explainErr).Str("chart", dsReq.Name).Str("query", finalQuery).Msg("External SQL Validation failed")
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1090,9 +1102,60 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 				})
 			}
 
+			// ── EXTRACT REAL COLUMNS from AI query result ────────────────────────
+			// AI queries produce different columns than the source table.
+			// E.g. "SELECT status, COUNT(*) as total FROM origin_table GROUP BY status"
+			// → actual columns: [status, total], NOT all original source columns.
+			var aiQueryCols []models.ColumnDef
+			if sampleRes != nil && len(sampleRes.Columns) > 0 {
+				// Use QueryResult.Columns (ordered column names) for deterministic order
+				for _, colName := range sampleRes.Columns {
+					colType := "string"
+					// Detect type from actual data if a sample row exists
+					if len(sampleRes.Rows) > 0 {
+						if val, ok := sampleRes.Rows[0][colName]; ok {
+							switch val.(type) {
+							case int, int32, int64, float32, float64:
+								colType = "number"
+							case bool:
+								colType = "boolean"
+							}
+						}
+					}
+					// Also infer type from column name heuristics (count, total, amount → number)
+					lowerCol := strings.ToLower(colName)
+					if colType == "string" && (strings.HasPrefix(lowerCol, "count") ||
+						strings.HasPrefix(lowerCol, "total") || strings.HasPrefix(lowerCol, "sum") ||
+						strings.HasPrefix(lowerCol, "avg") || strings.HasPrefix(lowerCol, "amount") ||
+						strings.HasPrefix(lowerCol, "jumlah") || strings.HasPrefix(lowerCol, "nilai") ||
+						strings.HasSuffix(lowerCol, "_count") || strings.HasSuffix(lowerCol, "_total") ||
+						strings.HasSuffix(lowerCol, "_amount")) {
+						colType = "number"
+					}
+					aiQueryCols = append(aiQueryCols, models.ColumnDef{Name: colName, Type: colType})
+				}
+			} else if len(sampleRes.Rows) > 0 {
+				// Fallback: extract columns from first row keys
+				for colName, val := range sampleRes.Rows[0] {
+					colType := "string"
+					switch val.(type) {
+					case int, int32, int64, float32, float64:
+						colType = "number"
+					case bool:
+						colType = "boolean"
+					}
+					aiQueryCols = append(aiQueryCols, models.ColumnDef{Name: colName, Type: colType})
+				}
+			}
+			if len(aiQueryCols) == 0 {
+				// Last resort: inherit source columns if query returned absolutely nothing
+				var srcCols []models.ColumnDef
+				_ = json.Unmarshal(source.Columns, &srcCols)
+				aiQueryCols = srcCols
+			}
+			aiColJSON, _ := encodeColumns(aiQueryCols)
+
 			newDatasetID := uuid.New().String()
-			// Store finalQuery as a virtual table expression. The reader (executeSQL + chart renderer)
-			// already knows how to handle DataTableName that starts with "(SELECT ...) AS alias".
 			virtualAlias := "t_" + strings.ReplaceAll(newDatasetID[:8], "-", "_")
 			virtualTableExpr := fmt.Sprintf("(%s) AS %s", finalQuery, virtualAlias)
 
@@ -1101,9 +1164,9 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 				UserID:        userID,
 				Name:          dsReq.Name,
 				FileName:      dsReq.Name,
-				Columns:       source.Columns, // inherit schema from parent
-				RowCount:      0,              // skip expensive COUNT on external DB
-				StorageKey:    source.StorageKey, // inherit external connection key
+				Columns:       aiColJSON,         // ✅ actual columns from AI query result
+				RowCount:      sampleRes.RowCount, // set to sample count immediately
+				StorageKey:    source.StorageKey,
 				DataTableName: virtualTableExpr,
 				CreatedAt:     time.Now(),
 				UpdatedAt:     time.Now(),
@@ -1113,6 +1176,51 @@ func (h *DatasetHandler) AIBatchGenerateDatasets(c *fiber.Ctx) error {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to register AI dataset record"})
 			}
 			results = append(results, datasetRecord)
+
+			// ── BACKGROUND COUNT(*) ─────────────────────────────────────────────
+			// Run async to update row_count after save without blocking the response.
+			// All loop-local variables are explicitly passed as goroutine parameters
+			// to avoid data races across loop iterations.
+			go func(dsID, q, storageKey string) {
+				bCtx, bCancel := context.WithTimeout(context.Background(), 60*time.Second)
+				defer bCancel()
+
+				// Open a FRESH connection — extConnector is closed via defer when the
+				// HTTP handler returns, so we cannot reuse it inside a goroutine.
+				connIDForBg := strings.TrimPrefix(storageKey, "EXTERNAL_CONN::")
+				var bgConnRecord models.DBConnection
+				if dbErr := h.db.Where("id = ?", connIDForBg).First(&bgConnRecord).Error; dbErr != nil {
+					return
+				}
+				bgConn, bgErr := connectors.Open(connectors.FromDBConnection(&bgConnRecord, bgConnRecord.PasswordEncrypted))
+				if bgErr != nil {
+					return
+				}
+				defer bgConn.Close()
+
+				countQ := fmt.Sprintf("SELECT COUNT(*) AS __cnt FROM (%s) __count_q", q)
+				countRes, cerr := bgConn.Query(bCtx, countQ, 1)
+				if cerr != nil || countRes == nil || len(countRes.Rows) == 0 {
+					return
+				}
+				for _, v := range countRes.Rows[0] {
+					var cnt int64
+					switch val := v.(type) {
+					case int64:
+						cnt = val
+					case float64:
+						cnt = int64(val)
+					case int32:
+						cnt = int64(val)
+					}
+					if cnt > 0 {
+						h.db.Model(&models.Dataset{}).Where("id = ?", dsID).Update("row_count", cnt)
+						log.Info().Str("dataset_id", dsID).Int64("row_count", cnt).Msg("AI dataset row count updated")
+					}
+					break
+				}
+			}(newDatasetID, finalQuery, source.StorageKey)
+
 			continue // skip local VIEW creation
 		}
 

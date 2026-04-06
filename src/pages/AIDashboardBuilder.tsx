@@ -279,11 +279,34 @@ function AIDashboardBuilder() {
         const newDataset = newDatasets[i];
         const newDatasetId = newDataset.id;
 
-        const firstRow = c.data[0] || {};
-        const keys = Object.keys(firstRow).filter(k => k !== 'map_key');
-        
-        const yAxis = keys.find(k => typeof firstRow[k] === 'number') || (keys.length > 1 ? keys[1] : keys[0]);
-        const xAxis = keys.find(k => typeof firstRow[k] === 'string') || keys[0] || '';
+        // ── AXIS DETECTION: 2-tier strategy ───────────────────────────────────
+        // Tier 1 (preferred): Use backend-saved dataset.columns metadata.
+        // columns is already typed as ColumnDef[] — no string-parsing needed.
+        // After the backend fix, this correctly reflects actual AI query columns
+        // (e.g. [status, total] from GROUP BY), NOT raw source table columns.
+        //
+        // Tier 2 (fallback): Inspect runtime data types from preview rows.
+        let xAxis = '';
+        let yAxis = '';
+
+        // newDataset.columns is ColumnDef[] per the DatasetItem interface.
+        // Use it directly — no JSON.parse or typeof-string guards required.
+        const dsColumns = Array.isArray(newDataset.columns) ? newDataset.columns : [];
+
+        if (dsColumns.length > 0) {
+          // Tier 1: columns metadata from backend (source of truth)
+          // ColumnDef.type is 'string' | 'number' | 'date' | 'boolean'
+          const strCol = dsColumns.find(col => col.type === 'string' || col.type === 'date');
+          const numCol = dsColumns.find(col => col.type === 'number');
+          xAxis = strCol?.name || dsColumns[0]?.name || '';
+          yAxis = numCol?.name || (dsColumns.length > 1 ? dsColumns[1].name : dsColumns[0]?.name) || '';
+        } else {
+          // Tier 2: fallback to runtime JS type inspection of preview data
+          const firstRow = c.data[0] || {};
+          const keys = Object.keys(firstRow).filter(k => k !== 'map_key');
+          xAxis = keys.find(k => typeof firstRow[k] === 'string') || keys[0] || '';
+          yAxis = keys.find(k => typeof firstRow[k] === 'number') || (keys.length > 1 ? keys[1] : keys[0]) || '';
+        }
 
         syncedAxes[i] = { xAxis, yAxis, datasetId: newDatasetId };
 
