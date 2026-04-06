@@ -128,32 +128,53 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 		// Execute SQL in parallel
 		for i := range charts {
 			go func(idx int) {
-				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				// S++ Bulletproof Pattern: Recover from panics to prevent main thread hang
+				defer func() {
+					if r := recover(); r != nil {
+						log.Error().Interface("panic", r).Int("chart_idx", idx).Msg("SQL Execution Panic")
+						resChan <- result{idx: idx, err: fmt.Errorf("panic in execution: %v", r)}
+					}
+				}()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) // Increased to 20s
 				defer cancel()
 
 				results, dbErr := h.executeSQL(ctx, req.DatasetID, charts[idx].Query)
+				
+				// S++ Safe Send: Always send something to unblock the main loop
 				resChan <- result{idx: idx, data: results, err: dbErr}
 			}(i)
 		}
 
+		// S++ Collection Watchdog: The entire phase must finish within 45 seconds total
+		// to ensure the SSE stream actually finishes.
+		collectionCtx, collectionCancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer collectionCancel()
+
 		// Collect results and update UI in real-time
+	collectLoop:
 		for i := 0; i < len(charts); i++ {
-			res := <-resChan
-			if res.err == nil {
-				charts[res.idx].Data = res.data
-			} else {
-				log.Error().Err(res.err).Str("query", charts[res.idx].Query).Msg("Chart SQL Execution Failed or Timed Out")
-				charts[res.idx].Data = make([]map[string]interface{}, 0)
+			select {
+			case res := <-resChan:
+				if res.err == nil {
+					charts[res.idx].Data = res.data
+				} else {
+					log.Error().Err(res.err).Int("chart_idx", res.idx).Str("query", charts[res.idx].Query).Msg("Chart SQL Execution Failed")
+					charts[res.idx].Data = make([]map[string]interface{}, 0)
+				}
+				
+				// Optional: Send incremental progress
+				progressData := map[string]interface{}{
+					"stage":   "executing",
+					"message": fmt.Sprintf("⚡ Berhasil memproses %d dari %d grafik...", i+1, len(charts)),
+				}
+				pBytes, _ := json.Marshal(progressData)
+				sendSSEEvent(w, "progress", string(pBytes))
+				w.Flush()
+			case <-collectionCtx.Done():
+				log.Warn().Msg("SQL Collection Watchdog Timeout Reached. Finishing with partial data.")
+				break collectLoop
 			}
-			
-			// S++ Safety: Encode progress as strict JSON
-			progressData := map[string]interface{}{
-				"stage":   "executing",
-				"message": fmt.Sprintf("⚡ Berhasil memproses %d dari %d grafik...", i+1, len(charts)),
-			}
-			pBytes, _ := json.Marshal(progressData)
-			sendSSEEvent(w, "progress", string(pBytes))
-			w.Flush()
 		}
 		close(stopPulse) // Stop heartbeats
 
