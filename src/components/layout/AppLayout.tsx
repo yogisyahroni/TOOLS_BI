@@ -1,3 +1,4 @@
+// Triggering redeploy to verify rollback state
 import { ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { useGlobalShortcuts } from '@/hooks/use-keyboard-shortcuts';
