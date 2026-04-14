@@ -461,6 +461,7 @@ func main() {
 	settings.Get("/ai-config", settingsH.GetAIConfig)       // Returns config WITHOUT raw API key
 	settings.Put("/ai-config", settingsH.SaveAIConfig)      // Encrypts & stores API key server-side
 	settings.Delete("/ai-config", settingsH.DeleteAIConfig) // Remove stored AI config
+	settings.Post("/test-notification", settingsH.TestNotification) // Test connectivity
 
 	// Chart routes
 	charts := api.Group("/charts")
