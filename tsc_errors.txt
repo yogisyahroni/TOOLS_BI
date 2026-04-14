@@ -1,7 +1,0 @@
-src/pages/Dashboard.tsx(117,24): error TS2322: Type 'import("E:/antigraviti google/SUDAH DEPLOY/TOOLS_BI/src/lib/api").Report[]' is not assignable to type 'import("E:/antigraviti google/SUDAH DEPLOY/TOOLS_BI/src/types/data").Report[]'.
-  Type 'Report' is missing the following properties from type 'Report': story, decisions, recommendations, dataSetId
-src/pages/GeoVisualization.tsx(80,11): error TS2559: Type 'number' has no properties in common with type 'TransitionProps'.
-src/pages/GeoVisualization.tsx(81,11): error TS2559: Type 'number' has no properties in common with type 'TransitionProps'.
-src/pages/GeoVisualization.tsx(82,11): error TS2559: Type 'number' has no properties in common with type 'TransitionProps'.
-src/pages/GeoVisualization.tsx(83,11): error TS2559: Type 'number' has no properties in common with type 'TransitionProps'.
-src/pages/GeoVisualization.tsx(84,11): error TS2559: Type 'number' has no properties in common with type 'TransitionProps'.
