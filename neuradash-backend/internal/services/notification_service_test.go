@@ -25,7 +25,7 @@ func TestNotificationService_SendToTargets(t *testing.T) {
 		{Name: "Disabled Target", Type: "email", Target: "test2@example.com", Enabled: false},
 	}
 
-	errs := svc.SendToTargets(targets, "Test", "Msg")
+	errs := svc.SendToTargets(targets, "", "", "", "Test", "Msg")
 	
 	if len(errs) != 0 {
 		t.Fatalf("Expected 0 errors, got %d", len(errs))
