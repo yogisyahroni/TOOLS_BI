@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"neuradash/internal/crypto"
 	"neuradash/internal/models"
 	"neuradash/internal/realtime"
 
@@ -29,12 +30,13 @@ type AIService struct {
 	notificationSvc  *NotificationService
 	db               *gorm.DB
 	hub              *realtime.Hub
+	encryptionKey    string
 	mu               sync.RWMutex
 	analysisCooldown map[string]time.Time // datasetID -> lastTime
 }
 
 // NewAIService creates a new AI service dengan security defaults
-func NewAIService(apiKey string, readOnly bool, db *gorm.DB, hub *realtime.Hub, intSvc *IntegrationService, notifSvc *NotificationService) *AIService {
+func NewAIService(apiKey string, readOnly bool, db *gorm.DB, hub *realtime.Hub, intSvc *IntegrationService, notifSvc *NotificationService, encKey string) *AIService {
 	return &AIService{
 		client:           openai.NewClient(apiKey),
 		model:            openai.GPT4TurboPreview,
@@ -44,6 +46,7 @@ func NewAIService(apiKey string, readOnly bool, db *gorm.DB, hub *realtime.Hub, 
 		hub:              hub,
 		integrationSvc:   intSvc,
 		notificationSvc:  notifSvc,
+		encryptionKey:    encKey,
 		analysisCooldown: make(map[string]time.Time),
 	}
 }
@@ -786,7 +789,8 @@ Your Goal:
 	})
 
 	// Send notification about the completed investigation
-	s.notificationSvc.SendTelegram(ctx, "", fmt.Sprintf("🚨 *Anomaly Investigation Complete*\n\n*Anomaly:* %s\n\n*Forensic Discovery:* %s", anomalyDescription, analysisResult))
+	// Inject dynamic tokens if possible (future enhancement)
+	s.notificationSvc.SendTelegram(ctx, "", "", fmt.Sprintf("🚨 *Anomaly Investigation Complete*\n\n*Anomaly:* %s\n\n*Forensic Discovery:* %s", anomalyDescription, analysisResult))
 
 	return analysisResult, nil
 }
@@ -808,7 +812,9 @@ func (s *AIService) ExecutePrescriptiveAction(ctx context.Context, connectorID s
 
 	result, err := s.integrationSvc.ExecuteConnector(ctx, connector, actionData)
 	if err != nil {
-		s.notificationSvc.SendTelegram(ctx, "", fmt.Sprintf("❌ *Action Failed*\nConnector: %s\nError: %s", connector.Name, err.Error()))
+	if connector.Enabled {
+		s.notificationSvc.SendTelegram(ctx, "", "", fmt.Sprintf("❌ *Action Failed*\nConnector: %s\nError: %s", connector.Name, err.Error()))
+	}
 		return nil, err
 	}
 
@@ -920,17 +926,54 @@ func (s *AIService) BuildGlobalSchemaContext(ctx context.Context, userID string)
 // S++ Pillar 4: Autonomous Data Integrity (Self-Healing)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// getSenderCredentials fetches and decrypts per-user channel tokens.
+func (s *AIService) getSenderCredentials(userID string) (tgToken, waInstance, waToken string) {
+	if userID == "" {
+		return
+	}
+	var cfg models.UserAIConfig
+	if err := s.db.Where("user_id = ?", userID).First(&cfg).Error; err != nil {
+		return
+	}
+
+	if cfg.EncryptedTelegramBotToken != "" {
+		tgToken, _ = crypto.Decrypt(cfg.EncryptedTelegramBotToken, s.encryptionKey)
+	}
+	if cfg.EncryptedWhatsAppInstanceID != "" {
+		waInstance, _ = crypto.Decrypt(cfg.EncryptedWhatsAppInstanceID, s.encryptionKey)
+	}
+	if cfg.EncryptedWhatsAppToken != "" {
+		waToken, _ = crypto.Decrypt(cfg.EncryptedWhatsAppToken, s.encryptionKey)
+	}
+	return
+}
+
 // SendNotification sends a standard S++ system alert.
 func (s *AIService) SendNotification(ctx context.Context, userID, subject, msg string) {
-	// For now, we simulate sending to default system targets (Telegram/Email)
-	// In production, we would fetch user-specific notification preferences.
+	tg, waInst, waTok := s.getSenderCredentials(userID)
+	
 	fullMsg := fmt.Sprintf("🤖 *S++ Intelligence System Alert*\n\n*Subject:* %s\n*Event:* %s\n\n_System operates at Grade S++ efficiency._", subject, msg)
-	_ = s.notificationSvc.SendTelegram(ctx, "", fullMsg)
+	_ = s.notificationSvc.SendTelegram(ctx, tg, "", fullMsg)
+	
+	// Also attempt WhatsApp if configured
+	if waInst != "" {
+		_ = s.notificationSvc.SendWhatsApp(ctx, waInst, waTok, "", fullMsg)
+	}
 }
 
 // SendDriftAlert sends a specialized alert when schema drift is detected.
-func (s *AIService) SendDriftAlert(ctx context.Context, datasetName, driftReport string) {
-	fullMsg := fmt.Sprintf("🚨 *CRITICAL: SCHEMA DRIFT DETECTED*\n\n*Dataset:* %s\n\n*Forensic Analysis:*\n%s\n\n⚠️ Dashboard widgets may fail. Please re-sync metadata.", datasetName, driftReport)
-	_ = s.notificationSvc.SendTelegram(ctx, "", fullMsg)
-}
+func (s *AIService) SendDriftAlert(ctx context.Context, datasetID, driftReport string) {
+	// Find owner
+	var ds models.Dataset
+	if err := s.db.Where("id = ?", datasetID).First(&ds).Error; err != nil {
+		return
+	}
 
+	tg, waInst, waTok := s.getSenderCredentials(ds.UserID)
+	fullMsg := fmt.Sprintf("🚨 *CRITICAL: SCHEMA DRIFT DETECTED*\n\n*Dataset:* %s\n\n*Forensic Analysis:*\n%s\n\n⚠️ Dashboard widgets may fail. Please re-sync metadata.", ds.Name, driftReport)
+	
+	_ = s.notificationSvc.SendTelegram(ctx, tg, "", fullMsg)
+	if waInst != "" {
+		_ = s.notificationSvc.SendWhatsApp(ctx, waInst, waTok, "", fullMsg)
+	}
+}

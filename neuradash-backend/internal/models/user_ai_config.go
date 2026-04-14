@@ -22,8 +22,11 @@ type UserAIConfig struct {
 	BaseURL               string          `json:"baseUrl"     gorm:"size:500"`
 	MaxTokens             int             `json:"maxTokens"   gorm:"default:4096"`
 	Temperature           float64         `json:"temperature" gorm:"default:0.7"`
-	NotificationTargets   json.RawMessage `json:"notificationTargets" gorm:"type:jsonb;default:'[]'"`   // List of target contacts for Causal Analysis
-	IntegrationConnectors json.RawMessage `json:"integrationConnectors" gorm:"type:jsonb;default:'[]'"` // Registry of external systems for Action Buttons
+	NotificationTargets          json.RawMessage `json:"notificationTargets" gorm:"type:jsonb;default:'[]'"`   // List of target contacts for Causal Analysis
+	IntegrationConnectors        json.RawMessage `json:"integrationConnectors" gorm:"type:jsonb;default:'[]'"` // Registry of external systems for Action Buttons
+	EncryptedTelegramBotToken    string          `json:"-"           gorm:"type:text"`                         // Encrypted Bot Token
+	EncryptedWhatsAppInstanceID  string          `json:"-"           gorm:"type:text"`                         // Encrypted Instance ID
+	EncryptedWhatsAppToken       string          `json:"-"           gorm:"type:text"`                         // Encrypted WhatsApp API Token
 	CreatedAt             time.Time       `json:"createdAt"`
 	UpdatedAt             time.Time       `json:"updatedAt"`
 }

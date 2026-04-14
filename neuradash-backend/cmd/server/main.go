@@ -187,7 +187,8 @@ func main() {
 	// Pillar Services
 	notificationSvc := services.NewNotificationService(mailer)
 	integrationSvc := services.NewIntegrationService()
-	aiSvc := services.NewAIService(cfg.AI.APIKey, true, db, hub, integrationSvc, notificationSvc)
+	encKey := cfg.Encryption.DBConnKey // reuse existing server-side encryption secret
+	aiSvc := services.NewAIService(cfg.AI.APIKey, true, db, hub, integrationSvc, notificationSvc, encKey)
 
 	log.Info().Msg("Autonomous Intelligence Pillar services initialised")
 
@@ -209,7 +210,7 @@ func main() {
 	cronH := handlers.NewCronHandler(db, hub, aiSvc, datasetSvc)
 	encKey := cfg.Encryption.DBConnKey // reuse existing server-side encryption secret
 	aiH := handlers.NewAIHandler(db, cfg.AI, encKey, aiSvc, datasetSvc)
-	settingsH := handlers.NewSettingsHandler(db, encKey)
+	settingsH := handlers.NewSettingsHandler(db, encKey, notificationSvc)
 	wsH := handlers.NewWSHandler(hub)
 	chartH := handlers.NewChartHandler(db, hub)
 	chartH.SetService(chartSvc)

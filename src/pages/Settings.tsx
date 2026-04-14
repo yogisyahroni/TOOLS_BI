@@ -35,6 +35,9 @@ interface BackendAIConfig {
   maxTokens: number;
   temperature: number;
   hasApiKey: boolean;
+  hasTelegramToken: boolean;
+  hasWhatsAppInstance: boolean;
+  hasWhatsAppToken: boolean;
   notificationTargets: NotificationTarget[];
   integrationConnectors: IntegrationConnector[];
 }
@@ -68,6 +71,11 @@ export default function SettingsPage() {
   // ── v2.0 Autonomous State ──────────────────────────────────────────────────
   const [notificationTargets, setNotificationTargets] = useState<NotificationTarget[]>([]);
   const [integrationConnectors, setIntegrationConnectors] = useState<IntegrationConnector[]>([]);
+
+  // -- Global Channel Credentials --
+  const [telegramBotToken, setTelegramBotToken] = useState('');
+  const [whatsappInstanceId, setWhatsappInstanceId] = useState('');
+  const [whatsappToken, setWhatsappToken] = useState('');
 
   // ── Status State ──────────────────────────────────────────────────────────
   const [backendConfig, setBackendConfig] = useState<BackendAIConfig | null>(null);
@@ -112,6 +120,9 @@ export default function SettingsPage() {
           maxTokens: 4096, 
           temperature: 0.7, 
           hasApiKey: false,
+          hasTelegramToken: false,
+          hasWhatsAppInstance: false,
+          hasWhatsAppToken: false,
           notificationTargets: [],
           integrationConnectors: []
         });
@@ -142,12 +153,35 @@ export default function SettingsPage() {
 
     setIsSaving(true);
     try {
-      const body: any = { provider, model, baseUrl, maxTokens, temperature, notificationTargets, integrationConnectors };
+      const body: any = { 
+        provider, 
+        model, 
+        baseUrl, 
+        maxTokens, 
+        temperature, 
+        notificationTargets, 
+        integrationConnectors,
+        telegramBotToken,
+        whatsappInstanceId,
+        whatsappToken
+      };
       if (apiKey) body.apiKey = apiKey;
 
       const { data } = await api.put<BackendAIConfig>('/settings/ai-config', body);
-      setBackendConfig({ ...data, provider, model, baseUrl, maxTokens, temperature, notificationTargets, integrationConnectors });
+      setBackendConfig({ 
+        ...data, 
+        provider, 
+        model, 
+        baseUrl, 
+        maxTokens, 
+        temperature, 
+        notificationTargets, 
+        integrationConnectors
+      });
       setApiKey('');
+      setTelegramBotToken('');
+      setWhatsappInstanceId('');
+      setWhatsappToken('');
       toast({ title: '🔒 Core state updated', description: 'Changes committed and encrypted on secure hardware.' });
     } catch (err: any) {
       toast({ title: 'Commit Failed', description: err?.response?.data?.error || 'Unknown network error', variant: 'destructive' });
@@ -478,6 +512,46 @@ export default function SettingsPage() {
                       <h3 className="text-2xl font-extrabold tracking-tight text-foreground">Autonomous Delivery Protocol</h3>
                       <p className="text-muted-foreground font-medium">Instruksikan AI untuk mengirimkan hasil analisis ke kanal pilihan Anda secara mandiri.</p>
                    </div>
+                </div>
+
+                {/* NEW: Global Channel Credentials */}
+                <div className="mb-12 p-6 rounded-2xl bg-primary/5 border border-primary/10 space-y-6">
+                   <div className="flex items-center gap-2 mb-2">
+                      <ShieldCheck className="w-5 h-5 text-primary" />
+                      <h4 className="font-bold text-foreground italic">Global Channel Credentials (Sender Config)</h4>
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                         <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
+                            Telegram Bot Token
+                            {backendConfig?.hasTelegramToken && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
+                         </Label>
+                         <Input type="password" placeholder={backendConfig?.hasTelegramToken ? "••••••••••••••••" : "Insert Bot Token (from @BotFather)"}
+                            value={telegramBotToken} onChange={e => setTelegramBotToken(e.target.value)}
+                            className="h-10 bg-card border-border rounded-xl text-xs font-mono" />
+                      </div>
+                      <div className="space-y-3">
+                         <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
+                            WhatsApp Instance ID
+                            {backendConfig?.hasWhatsAppInstance && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
+                         </Label>
+                         <Input placeholder={backendConfig?.hasWhatsAppInstance ? "Instance Active" : "Green-API Instance ID"}
+                            value={whatsappInstanceId} onChange={e => setWhatsappInstanceId(e.target.value)}
+                            className="h-10 bg-card border-border rounded-xl text-xs" />
+                      </div>
+                      <div className="space-y-3 md:col-span-2">
+                         <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
+                            WhatsApp API Token
+                            {backendConfig?.hasWhatsAppToken && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
+                         </Label>
+                         <Input type="password" placeholder={backendConfig?.hasWhatsAppToken ? "••••••••••••••••" : "Green-API Token"}
+                            value={whatsappToken} onChange={e => setWhatsappToken(e.target.value)}
+                            className="h-10 bg-card border-border rounded-xl text-xs font-mono" />
+                      </div>
+                   </div>
+                   <p className="text-[10px] text-muted-foreground font-medium">
+                      *Kredensial di atas digunakan sebagai akun pengirim. Anda hanya perlu mengkonfigurasi ini sekali.
+                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">

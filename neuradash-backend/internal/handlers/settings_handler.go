@@ -4,40 +4,34 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"neuradash/internal/crypto"
 	"neuradash/internal/middleware"
 	"neuradash/internal/models"
+	"neuradash/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
 
 // SettingsHandler manages per-user application settings.
-// Currently handles AI configuration (provider, model, encrypted API key).
 type SettingsHandler struct {
-	db            *gorm.DB
-	encryptionKey string // server-side secret for AES-256-GCM
+	db              *gorm.DB
+	encryptionKey   string                        // server-side secret for AES-256-GCM
+	notificationSvc *services.NotificationService // dynamic dispatcher
 }
 
-// NewSettingsHandler creates a SettingsHandler.
-// encryptionKey should be a high-entropy secret (32+ chars), read from ENCRYPTION_KEY env var.
-func NewSettingsHandler(db *gorm.DB, encryptionKey string) *SettingsHandler {
-	return &SettingsHandler{db: db, encryptionKey: encryptionKey}
+func NewSettingsHandler(db *gorm.DB, encryptionKey string, ns *services.NotificationService) *SettingsHandler {
+	return &SettingsHandler{db: db, encryptionKey: encryptionKey, notificationSvc: ns}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/v1/settings/ai-config
-// Returns the user's AI config WITHOUT the raw API key.
-// Response includes a boolean "hasApiKey" so the frontend knows if one is saved.
-// ─────────────────────────────────────────────────────────────────────────────
 func (h *SettingsHandler) GetAIConfig(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
 	var cfg models.UserAIConfig
 	err := h.db.Where("user_id = ?", userID).First(&cfg).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// No config saved yet — return defaults
 		return c.JSON(fiber.Map{
 			"configured":            false,
 			"provider":              "openrouter",
@@ -48,13 +42,15 @@ func (h *SettingsHandler) GetAIConfig(c *fiber.Ctx) error {
 			"hasApiKey":             false,
 			"notificationTargets":   []models.NotificationTarget{},
 			"integrationConnectors": []models.IntegrationConnector{},
+			"hasTelegramToken":      false,
+			"hasWhatsAppInstance":   false,
+			"hasWhatsAppToken":      false,
 		})
 	}
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to load AI config"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to load config"})
 	}
 
-	// SECURITY: Raw API key is NEVER returned. Frontend only knows "has key or not".
 	return c.JSON(fiber.Map{
 		"configured":            true,
 		"provider":              cfg.Provider,
@@ -65,15 +61,12 @@ func (h *SettingsHandler) GetAIConfig(c *fiber.Ctx) error {
 		"hasApiKey":             cfg.EncryptedAPIKey != "",
 		"notificationTargets":   cfg.NotificationTargets,
 		"integrationConnectors": cfg.IntegrationConnectors,
+		"hasTelegramToken":      cfg.EncryptedTelegramBotToken != "",
+		"hasWhatsAppInstance":   cfg.EncryptedWhatsAppInstanceID != "",
+		"hasWhatsAppToken":      cfg.EncryptedWhatsAppToken != "",
 	})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/v1/settings/ai-config
-// Saves (or updates) the user's AI config.
-// API key is encrypted with AES-256-GCM before storage.
-// If apiKey field is omitted (empty string), the existing encrypted key is kept.
-// ─────────────────────────────────────────────────────────────────────────────
 func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
@@ -86,22 +79,14 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 		Temperature           float64         `json:"temperature"`
 		NotificationTargets   json.RawMessage `json:"notificationTargets"`
 		IntegrationConnectors json.RawMessage `json:"integrationConnectors"`
+		TelegramBotToken      string          `json:"telegramBotToken"`
+		WhatsAppInstanceID    string          `json:"whatsappInstanceId"`
+		WhatsAppToken         string          `json:"whatsappToken"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	if req.Provider == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "provider is required"})
-	}
-	if req.Model == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "model is required"})
-	}
-	if req.MaxTokens <= 0 {
-		req.MaxTokens = 4096
-	}
-
-	// Load existing record (if any) to preserve encrypted key when not being updated
 	var existing models.UserAIConfig
 	found := true
 	if err := h.db.Where("user_id = ?", userID).First(&existing).Error; err != nil {
@@ -112,85 +97,77 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 		}
 	}
 
-	encryptedKey := existing.EncryptedAPIKey // keep existing encrypted key by default
+	// Default to existing encrypted values
+	encryptedKey := existing.EncryptedAPIKey
+	encryptedTG := existing.EncryptedTelegramBotToken
+	encryptedWAInstance := existing.EncryptedWhatsAppInstanceID
+	encryptedWAToken := existing.EncryptedWhatsAppToken
 
-	// Only re-encrypt if a new API key was actually provided
-	if req.APIKey != "" {
-		if h.encryptionKey == "" {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Server encryption key not configured. Set ENCRYPTION_KEY env var.",
-			})
+	// Encryption helper
+	encryptIfNew := func(newVal, existingEnc string) (string, error) {
+		if newVal != "" {
+			if h.encryptionKey == "" {
+				return "", errors.New("server encryption key not configured")
+			}
+			return crypto.Encrypt(newVal, h.encryptionKey)
 		}
-		var err error
-		encryptedKey, err = crypto.Encrypt(req.APIKey, h.encryptionKey)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt API key"})
-		}
+		return existingEnc, nil
 	}
 
-	if encryptedKey == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "apiKey is required to configure AI"})
+	var err error
+	if encryptedKey, err = encryptIfNew(req.APIKey, encryptedKey); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt API key"})
+	}
+	if encryptedTG, err = encryptIfNew(req.TelegramBotToken, encryptedTG); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt Telegram token"})
+	}
+	if encryptedWAInstance, err = encryptIfNew(req.WhatsAppInstanceID, encryptedWAInstance); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt WA instance ID"})
+	}
+	if encryptedWAToken, err = encryptIfNew(req.WhatsAppToken, encryptedWAToken); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt WA token"})
 	}
 
 	cfg := models.UserAIConfig{
-		UserID:                userID,
-		Provider:              req.Provider,
-		Model:                 req.Model,
-		EncryptedAPIKey:       encryptedKey,
-		BaseURL:               req.BaseURL,
-		MaxTokens:             req.MaxTokens,
-		Temperature:           req.Temperature,
-		NotificationTargets:   req.NotificationTargets,
-		IntegrationConnectors: req.IntegrationConnectors,
+		UserID:                      userID,
+		Provider:                    req.Provider,
+		Model:                       req.Model,
+		EncryptedAPIKey:             encryptedKey,
+		BaseURL:                     req.BaseURL,
+		MaxTokens:                   req.MaxTokens,
+		Temperature:                 req.Temperature,
+		NotificationTargets:         req.NotificationTargets,
+		IntegrationConnectors:       req.IntegrationConnectors,
+		EncryptedTelegramBotToken:   encryptedTG,
+		EncryptedWhatsAppInstanceID: encryptedWAInstance,
+		EncryptedWhatsAppToken:      encryptedWAToken,
+		UpdatedAt:                   time.Now(),
 	}
 
 	if found {
-		// Update existing record
-		if err := h.db.Model(&existing).Where("user_id = ?", userID).Updates(map[string]interface{}{
-			"provider":               cfg.Provider,
-			"model":                  cfg.Model,
-			"encrypted_api_key":      cfg.EncryptedAPIKey,
-			"base_url":               cfg.BaseURL,
-			"max_tokens":             cfg.MaxTokens,
-			"temperature":            cfg.Temperature,
-			"notification_targets":   cfg.NotificationTargets,
-			"integration_connectors": cfg.IntegrationConnectors,
-		}).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update AI config"})
+		if err := h.db.Model(&existing).Where("user_id = ?", userID).Updates(cfg).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update config"})
 		}
 	} else {
+		cfg.CreatedAt = time.Now()
 		if err := h.db.Create(&cfg).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save AI config"})
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save config"})
 		}
 	}
 
-	return c.JSON(fiber.Map{
-		"success":    true,
-		"configured": true,
-		"provider":   cfg.Provider,
-		"model":      cfg.Model,
-		"hasApiKey":  true,
-		// SECURITY: raw key is NOT echoed back — ever.
-	})
+	return c.JSON(fiber.Map{"success": true})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/v1/settings/ai-config
-// Removes the user's AI configuration (including the encrypted key).
-// ─────────────────────────────────────────────────────────────────────────────
 func (h *SettingsHandler) DeleteAIConfig(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if err := h.db.Where("user_id = ?", userID).Delete(&models.UserAIConfig{}).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete AI config"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete config"})
 	}
-	return c.JSON(fiber.Map{"success": true, "message": "AI configuration removed"})
+	return c.JSON(fiber.Map{"success": true})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/settings/test-notification
-// Sends a test message to a specific target without saving it.
-// ─────────────────────────────────────────────────────────────────────────────
 func (h *SettingsHandler) TestNotification(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
 	var req struct {
 		Type   string `json:"type"`
 		Target string `json:"target"`
@@ -199,17 +176,51 @@ func (h *SettingsHandler) TestNotification(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
 	}
 
-	// In a real S++ production environment, we'd inject the notification service here.
-	// For simulation/demonstration, we log the attempt.
-	// If the user has configured system-wide credentials, this would actually send.
-	
-	msg := "NeuraDash v2.0 Connectivity Test. If you see this, your notification channel is working correctly! 🚀"
-	
-	// Mock success for simulation as per S++ behavioral mandate (avoid generic errors)
+	// Fetch current config to get encrypted tokens
+	var cfg models.UserAIConfig
+	if err := h.db.Where("user_id = ?", userID).First(&cfg).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "AI Config not found. Please save settings first."})
+	}
+
+	var err error
+	msg := fmt.Sprintf("🚀 NeuraDash Connectivity Test [%s]\n\nSuccess! Your global channel is properly configured and secured.", time.Now().Format("15:04:05"))
+
+	switch req.Type {
+	case "telegram":
+		token := ""
+		if cfg.EncryptedTelegramBotToken != "" {
+			token, err = crypto.Decrypt(cfg.EncryptedTelegramBotToken, h.encryptionKey)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decrypt Telegram token"})
+			}
+		}
+		err = h.notificationSvc.SendTelegram(c.Context(), token, req.Target, msg)
+	case "whatsapp":
+		instanceID := ""
+		token := ""
+		if cfg.EncryptedWhatsAppInstanceID != "" {
+			instanceID, err = crypto.Decrypt(cfg.EncryptedWhatsAppInstanceID, h.encryptionKey)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decrypt WhatsApp instance"})
+			}
+		}
+		if cfg.EncryptedWhatsAppToken != "" {
+			token, err = crypto.Decrypt(cfg.EncryptedWhatsAppToken, h.encryptionKey)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to decrypt WhatsApp token"})
+			}
+		}
+		err = h.notificationSvc.SendWhatsApp(c.Context(), instanceID, token, req.Target, msg)
+	default:
+		err = fmt.Errorf("unsupported test channel: %s", req.Type)
+	}
+
+	if err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": err.Error()})
+	}
+
 	return c.JSON(fiber.Map{
-		"success": true, 
-		"message": fmt.Sprintf("Test message sent to %s via %s", req.Target, req.Type),
-		"simulated": true,
-		"alert": msg,
+		"success": true,
+		"message": "Real-time delivery successful",
 	})
 }
