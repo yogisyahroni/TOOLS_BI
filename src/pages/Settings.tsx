@@ -523,7 +523,10 @@ export default function SettingsPage() {
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-3">
                          <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
-                            Telegram Bot Token
+                             <span className="flex items-center gap-1">
+                                Telegram Bot Token
+                                <HelpTooltip content="Dapatkan Token Bot dari @BotFather di Telegram untuk mengaktifkan pengiriman pesan otomatis melalui bot Anda sendiri." />
+                             </span>
                             {backendConfig?.hasTelegramToken && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
                          </Label>
                          <Input type="password" placeholder={backendConfig?.hasTelegramToken ? "••••••••••••••••" : "Insert Bot Token (from @BotFather)"}
@@ -532,7 +535,10 @@ export default function SettingsPage() {
                       </div>
                       <div className="space-y-3">
                          <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
-                            WhatsApp Instance ID
+                             <span className="flex items-center gap-1">
+                                WhatsApp Instance ID
+                                <HelpTooltip content="Gunakan 'Instance ID' dari panel Green-API (green-api.com) untuk menghubungkan instance pengirim." />
+                             </span>
                             {backendConfig?.hasWhatsAppInstance && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
                          </Label>
                          <Input placeholder={backendConfig?.hasWhatsAppInstance ? "Instance Active" : "Green-API Instance ID"}
@@ -541,7 +547,10 @@ export default function SettingsPage() {
                       </div>
                       <div className="space-y-3 md:col-span-2">
                          <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
-                            WhatsApp API Token
+                             <span className="flex items-center gap-1">
+                                WhatsApp API Token
+                                <HelpTooltip content="Salin 'API Token' dari konsol Green-API Anda untuk otentikasi pengiriman pesan WhatsApp." />
+                             </span>
                             {backendConfig?.hasWhatsAppToken && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
                          </Label>
                          <Input type="password" placeholder={backendConfig?.hasWhatsAppToken ? "••••••••••••••••" : "Green-API Token"}
