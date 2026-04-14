@@ -9,83 +9,55 @@
   <br />
   <br />
 
-  <h1>Neuradash</h1>
-  <p><b>Enterprise AI Analytics & Strategic BI Platform</b></p>
-  <p>A high-performance "Data Operating System" designed to bridge the gap between fragmented data silos and actionable strategic intelligence through autonomous AI and resilient engineering.</p>
+  <h1>Neuradash v2.0</h1>
+  <p><b>Autonomous Intelligence & Strategic BI Engine</b></p>
+  <p>A high-performance "Data Operating System" that transforms fragmented silos into a self-healing, causal-aware intelligence ecosystem.</p>
 </div>
 
 ---
 
 ## 🏛️ Project Vision
-**Neuradash** is not just another dashboarding tool; it is an end-to-end analytical ecosystem. It handles the entire data lifecycle—from visual-node **ETL pipelines** and **automated data profiling** to **Natural Language to SQL (NL2SQL)** conversion and autonomous **Agentic Dashboard Generation**. 
-
-Designed for high-reliability environments, Neuradash features unique **resource-aware processing** and **atomic persistence** to ensure zero downtime during massive data migrations.
+**Neuradash v2.0** represents the pinnacle of autonomous BI. It is no longer just a visualization tool; it is a **Sentient Analytics Layer**. By combining visual-node **ETL pipelines**, **autonomous forensic investigation**, and **multi-channel active alerting**, Neuradash closes the loop between data anomaly and executive action.
 
 ---
 
-## 🔥 Key Innovations & Features
+## 🔥 Key Innovations & Features (v2.0)
 
-### 🤖 Next-Gen AI Analytics
-- **Agentic AI Dashboard Builder (✨ Vercel v0 Style)**: Construct entire BI dashboards from raw natural language instructions. The AI autonomously plans the architecture, executes optimized SQL, and generates a responsive **12-column grid layout** live via **SSE Streaming**.
-- **AI SQL Rewriting Engine (S++ Precision)**: A proprietary normalization layer that intercept AI-generated SQL and automatically maps logical dataset names to their underlying physical PostgreSQL tables (`ds_uuid`). This ensures **100% query accuracy** and eliminates "relation does not exist" errors caused by AI hallucination.
-- **Ask Data (Advanced NL2SQL)**: Chat with your database. Our optimized inference engine resolves complex queries and recommends the best-fit visualizations (Bar, Line, Pie, Radar, or Tables) instantly.
-- **5 Expert AI Personas**: The system intelligently switches between specialized agents: *Data Visualization Architect*, *Predictive Analyst*, *Financial Risk Expert*, *Anomaly Detection Specialist*, and *NLP Sentiment Analyst*.
-- **Async BI Migration Engine**: Convert legacy enterprise assets (**Power BI `.pbix`**, **Tableau `.twbx`**, **PowerPoint `.pptx`**) into functional Neuradash templates asynchronously in the background.
-- **AI-Powered Resilience (Checkpoint & Resume)**: Atomic persistence mechanism that saves migration progress at every step. If infrastructure failures occur, users can resume complex AI tasks with a single click from the last successful checkpoint.
+### 🤖 Autonomous Intelligence (S++ Grade)
+- **Autonomous Causal Investigation**: Beyond reporting "what" happened, Neuradash triggers deep-dive forensic agents on every KPI breach to identify the "why" through automated cross-dataset reasoning.
+- **Semantic Join Intuition**: Advanced AI logic that autonomously discovers relationships between datasets. It prioritizes **Unique Identifiers** (SKU, Resi, Order ID, Code) to ensure 100% data integrity during multi-source synthesis.
+- **Agentic Dashboard Builder**: Construct entire BI dashboards from raw natural language. The AI plans architecture, executes optimized SQL, and streams responsive layouts live via SSE.
 
-### 🛠️ Robust Data Engineering
-- **Visual ETL & Node-Based Pipelines**: Drag-and-drop interface for building complex Extract, Transform, Load (ETL) workflows without writing code.
-- **Dynamic Resource-Aware Chunking**: Real-time RAM and CPU monitoring on the backend. The system dynamically adjusts batch sizes to prevent **Out-of-Memory (OOM)** crashes, ensuring stability even on limited infrastructure (e.g., Render Free Tier).
-- **Proactive Data Profiling**: Instantly extract deep insights from raw datasets, including null distributions, categorical grouping, and statistical min/max/average metrics.
-- **Enterprise Connectivity**: Native support for **PostgreSQL**, **MySQL**, **SQL Server**, **Snowflake**, and **BigQuery** with secure read-only SQL execution and schema-introspection.
+### 🛡️ Resilience & Security (Pillar 5 Hardening)
+- **Self-Healing Data Sentinel**: Proactive monitoring for **Schema Drift**. If underlying database structures change, the sentinel automatically alerts the team and provides a drift-analysis report.
+- **Prescriptive Action Safeguards**: AI-suggested actions (Webhooks/SAP/Odoo) are passed through a strict **S++ Validation Layer** to prevent malformed payloads or malicious script injections.
+- **Adaptive Rate-Limiting**: Intelligent cooldown mechanisms (Sliding-Window) for AI investigations to protect infrastructure from runaway costs and processing loops.
 
-### 📊 Professional Visualization
-- **12-Column Responsive Matrix**: A high-fidelity dashboard canvas supporting drag-and-drop interactions, resizing, and intelligent grid snapping.
-- **High-Performance Geospatial Mapping**: Powered by **MapLibre** and **Deck.gl** for rendering millions of spatial data points with interactive regional performance tracking.
-- **Interactive Drill-Downs & Cross-Filtering**: Slice and dice data with ease. Selecting a segment in one chart automatically filters all related visualizations using state-synchronized context.
-- **Executive KPI Scorecards**: Real-time tracking of critical business metrics with benchmarking and comparative period analysis.
+### 📡 Active Alerting & Foresight
+- **Multi-Channel Dispatcher**: Autonomous reports are delivered directly to **Telegram**, **WhatsApp**, and **Enterprise Email** (Rich HTML templates).
+- **Live Forensic Widget**: A real-time dashboard feed displaying active AI investigations, causal findings, and prescriptive recommendations as they happen.
+- **Drift Intelligence Banner**: Persistent top-tier UI alert system for mission-critical infrastructure status and schema integrity warnings.
 
-### 🔐 Governance & Security
-- **Strict Row-Level Security (RLS)**: Fine-grained access control policies ensuring multi-tenant isolation and PII protection at the database layer.
-- **Secure Embed & Share**: Generate signed URLs and secure Iframes for internal portals or public presentations with preloaded metadata support.
-- **Audit-Ready Logs**: Comprehensive tracking of query execution, data access, and metadata changes.
+### 📊 Robust Data Engineering
+- **Visual ETL Nodes**: Drag-and-drop pipelines with checkpoint-and-resume capabilities for massive data migrations.
+- **Resource-Aware Processing**: Dynamic batch adjustment based on real-time backend CPU/RAM metrics to prevent OOM crashes on any infrastructure.
+- **Enterprise Connectivity**: Native read-only support for PostgreSQL, MySQL, SQL Server, Snowflake, and BigQuery.
 
 ---
 
-## 💻 Tech Stack (Grade S++)
+## 💻 Tech Stack
 
 ### **Frontend Architecture**
 - **Core**: React 18 + TypeScript + Vite.
-- **Styling**: Tailwind CSS + Shadcn UI (Radix Primitives).
-- **State Management**: **Zustand** (Global UI) + **TanStack Query** (Server-state caching & deduplication).
-- **Graphics Engine**: Apache ECharts, Recharts, Deck.gl, Framer Motion.
-- **Canvas**: React Grid Layout + @hello-pangea/dnd.
+- **UI Architecture**: Tailwind CSS + Shadcn UI + **Framer Motion** (Staggered Entrance).
+- **State & Real-time**: **Zustand** + **TanStack Query** + **WebSocket WSS** (Investigation streams).
+- **Graphics**: Apache ECharts, Recharts, Deck.gl.
 
 ### **Backend Infrastructure**
-- **Language**: **Go 1.22** (Concurrency-optimized).
-- **Framework**: Fiber v2 (Enterprise API Engine).
-- **Persistence**: GORM + PostgreSQL 16 (Stateless architecture).
-- **Real-time**: Redis 7 + WebSocket Hubs for live dashboard synchronization.
-- **AI Core**: Native LLM bridging with specialized prompt-refining logic.
-
----
-
-## 📐 System Architecture
-
-```mermaid
-graph TD
-    User((User)) -->|HTTPS/WSS| FE[React + Vite Frontend]
-    FE -->|JSON/SSE| BE[Go Fiber Engine]
-    BE -->|SQL/Auth| DB[(PostgreSQL / Supabase)]
-    BE -->|State/Cache| Redis[(Redis 7)]
-    BE -->|Inference| LLM[LLM / OpenAI]
-    
-    subgraph "Resilient Data Layer"
-        ETL[ETL Node Engine] -->|Atomic Checkpoint| BE
-        BE -->|Connector| Remote[(External Warehouses)]
-        BE -->|Storage| S3[(S3 Compatible Storage)]
-    end
-```
+- **Language**: **Go 1.22** (Concurrency-first).
+- **Core Engine**: Fiber v2 + GORM + PostgreSQL 16.
+- **Automation**: Cron-based Sentinel Jobs + Redis Pub/Sub for cross-node event broadcasting.
+- **AI Integration**: Multi-agent orchestration with proprietary prompt-refining logic (Unique Key Focus).
 
 ---
 
@@ -93,50 +65,37 @@ graph TD
 
 ```text
 .
-├── src/                   # Frontend: React 18 UI & State
-│   ├── components/        # Shadcn UI, Recharts, Geo-viz
-│   ├── pages/             # 40+ Features (AI Builder, ETL, Data Stories)
-│   └── lib/               # Shared logic & Client initializers
-├── neuradash-backend/      # Backend: Go 1.22 Concurrent Core
-│   ├── internal/          # Business logic (Planning, Parsing, OOM Guard)
-│   ├── cmd/server/        # Entrypoint
-│   └── docker-compose.yml # Dev infrastructure (DB, Redis, MinIO)
-├── package.json           # Frontend dependencies
-└── README.md              # Project documentation
+├── src/                    # Frontend: React 18 UI & State
+│   ├── components/         # AnomalyForensics, DriftSentinel, UI Primitives
+│   ├── components/realtime # WebSocket handlers & Toast listeners
+│   └── pages/              # AI Dashboard Builder, ETL, Data Stories
+├── neuradash-backend/       # Backend: Go 1.22 Autonomous Core
+│   ├── internal/services/  # AI Synthesis, Notification, Integration Service
+│   ├── internal/handlers/  # Cron (Alert/Sentinel), AI, Dataset Handlers
+│   └── cmd/server/         # Enterprise Entrypoint
 ```
 
 ---
 
 ## ⚙️ Quick Start
 
-### Prerequisites
-- Node.js (v18+)
-- Go (v1.22+)
-- Docker (for local infrastructure)
-
 ### Installation
-1. **Clone the Repo**:
+1. **Clone & Enter**:
    ```bash
    git clone https://github.com/yogisyahroni/TOOLS_BI.git
    cd TOOLS_BI
    ```
-2. **Setup Infrastructure**:
+2. **Infrastructure**:
    ```bash
-   docker-compose up -d
+   docker-compose up -d  # Spins up DB, Redis, MinIO
    ```
-3. **Environment Configuration**:
-   - Create `.env` in root for Frontend (VITE_SUPABASE_URL, etc.).
-   - Create `.env` in `neuradash-backend/` for Backend.
-4. **Launch Application**:
+3. **Launch**:
    - Backend: `cd neuradash-backend && go run ./cmd/server/`
    - Frontend: `npm install && npm run dev`
 
 ---
 
 ## 📩 Purpose & Capabilities
-This project serves as a showcase of high-end **Full-stack Technical Architecture**, **Data Engineering at scale**, and **AI Product Integration**. It is built with a focus on:
-- **Resilience**: Handling massive data without crashes.
-- **Velocity**: Accelerating speed-to-insight by 10x via AI.
-- **Aesthetics**: Premium UI/UX that meets 2024 enterprise standards.
+Neuradash serves as a showcase of **High-End Full-stack Technical Architecture** and **Autonomous AI Integration**.
 
 **Built for the next generation of data-driven enterprises.**
