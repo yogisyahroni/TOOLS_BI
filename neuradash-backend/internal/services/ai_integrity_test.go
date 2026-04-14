@@ -24,7 +24,7 @@ func TestAIService_AnalyzeAnomaly_RateLimiting(t *testing.T) {
 	// Note: NewAIService usually requires full deps, we might need a test constructor
 	// or just manually initialize the struct fields that matter.
 	
-	svc := services.NewAIService("fake-key", true, nil, nil, nil, nil)
+	svc := services.NewAIService("fake-key", true, nil, nil, nil, nil, "")
 	
 	// Test first call: Should proceed (fail on OpenAI call, but past rate limit)
 	_, err := svc.AnalyzeAnomaly(context.Background(), dsID, "Something is wrong")

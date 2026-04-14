@@ -208,7 +208,6 @@ func main() {
 	alertH := handlers.NewAlertHandler(db)
 	alertH.SetService(dataAlertSvc)
 	cronH := handlers.NewCronHandler(db, hub, aiSvc, datasetSvc)
-	encKey := cfg.Encryption.DBConnKey // reuse existing server-side encryption secret
 	aiH := handlers.NewAIHandler(db, cfg.AI, encKey, aiSvc, datasetSvc)
 	settingsH := handlers.NewSettingsHandler(db, encKey, notificationSvc)
 	wsH := handlers.NewWSHandler(hub)
