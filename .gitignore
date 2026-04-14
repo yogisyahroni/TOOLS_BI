@@ -72,4 +72,5 @@ test.csv
 *.pid
 *.seed
 *.pid.lock
-.webhook_uuid.txt
+.webhook_uuid.txttask.md 
+rules.md 
