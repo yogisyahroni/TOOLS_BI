@@ -11,7 +11,8 @@ type DataAlert struct {
 	DatasetID     string     `json:"datasetId" gorm:"type:uuid;not null;index"`
 	Name          string     `json:"name" gorm:"not null"`
 	ColumnName    string     `json:"columnName" gorm:"size:100;not null"`
-	Condition     string     `json:"condition" gorm:"not null"` // gt,lt,gte,lte,eq,neq
+	Aggregation   string     `json:"aggregation" gorm:"size:50;default:'AVG'"` // COUNT, AVG, SUM, MIN, MAX
+	Condition     string     `json:"condition" gorm:"not null"`                // gt,lt,gte,lte,eq,neq
 	Threshold     float64    `json:"threshold" gorm:"not null"`
 	Enabled       bool       `json:"enabled" gorm:"default:true"`
 	Triggered     bool       `json:"triggered" gorm:"default:false"`

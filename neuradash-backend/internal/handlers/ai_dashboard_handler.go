@@ -63,7 +63,7 @@ func (h *AIHandler) StreamGenerateAIDashboard(c *fiber.Ctx) error {
 		w.Flush()
 
 		var jsonBuf strings.Builder
-		err := h.streamOpenAI(cfg, prompt, func(eventType, token string) {
+		err := h.streamOpenAI(cfg, prompt, userID, func(eventType, token string) {
 			if eventType == "message" {
 				jsonBuf.WriteString(token)
 				// We don't stream raw JSON tokens to UI to prevent messy UI updates, 

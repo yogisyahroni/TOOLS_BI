@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"neuradash/internal/middleware"
 	"neuradash/internal/models"
 	"neuradash/internal/realtime"
+	"neuradash/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -16,10 +18,11 @@ import (
 
 // CronHandler manages scheduled job operations.
 type CronHandler struct {
-	db  *gorm.DB
-	hub *realtime.Hub
+	db    *gorm.DB
+	hub   *realtime.Hub
+	aiSvc *services.AIService
+	dsSvc *services.DatasetService
 	// jobQueue is a buffered channel for async job execution requests.
-	// Prevents TriggerCronJob from blocking HTTP handlers.
 	jobQueue chan jobExecRequest
 }
 
@@ -29,11 +32,13 @@ type jobExecRequest struct {
 }
 
 // NewCronHandler creates a new CronHandler and starts the background job executor.
-func NewCronHandler(db *gorm.DB, hub *realtime.Hub) *CronHandler {
+func NewCronHandler(db *gorm.DB, hub *realtime.Hub, aiSvc *services.AIService, dsSvc *services.DatasetService) *CronHandler {
 	h := &CronHandler{
 		db:       db,
 		hub:      hub,
-		jobQueue: make(chan jobExecRequest, 50), // buffer 50 concurrent triggers
+		aiSvc:    aiSvc,
+		dsSvc:    dsSvc,
+		jobQueue: make(chan jobExecRequest, 50),
 	}
 	// PERF-09 fix: start background executor goroutine
 	go h.runJobExecutor()
@@ -70,6 +75,8 @@ func (h *CronHandler) executeJob(req jobExecRequest) {
 	switch job.Type {
 	case "alert_check":
 		execErr = h.execAlertCheck(job)
+	case "data_validation":
+		execErr = h.execDataValidation(job)
 	case "data_refresh":
 		execErr = h.execDataRefresh(job)
 	case "kpi_snapshot":
@@ -107,13 +114,101 @@ func (h *CronHandler) executeJob(req jobExecRequest) {
 }
 
 // execAlertCheck evaluates all active alerts for the job's target dataset.
+// If tripped, it triggers an autonomous AI investigation.
 func (h *CronHandler) execAlertCheck(job models.CronJob) error {
 	var alerts []models.DataAlert
 	q := h.db.Where("user_id = ? AND enabled = true", job.UserID)
 	if job.TargetID != "" {
 		q = q.Where("dataset_id = ?", job.TargetID)
 	}
-	return q.Find(&alerts).Error
+	if err := q.Find(&alerts).Error; err != nil {
+		return err
+	}
+
+	for _, alert := range alerts {
+		// 1. Get current value for alert
+		var dataset models.Dataset
+		if err := h.db.Where("id = ?", alert.DatasetID).First(&dataset).Error; err != nil {
+			continue
+		}
+
+		// Calculate aggregate value based on alert setting
+		agg := alert.Aggregation
+		if agg == "" {
+			agg = "AVG" // safe fallback
+		}
+		query := fmt.Sprintf("SELECT %s(%s) as val FROM %s", agg, alert.ColumnName, dataset.DataTableName)
+		var result struct{ Val float64 }
+		if err := h.db.Raw(query).Scan(&result).Error; err != nil {
+			continue
+		}
+
+		// 2. Check threshold
+		isTripped := false
+		switch alert.Condition {
+		case "gt":
+			isTripped = result.Val > alert.Threshold
+		case "lt":
+			isTripped = result.Val < alert.Threshold
+		case "gte":
+			isTripped = result.Val >= alert.Threshold
+		case "lte":
+			isTripped = result.Val <= alert.Threshold
+		case "eq":
+			isTripped = result.Val == alert.Threshold
+		case "neq":
+			isTripped = result.Val != alert.Threshold
+		}
+
+		if isTripped {
+			// Phase 4: Broadcast real-time breach to frontend
+			h.hub.Broadcast("kpi_alert_tripped", map[string]any{
+				"alertId":    alert.ID,
+				"alertName":  alert.Name,
+				"datasetId":  alert.DatasetID,
+				"columnName": alert.ColumnName,
+				"value":      result.Val,
+				"threshold":  alert.Threshold,
+				"timestamp":  time.Now(),
+			})
+
+			// Trigger investigation in background (limit to one per hour per alert to save tokens)
+			go func(a models.DataAlert, val float64) {
+				anomalyDesc := fmt.Sprintf("Threshold breached for alert '%s'. Column: %s, Threshold: %v, Actual: %v", a.Name, a.ColumnName, a.Threshold, val)
+				h.aiSvc.AnalyzeAnomaly(context.Background(), a.DatasetID, anomalyDesc)
+			}(alert, result.Val)
+		}
+	}
+
+	return nil
+}
+
+// execDataValidation performs schema validation to detect and report drift.
+func (h *CronHandler) execDataValidation(job models.CronJob) error {
+	if job.TargetID == "" {
+		return fmt.Errorf("targetId required for data_validation job")
+	}
+
+	drift, _, err := h.dsSvc.CheckSchemaDrift(context.Background(), job.TargetID, job.UserID)
+	if err != nil {
+		return err
+	}
+
+	if drift != "" {
+		// Phase 4: Broadcast real-time drift discovery
+		h.hub.Broadcast("schema_drift_detected", map[string]any{
+			"datasetId":  job.TargetID,
+			"report":     drift,
+			"isCritical": true,
+			"timestamp":  time.Now(),
+		})
+
+		// Send drift alert via notification targets
+		// Boolean 'isCritical' can be used later to escalate alerts
+		h.aiSvc.SendDriftAlert(context.Background(), job.TargetID, drift)
+	}
+
+	return nil
 }
 
 // execDataRefresh records a timestamp refresh for the target dataset.
@@ -179,6 +274,7 @@ func (h *CronHandler) CreateCronJob(c *fiber.Ctx) error {
 
 	validTypes := map[string]bool{
 		"data_refresh": true, "report_gen": true, "alert_check": true,
+		"data_validation": true,
 		"etl_run": true, "export_send": true, "kpi_snapshot": true,
 	}
 	if !validTypes[req.Type] {

@@ -69,9 +69,12 @@ const SystemPromptDataAnalyst = `You are an expert data analyst combining the fo
 - Scrutinize the data for outliers, extremely high/low variance, or mathematically improbable spikes/drops.
 - Alert the user to possible anomalies or data integrity issues (suspicious patterns).
 
-### As a Sentiment & NLP Analyst
-- For text-heavy datasets (e.g., reviews, logs, descriptions), deduce over-arching sentiment (positive/negative/neutral).
 - Group text feedback into overarching themes or recurring topics automatically.
++
++### As an Autonomous Systems Architect (S++)
++- You proactively identify when an investigation requires more data than currently shown.
++- You utilize given "Tools" (investigate_anomaly, execute_workflow_action, validate_data_integrity) when the user's intent implies action or deep diagnostic needs.
++- You have "Cross-Dataset Join Intuition": you scan the full workspace metadata to suggest joining disparate datasets (e.g., Sales + Marketing) if they share logical keys.
 
 ## Critical Anti-Hallucination Rules
 
@@ -141,7 +144,13 @@ func BuildReportPrompt(schema, tableName string, sampleData string, columnValues
 		base = userPrompt
 	}
 
+	globalCtxSection := ""
+	if len(lang) > 1 && lang[1] != "" {
+		globalCtxSection = "\n### GLOBAL WORKSPACE CONTEXT (Cross-Dataset Awareness)\n" + lang[1] + "\n"
+	}
+
 	return SystemPromptDataAnalyst + `
+` + globalCtxSection + `
 
 ---
 
@@ -211,7 +220,7 @@ If data is insufficient for a claim, explicitly say "insufficient data to determ
 // BuildAskDataPrompt constructs the full prompt for NL→SQL (Ask Data).
 // It prioritizes SQL accuracy and schema fidelity.
 // ─────────────────────────────────────────────────────────────────────────────
-func BuildAskDataPrompt(tableName, schema, sampleData, columnValues, question string) string {
+func BuildAskDataPrompt(tableName, schema, sampleData, columnValues, question, globalContext string) string {
 	return SystemPromptDataAnalyst + `
 
 ---
@@ -231,6 +240,9 @@ Available Columns (use ONLY these):
 
 ### User Question
 "` + question + `"
+
+### GLOBAL WORKSPACE CONTEXT (Use for suggesting Auto-Joins)
+` + globalContext + `
 
 ---
 
@@ -448,4 +460,30 @@ For each chart, you must provide the precise PostgreSQL query needed to fetch it
 
 func formatInt(n int) string {
 	return fmt.Sprintf("%d", n)
+}
+
+// BuildSQLSelfHealPrompt constructs a prompt to correct a failed SQL query.
+func BuildSQLSelfHealPrompt(tableName, schema, originalPrompt, failedSQL, errorMessage, globalContext string) string {
+	return fmt.Sprintf(`### ROLE: S++ SQL RECOVERY ENGINE
+### WORKSPACE AWARENESS
+%s
+
+### SCHEMA CONTEXT (TARGET TABLE)
+Table: %s
+Schema:
+%s
+
+### FAILURE DIAGNOSIS
+Original Intent: %s
+Attempted SQL: %s
+Database Error: %s
+
+### OBJECTIVE
+Your previous SQL query failed. Analyze the error carefully against the schema and provide a CORRECTED, syntactically perfect SQL query.
+If the error was 'column not found', verify the exact column names in the schema.
+If the error suggests data is in another table, use the Workspace Awareness to perform a JOIN.
+
+### OUTPUT FORMAT
+Provide ONLY the corrected SQL query inside a markdown block.
+`, globalContext, tableName, schema, originalPrompt, failedSQL, errorMessage)
 }

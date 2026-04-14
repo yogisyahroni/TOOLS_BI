@@ -183,8 +183,13 @@ func main() {
 	dashboardSvc := services.NewDashboardService(dashboardRepo)
 	chartSvc := services.NewChartService(chartRepo)
 	dataAlertSvc := services.NewDataAlertService(dataAlertRepo)
+	
+	// Pillar Services
+	notificationSvc := services.NewNotificationService(mailer)
+	integrationSvc := services.NewIntegrationService()
+	aiSvc := services.NewAIService(cfg.AI.APIKey, true, db, hub, integrationSvc, notificationSvc)
 
-	log.Info().Msg("Service layer initialised")
+	log.Info().Msg("Autonomous Intelligence Pillar services initialised")
 
 	// --- Phase 31: Circuit Breaker ---
 	// One CB guards the entire API surface. Trips after 5 consecutive 5xx.
@@ -201,9 +206,9 @@ func main() {
 	kpiH := handlers.NewKPIHandler(db)
 	alertH := handlers.NewAlertHandler(db)
 	alertH.SetService(dataAlertSvc)
-	cronH := handlers.NewCronHandler(db, hub)
+	cronH := handlers.NewCronHandler(db, hub, aiSvc, datasetSvc)
 	encKey := cfg.Encryption.DBConnKey // reuse existing server-side encryption secret
-	aiH := handlers.NewAIHandler(db, cfg.AI, encKey)
+	aiH := handlers.NewAIHandler(db, cfg.AI, encKey, aiSvc, datasetSvc)
 	settingsH := handlers.NewSettingsHandler(db, encKey)
 	wsH := handlers.NewWSHandler(hub)
 	chartH := handlers.NewChartHandler(db, hub)

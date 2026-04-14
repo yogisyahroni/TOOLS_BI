@@ -12,6 +12,7 @@ import { lazy, Suspense } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { RealtimeNotificationHandler } from "@/components/realtime/RealtimeNotificationHandler";
 
 // ─── Page Skeleton Loader ─────────────────────────────────────────────────────
 function PageFallback() {
@@ -151,6 +152,7 @@ const App = () => (
     <ThemeProvider defaultTheme="system" enableSystem attribute="class">
       <AuthProvider>
         <TooltipProvider>
+          <RealtimeNotificationHandler />
           <Toaster />
           <Sonner />
           <BrowserRouter>

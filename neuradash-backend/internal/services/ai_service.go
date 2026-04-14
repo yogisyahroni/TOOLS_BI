@@ -2,12 +2,18 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
+	"neuradash/internal/models"
+	"neuradash/internal/realtime"
+
 	"github.com/sashabaranov/go-openai"
+	"gorm.io/gorm"
 )
 
 // AIService handles AI-powered NL2SQL generation with security safeguards
@@ -17,15 +23,28 @@ type AIService struct {
 	provider string
 	// Security: query allowlist untuk critical operations
 	allowedReadOnly bool // default true, set false untuk admin
+
+	// Pillar Dependencies
+	integrationSvc   *IntegrationService
+	notificationSvc  *NotificationService
+	db               *gorm.DB
+	hub              *realtime.Hub
+	mu               sync.RWMutex
+	analysisCooldown map[string]time.Time // datasetID -> lastTime
 }
 
 // NewAIService creates a new AI service dengan security defaults
-func NewAIService(apiKey string, readOnly bool) *AIService {
+func NewAIService(apiKey string, readOnly bool, db *gorm.DB, hub *realtime.Hub, intSvc *IntegrationService, notifSvc *NotificationService) *AIService {
 	return &AIService{
-		client:          openai.NewClient(apiKey),
-		model:           openai.GPT4TurboPreview,
-		provider:        "openai",
-		allowedReadOnly: readOnly, // true = hanya SELECT allowed
+		client:           openai.NewClient(apiKey),
+		model:            openai.GPT4TurboPreview,
+		provider:         "openai",
+		allowedReadOnly:  readOnly,
+		db:               db,
+		hub:              hub,
+		integrationSvc:   intSvc,
+		notificationSvc:  notifSvc,
+		analysisCooldown: make(map[string]time.Time),
 	}
 }
 
@@ -476,8 +495,12 @@ func (s *AIService) getSystemPrompt() string {
 3. Use parameterized queries with ? placeholders
 4. Always include reasonable LIMIT clauses (max 10000 rows)
 5. Prefer explicit column names over SELECT *
-6. Add comments explaining complex logic
-7. If unsure, return safe fallback query`
+6. **SEMANTIC JOIN INTEGRITY**: 
+   - Prioritize UNIQUE IDENTIFIERS for joins (e.g., ID, SKU, Resi, Order_ID, Ref_No, Code).
+   - Join exactly matching columns (e.g., table1.SKU = table2.SKU).
+   - NEVER join on generic columns like 'status', 'date', or 'type' unless primary unique keys match first.
+7. Add comments explaining complex logic
+8. If unsure, return safe fallback query`
 }
 
 func (s *AIService) buildSecurePrompt(question string, schema Schema) string {
@@ -703,3 +726,211 @@ type StreamEvent struct {
 	IsSafe           bool     `json:"is_safe,omitempty"`
 	Warnings         []string `json:"warnings,omitempty"`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S++ Pillar 2: Causal Analysis Logic
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (s *AIService) AnalyzeAnomaly(ctx context.Context, datasetID, anomalyDescription string) (string, error) {
+	// Phase 5: Rate Limiting (1 per hour per dataset)
+	s.mu.Lock()
+	last, exists := s.analysisCooldown[datasetID]
+	if exists && time.Since(last) < 1*time.Hour {
+		s.mu.Unlock()
+		return "Rate limited: analysis recently performed for this dataset", nil
+	}
+	s.analysisCooldown[datasetID] = time.Now()
+	s.mu.Unlock()
+
+	// 1. Fetch dataset metadata for forensic context
+	var ds models.Dataset
+	if err := s.db.WithContext(ctx).Where("id = ?", datasetID).First(&ds).Error; err != nil {
+		return "", fmt.Errorf("dataset not found for anomaly analysis: %w", err)
+	}
+
+	analysisPrompt := fmt.Sprintf(`PERFORM DEEP FORENSIC CAUSAL ANALYSIS
+Anomaly Description: %s
+Physical Table: %s
+Dataset Name: %s
+
+Available Columns & Types:
+%s
+
+Your Goal:
+1. Identify the most likely root cause based on schema relationships.
+2. Suggest 2-3 FORENSIC SQL queries that would prove the hypothesis (e.g., checking for null spikes, variance shifts, or specific value correlations).
+3. Draft a resolution plan.
+`, anomalyDescription, ds.DataTableName, ds.Name, string(ds.Columns))
+
+	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: s.model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleSystem, Content: "You are an expert Forensic Data Scientist. You excel at finding root causes in complex data schemas. You always provide verifiable SQL hypotheses."},
+			{Role: openai.ChatMessageRoleUser, Content: analysisPrompt},
+		},
+		Temperature: 0.2,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	analysisResult := resp.Choices[0].Message.Content
+
+	// Broadcast to all active users via WebSocket (Phase 4: Frontend Integration)
+	s.hub.Broadcast("investigation_completed", map[string]any{
+		"datasetId":          datasetID,
+		"datasetName":        ds.Name,
+		"anomalyDescription": anomalyDescription,
+		"analysisResult":     analysisResult,
+		"timestamp":          time.Now(),
+	})
+
+	// Send notification about the completed investigation
+	s.notificationSvc.SendTelegram(ctx, "", fmt.Sprintf("🚨 *Anomaly Investigation Complete*\n\n*Anomaly:* %s\n\n*Forensic Discovery:* %s", anomalyDescription, analysisResult))
+
+	return analysisResult, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S++ Pillar 3: Prescriptive Workflow Logic
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (s *AIService) ExecutePrescriptiveAction(ctx context.Context, connectorID string, actionData map[string]interface{}) (interface{}, error) {
+	// Phase 5: Security Hardening - Validate AI-generated payload
+	if err := s.validateActionData(actionData); err != nil {
+		return nil, fmt.Errorf("action data validation failed: %w", err)
+	}
+
+	var connector models.IntegrationConnector
+	if err := s.db.Where("id = ?", connectorID).First(&connector).Error; err != nil {
+		return nil, fmt.Errorf("connector not found: %w", err)
+	}
+
+	result, err := s.integrationSvc.ExecuteConnector(ctx, connector, actionData)
+	if err != nil {
+		s.notificationSvc.SendTelegram(ctx, "", fmt.Sprintf("❌ *Action Failed*\nConnector: %s\nError: %s", connector.Name, err.Error()))
+		return nil, err
+	}
+
+	s.notificationSvc.SendEmail(ctx, "billing@neuradash.com", "Prescriptive Action Executed", fmt.Sprintf("Action successfully dispatched to %s.\nData: %v", connector.Name, actionData))
+	
+	return result, nil
+}
+
+// validateActionData ensures AI payloads don't contain forbidden patterns or risky types.
+func (s *AIService) validateActionData(data map[string]interface{}) error {
+	for k, v := range data {
+		// Key validation: prevent header injection if keys were to be used as headers
+		if len(k) > 64 || strings.ContainsAny(k, "\r\n:") {
+			return fmt.Errorf("invalid key name: %s", k)
+		}
+
+		// Value validation: basic sanitization for string types
+		if str, ok := v.(string); ok {
+			if len(str) > 2000 {
+				return fmt.Errorf("value for key %s exceeds safety limits", k)
+			}
+			// Check for obvious script injection attempts
+			lower := strings.ToLower(str)
+			if strings.Contains(lower, "<script") || strings.Contains(lower, "javascript:") {
+				return fmt.Errorf("potentially malicious script detected in action value")
+			}
+		}
+	}
+	return nil
+}
+
+// SynthesizeMultiDatasetInsights performs cross-dataset reasoning.
+func (s *AIService) SynthesizeMultiDatasetInsights(ctx context.Context, userID string, datasetIDs []string, query string) (string, error) {
+	globalContext, err := s.BuildGlobalSchemaContext(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	analysisPrompt := fmt.Sprintf(`### GLOBAL WORKSPACE CONTEXT
+%s
+
+### User Request
+%s
+
+Goal: Synthesize insights across these DIFFERENT data sources. Find hidden correlations or cross-functional dependencies that a single-dataset analysis would miss.
+`, globalContext, query)
+
+	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: s.model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleSystem, Content: "You are an Elite Cross-Functional Data Architect. Your specialty is finding patterns between disconnected business silos (e.g., Marketing vs Ops vs Finance)."},
+			{Role: openai.ChatMessageRoleUser, Content: analysisPrompt},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return resp.Choices[0].Message.Content, nil
+}
+
+// BuildGlobalSchemaContext constructs a metadata summary of all datasets owned by a user.
+func (s *AIService) BuildGlobalSchemaContext(ctx context.Context, userID string) (string, error) {
+	var datasets []models.Dataset
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Find(&datasets).Error; err != nil {
+		return "", err
+	}
+
+	if len(datasets) == 0 {
+		return "No additional datasets available in workspace.", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Available Datasets in Workspace (for Multi-Dataset Synthesis):\n")
+	for _, ds := range datasets {
+		sb.WriteString(fmt.Sprintf("- Table: %s (Context: %s)\n", ds.DataTableName, ds.Name))
+		
+		var cols []models.ColumnDef
+		if err := json.Unmarshal(ds.Columns, &cols); err == nil {
+			sb.WriteString("  Columns: ")
+			for i, col := range cols {
+				// Phase 5: Flag unique identifiers for AI join intuition
+				lowerName := strings.ToLower(col.Name)
+				isUnique := strings.Contains(lowerName, "id") || 
+							strings.Contains(lowerName, "sku") || 
+							strings.Contains(lowerName, "resi") || 
+							strings.Contains(lowerName, "ref") || 
+							strings.Contains(lowerName, "code")
+				
+				if isUnique {
+					sb.WriteString(fmt.Sprintf("%s [UNIQUE KEY]", col.Name))
+				} else {
+					sb.WriteString(col.Name)
+				}
+				
+				if i < len(cols)-1 {
+					sb.WriteString(", ")
+				}
+			}
+			sb.WriteString("\n")
+		}
+	}
+	sb.WriteString("\nInstruction: If the user's request requires data not in the active dataset, refer to these workspace tables and suggest an 'Auto-Join' if appropriate.")
+
+	return sb.String(), nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S++ Pillar 4: Autonomous Data Integrity (Self-Healing)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// SendNotification sends a standard S++ system alert.
+func (s *AIService) SendNotification(ctx context.Context, userID, subject, msg string) {
+	// For now, we simulate sending to default system targets (Telegram/Email)
+	// In production, we would fetch user-specific notification preferences.
+	fullMsg := fmt.Sprintf("🤖 *S++ Intelligence System Alert*\n\n*Subject:* %s\n*Event:* %s\n\n_System operates at Grade S++ efficiency._", subject, msg)
+	_ = s.notificationSvc.SendTelegram(ctx, "", fullMsg)
+}
+
+// SendDriftAlert sends a specialized alert when schema drift is detected.
+func (s *AIService) SendDriftAlert(ctx context.Context, datasetName, driftReport string) {
+	fullMsg := fmt.Sprintf("🚨 *CRITICAL: SCHEMA DRIFT DETECTED*\n\n*Dataset:* %s\n\n*Forensic Analysis:*\n%s\n\n⚠️ Dashboard widgets may fail. Please re-sync metadata.", datasetName, driftReport)
+	_ = s.notificationSvc.SendTelegram(ctx, "", fullMsg)
+}
+

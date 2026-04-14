@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -175,6 +176,82 @@ func (s *DatasetService) GetDatasetContext(ctx context.Context, id, userID strin
 	}
 
 	return tableName, schemaStr, sampleData, true
+}
+
+// CheckSchemaDrift compares stored metadata with the physical database structure.
+func (s *DatasetService) CheckSchemaDrift(ctx context.Context, id, userID string) (string, bool, error) {
+	ds, err := s.repo.GetByID(ctx, id, userID)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Only check for local tables (not external which might have transient structural change)
+	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
+		return "Skipping drift check for external connection.", false, nil
+	}
+
+	var physicalCols []struct {
+		ColumnName string `gorm:"column:column_name"`
+		DataType   string `gorm:"column:data_type"`
+	}
+
+	// PostgreSQL-specific schema query
+	query := `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = ? ORDER BY ordinal_position`
+	if err := s.db.WithContext(ctx).Raw(query, ds.DataTableName).Scan(&physicalCols).Error; err != nil {
+		return "", false, fmt.Errorf("failed to fetch physical schema: %w", err)
+	}
+
+	if len(physicalCols) == 0 {
+		return "Table not found in physical database.", true, nil // Major drift: Table missing
+	}
+
+	var storedCols []models.ColumnDef
+	if err := json.Unmarshal(ds.Columns, &storedCols); err != nil {
+		return "", false, fmt.Errorf("failed to parse stored metadata: %w", err)
+	}
+
+	// Detection logic: check if all stored columns still exist physically
+	driftFound := false
+	var driftDetails strings.Builder
+	driftDetails.WriteString("Schema Drift Analysis:\n")
+
+	physicalMap := make(map[string]string)
+	for _, pc := range physicalCols {
+		physicalMap[pc.ColumnName] = pc.DataType
+	}
+
+	for _, sc := range storedCols {
+		pType, exists := physicalMap[sc.Name]
+		if !exists {
+			driftDetails.WriteString(fmt.Sprintf("- MISSING COLUMN: '%s'\n", sc.Name))
+			driftFound = true
+		} else if strings.ToLower(pType) != strings.ToLower(sc.Type) {
+			// Basic type drift check (fuzzy)
+			driftDetails.WriteString(fmt.Sprintf("- TYPE MISMATCH: '%s' (Stored: %s, Physical: %s)\n", sc.Name, sc.Type, pType))
+			driftFound = true
+		}
+	}
+
+	// Check for new columns not in metadata
+	storedMap := make(map[string]bool)
+	for _, sc := range storedCols {
+		storedMap[sc.Name] = true
+	}
+	for _, pc := range physicalCols {
+		if !storedMap[pc.ColumnName] {
+			driftDetails.WriteString(fmt.Sprintf("- NEW COLUMN DETECTED: '%s' (%s)\n", pc.ColumnName, pc.DataType))
+			driftFound = true
+		}
+	}
+
+	if !driftFound {
+		return "Schema is synchronized with physical database.", false, nil
+	}
+
+	report := driftDetails.String()
+	log.Warn().Str("dataset_id", id).Msg(report)
+
+	return report, true, nil
 }
 
 // ExecuteDatasetSQL runs generated SQL against the dataset.

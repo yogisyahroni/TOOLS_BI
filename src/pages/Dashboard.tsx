@@ -5,6 +5,8 @@ import { StatsCard } from '@/components/dashboard/StatsCard';
 import { DataChart } from '@/components/dashboard/DataChart';
 import { DonutChart } from '@/components/dashboard/DonutChart';
 import { RecentReports } from '@/components/dashboard/RecentReports';
+import { AnomalyForensicsWidget } from '@/components/dashboard/AnomalyForensicsWidget';
+import { DriftSentinelBanner } from '@/components/dashboard/DriftSentinelBanner';
 import { useDatasets } from '@/hooks/useApi';
 import { useReports } from '@/hooks/useApi';
 import { usePipelines } from '@/hooks/useApi';
@@ -74,6 +76,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 lg:space-y-8">
+      <DriftSentinelBanner />
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-2">
@@ -114,8 +117,11 @@ export default function Dashboard() {
 
       {/* Bottom Row */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
+        <AnomalyForensicsWidget />
         <RecentReports reports={reports} />
+      </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
         {/* Quick Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}

@@ -25,6 +25,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
+
+	"neuradash/internal/services"
 )
 
 // AIHandler handles natural language → data query (Ask Data) and AI report generation.
@@ -37,11 +39,13 @@ type AIHandler struct {
 	db            *gorm.DB
 	aiConf        config.AIConfig
 	encryptionKey string // server-side AES-256-GCM key for decrypting user AI keys
+	aiSvc         *services.AIService
+	datasetSvc    *services.DatasetService
 }
 
 // NewAIHandler creates a new AIHandler.
-func NewAIHandler(db *gorm.DB, aiConf config.AIConfig, encryptionKey string) *AIHandler {
-	return &AIHandler{db: db, aiConf: aiConf, encryptionKey: encryptionKey}
+func NewAIHandler(db *gorm.DB, aiConf config.AIConfig, encryptionKey string, aiSvc *services.AIService, datasetSvc *services.DatasetService) *AIHandler {
+	return &AIHandler{db: db, aiConf: aiConf, encryptionKey: encryptionKey, aiSvc: aiSvc, datasetSvc: datasetSvc}
 }
 
 // resolvedConfig holds the effective AI configuration for a single request.
@@ -179,7 +183,7 @@ retryChat:
 	}
 
 	if useTools {
-		reqBody["tools"] = []map[string]interface{}{sequentialThinkingToolDef()}
+		reqBody["tools"] = allAITools()
 		reqBody["tool_choice"] = "auto"
 	}
 
@@ -264,7 +268,7 @@ func (h *AIHandler) ChatStream(c *fiber.Ctx) error {
 	c.Set("Transfer-Encoding", "chunked")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		err := h.streamOpenAIChatMessages(cfg, req.Messages, func(eventType string, data string) {
+		err := h.streamOpenAIChatMessages(cfg, req.Messages, userID, func(eventType string, data string) {
 			// Do not wrap in another object, send raw data string for the event
 			sendSSEEvent(w, eventType, data)
 			w.Flush()
@@ -321,10 +325,24 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
-	// Use expert prompt: Data Engineer (schema fidelity) + Data Scientist (anti-hallucination)
-	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, columnValues, req.Question)
+	// S++ Autonomous Pillar: Opportunistic Schema Drift Check (Background)
+	go func(id, name, uid string) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	sqlRaw, err := h.callOpenAI(cfg, prompt)
+		report, hasDrift, err := h.datasetSvc.CheckSchemaDrift(bgCtx, id, uid)
+		if err == nil && hasDrift {
+			h.aiSvc.SendDriftAlert(context.Background(), name, report)
+		}
+	}(req.DatasetID, tableName, userID)
+
+	// Fetch global context (all user datasets) for multi-dataset synthesis capability
+	globalContext, _ := h.aiSvc.BuildGlobalSchemaContext(c.Context(), userID)
+
+	// Use expert prompt: Data Engineer (schema fidelity) + Data Scientist (anti-hallucination)
+	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, columnValues, req.Question, globalContext)
+
+	sqlRaw, err := h.callOpenAI(cfg, prompt, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed: " + err.Error()})
 	}
@@ -343,15 +361,36 @@ func (h *AIHandler) AskData(c *fiber.Ctx) error {
 
 	results, err := h.executeSQL(ctx, req.DatasetID, sqlQuery)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "SQL execution failed", "sql": sqlQuery, "dbError": err.Error(),
-		})
+		// S++ Self-Healing Logic: 1x retry with error feedback
+		log.Warn().Err(err).Str("sql", sqlQuery).Msg("First SQL attempt failed. Initiating Self-Healing...")
+
+		healedSQLRaw, healErr := h.selfHealSQL(cfg, tableName, schemaStr, req.Question, sqlQuery, err.Error(), globalContext, userID)
+		if healErr == nil {
+			healedSQL := cleanAISQL(healedSQLRaw)
+			healedSQL = RewriteQueryToPhysicalTable(healedSQL, tableName, ds.DataTableName)
+
+			if isSafeSelect(healedSQL) {
+				log.Info().Str("healed_sql", healedSQL).Msg("Self-Healing successful. Retrying...")
+				results, err = h.executeSQL(ctx, req.DatasetID, healedSQL)
+				if err == nil {
+					sqlQuery = healedSQL // Update for interpretation
+					// S++ Notification: Successful Heal
+					go h.aiSvc.SendNotification(c.Context(), userID, "Self-Healing Success", fmt.Sprintf("AI successfully corrected a failed query for: %s", req.Question))
+				}
+			}
+		}
+
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "SQL execution failed after self-healing attempt", "sql": sqlQuery, "dbError": err.Error(),
+			})
+		}
 	}
 
 	// Phase 2: Interpret results using Data Scientist + Data Storytelling skill
 	resultJSON, _ := json.Marshal(results)
 	interpretPrompt := BuildAskDataInterpretationPrompt(req.Question, sqlQuery, string(resultJSON), len(results))
-	interpretation, _ := h.callOpenAI(cfg, interpretPrompt)
+	interpretation, _ := h.callOpenAI(cfg, interpretPrompt, userID)
 
 	return c.JSON(fiber.Map{
 		"question":       req.Question,
@@ -384,10 +423,11 @@ func (h *AIHandler) GenerateReport(c *fiber.Ctx) error {
 	}
 
 	tableName, schemaStr, sampleData, columnValues, _ := h.extractDatasetContext(req.DatasetID)
+	globalContext, _ := h.aiSvc.BuildGlobalSchemaContext(c.Context(), userID)
 
 	// Use expert prompt from Data Storytelling + Data Scientist skills
-	prompt := BuildReportPrompt(schemaStr, tableName, sampleData, columnValues, req.Prompt, req.Language)
-	content, err := h.callOpenAI(cfg, prompt)
+	prompt := BuildReportPrompt(schemaStr, tableName, sampleData, columnValues, req.Prompt, req.Language, globalContext)
+	content, err := h.callOpenAI(cfg, prompt, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "AI call failed"})
 	}
@@ -544,8 +584,8 @@ func (h *AIHandler) executeSQL(ctx context.Context, datasetID, sqlQuery string) 
 		return nil, fmt.Errorf("dataset not found: %w", err)
 	}
 
-	// S++ SQL Rewriting Engine: 
-	// Pastikan kueri AI yang mungkin merujuk ke nama logis ("belajar_data") 
+	// S++ SQL Rewriting Engine:
+	// Pastikan kueri AI yang mungkin merujuk ke nama logis ("belajar_data")
 	// dipetakan kembali ke tabel fisik ("ds_xxx") sebelum eksekusi.
 	sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, ds.Name, ds.DataTableName)
 
@@ -563,7 +603,7 @@ func (h *AIHandler) executeSQL(ctx context.Context, datasetID, sqlQuery string) 
 		if err := h.db.Where("id = ? AND user_id = ?", connID, ds.UserID).First(&conn).Error; err != nil {
 			return nil, fmt.Errorf("external connection not found: %w", err)
 		}
-		
+
 		opts := connectors.FromDBConnection(&conn, conn.PasswordEncrypted)
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -619,9 +659,10 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 
 	// Extract real schema + sample data → anti-hallucination grounding
 	tableName, schemaStr, sampleData, columnValues, _ := h.extractDatasetContext(req.DatasetID)
+	globalContext, _ := h.aiSvc.BuildGlobalSchemaContext(c.Context(), userID)
 
 	// Build expert prompt: Data Engineer + Data Scientist + Data Storytelling skills + language
-	expertPrompt := BuildReportPrompt(schemaStr, tableName, sampleData, columnValues, req.Prompt, req.Language)
+	expertPrompt := BuildReportPrompt(schemaStr, tableName, sampleData, columnValues, req.Prompt, req.Language, globalContext)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -632,7 +673,7 @@ func (h *AIHandler) StreamGenerateReport(c *fiber.Ctx) error {
 		sendSSEEvent(w, "progress", `{"stage":"generating","message":"Analyst AI is analyzing your data and writing report..."}`)
 		w.Flush()
 
-		err := h.streamOpenAI(cfg, expertPrompt, func(eventType, token string) {
+		err := h.streamOpenAI(cfg, expertPrompt, userID, func(eventType, token string) {
 			if eventType == "message" {
 				sendSSEEvent(w, "token", jsonEscape(token))
 			} else if eventType == "thought" {
@@ -687,7 +728,9 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Dataset not found"})
 	}
 
-	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, columnValues, req.Question)
+	globalContext, _ := h.aiSvc.BuildGlobalSchemaContext(c.Context(), userID)
+
+	prompt := BuildAskDataPrompt(tableName, schemaStr, sampleData, columnValues, req.Question, globalContext)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -705,7 +748,7 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		sendSSEEvent(w, "progress", `{"stage":"generating","message":"Generating SQL query..."}`)
 		w.Flush()
 
-		err := h.streamOpenAI(cfg, prompt, func(eventType, token string) {
+		err := h.streamOpenAI(cfg, prompt, userID, func(eventType, token string) {
 			if eventType == "message" {
 				sqlBuf.WriteString(token)
 				sendSSEEvent(w, "token", jsonEscape(token))
@@ -723,7 +766,7 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 		sqlRaw := sqlBuf.String()
 		sqlQuery := cleanAISQL(sqlRaw)
 		log.Info().Str("dataset_id", req.DatasetID).Str("raw", sqlRaw).Str("cleaned", sqlQuery).Msg("AskData (SSE) Debug")
-		
+
 		// S++: Resolve physical table name BEFORE validation
 		sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, ds.Name, ds.DataTableName)
 
@@ -750,7 +793,7 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 			return
 		}
 
-		// S++ IMMEDIATE DATA DELIVERY: 
+		// S++ IMMEDIATE DATA DELIVERY:
 		// Send raw results BEFORE starting the (potentially slow) AI interpretation phase.
 		// This prevents the 90% hang because the UI gets the data and can render it immediately.
 		initialResultJSON, _ := json.Marshal(map[string]interface{}{
@@ -778,7 +821,7 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 
 			// We use callOpenAI (non-streaming) for interpretation to get it as a single block
 			// S++: Wrapped in a recover/timeout-safe check implicitly via callOpenAI
-			interpResult, err := h.callOpenAI(cfg, interpPrompt)
+			interpResult, err := h.callOpenAI(cfg, interpPrompt, userID)
 			if err == nil {
 				interpretation = interpResult
 				// Send updated result with interpretation
@@ -800,8 +843,18 @@ func (h *AIHandler) StreamAskData(c *fiber.Ctx) error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// callOpenAI — non-streaming OpenAI-compatible request
+// Tool Definitions — NeuraDash 4 Pillars of Autonomous Intelligence
 // ─────────────────────────────────────────────────────────────────────────────
+
+func allAITools() []map[string]interface{} {
+	return []map[string]interface{}{
+		sequentialThinkingToolDef(),
+		investigateAnomalyToolDef(),
+		executeWorkflowActionToolDef(),
+		validateDataIntegrityToolDef(),
+	}
+}
+
 func sequentialThinkingToolDef() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "function",
@@ -811,22 +864,10 @@ func sequentialThinkingToolDef() map[string]interface{} {
 			"parameters": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"thought": map[string]interface{}{
-						"type":        "string",
-						"description": "Your current thinking step.",
-					},
-					"nextThoughtNeeded": map[string]interface{}{
-						"type":        "boolean",
-						"description": "Whether another thought step is needed.",
-					},
-					"thoughtNumber": map[string]interface{}{
-						"type":        "integer",
-						"description": "Current thought number.",
-					},
-					"totalThoughts": map[string]interface{}{
-						"type":        "integer",
-						"description": "Estimated total thoughts needed.",
-					},
+					"thought":           map[string]interface{}{"type": "string", "description": "Your current thinking step."},
+					"nextThoughtNeeded": map[string]interface{}{"type": "boolean", "description": "Whether another thought step is needed."},
+					"thoughtNumber":     map[string]interface{}{"type": "integer", "description": "Current thought number."},
+					"totalThoughts":     map[string]interface{}{"type": "integer", "description": "Estimated total thoughts needed.", "default": 10},
 				},
 				"required": []string{"thought", "nextThoughtNeeded", "thoughtNumber", "totalThoughts"},
 			},
@@ -834,10 +875,64 @@ func sequentialThinkingToolDef() map[string]interface{} {
 	}
 }
 
+func investigateAnomalyToolDef() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "function",
+		"function": map[string]interface{}{
+			"name":        "investigate_anomaly",
+			"description": "Trigger an autonomous investigation into a detected data anomaly (Causal Analysis).",
+			"parameters": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"datasetId":          map[string]interface{}{"type": "string", "description": "The unique ID of the dataset containing the anomaly."},
+					"anomalyDescription": map[string]interface{}{"type": "string", "description": "Summary of the anomaly detected (e.g., 'Sudden spike in conversion')."},
+				},
+				"required": []string{"datasetId", "anomalyDescription"},
+			},
+		},
+	}
+}
+
+func executeWorkflowActionToolDef() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "function",
+		"function": map[string]interface{}{
+			"name":        "execute_workflow_action",
+			"description": "Trigger a prescriptive action to an external system (SAP, Odoo, Webhook) via a connected integration.",
+			"parameters": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"connectorId": map[string]interface{}{"type": "string", "description": "The ID of the pre-configured system connector."},
+					"actionData":  map[string]interface{}{"type": "object", "description": "Data to be sent to the external system."},
+				},
+				"required": []string{"connectorId", "actionData"},
+			},
+		},
+	}
+}
+
+func validateDataIntegrityToolDef() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "function",
+		"function": map[string]interface{}{
+			"name":        "validate_data_integrity",
+			"description": "Performs a self-healing health check on dataset schema and data quality.",
+			"parameters": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"datasetId": map[string]interface{}{"type": "string", "description": "The ID of the dataset to validate."},
+				},
+				"required": []string{"datasetId"},
+			},
+		},
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// callOpenAI — non-streaming OpenAI-compatible request
+// OpenAI Call Handlers (Extended for multi-tool support)
 // ─────────────────────────────────────────────────────────────────────────────
-func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error) {
+
+func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string, userID string) (string, error) {
 	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
@@ -869,7 +964,7 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 			"messages":    messages,
 			"max_tokens":  cfg.MaxTokens,
 			"temperature": cfg.Temperature,
-			"tools":       []map[string]interface{}{sequentialThinkingToolDef()},
+			"tools":       allAITools(),
 			"tool_choice": "auto",
 		}
 		data, _ := json.Marshal(reqBody)
@@ -879,7 +974,7 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-		httpReq.Header.Set("ngrok-skip-browser-warning", "true") // Bypass Ngrok warning page
+		httpReq.Header.Set("ngrok-skip-browser-warning", "true")
 
 		resp, err := client.Do(httpReq)
 		if err != nil {
@@ -938,13 +1033,7 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 		messages = append(messages, astMsg)
 
 		for _, tc := range msg.ToolCalls {
-			toolResult := "{}"
-			if tc.Function.Name == "sequentialthinking" {
-				toolResult = `{"status": "thought_recorded"}`
-			} else {
-				toolResult = `{"error": "unknown tool"}`
-			}
-
+			toolResult := h.executeTool(tc.Function.Name, tc.Function.Arguments, userID)
 			messages = append(messages, map[string]interface{}{
 				"role":         "tool",
 				"tool_call_id": tc.Id,
@@ -955,10 +1044,61 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string) (string, error
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// streamOpenAI — streaming OpenAI-compatible request, calls onToken per delta
-// ─────────────────────────────────────────────────────────────────────────────
-func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onEvent func(eventType string, data string)) error {
+// execution logic for AI tools (Stub/Proxy)
+func (h *AIHandler) executeTool(name, args string, userID string) string {
+	ctx := context.Background()
+
+	switch name {
+	case "sequentialthinking":
+		return `{"status": "thought_recorded"}`
+	case "investigate_anomaly":
+		var params struct {
+			DatasetId          string `json:"datasetId"`
+			AnomalyDescription string `json:"anomalyDescription"`
+		}
+		if err := json.Unmarshal([]byte(args), &params); err != nil {
+			return `{"error": "invalid arguments"}`
+		}
+		result, err := h.aiSvc.AnalyzeAnomaly(ctx, params.DatasetId, params.AnomalyDescription)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%s"}`, err.Error())
+		}
+		return fmt.Sprintf(`{"status": "investigation_complete", "result": %s}`, jsonEscape(result))
+
+	case "execute_workflow_action":
+		var params struct {
+			ConnectorId string                 `json:"connectorId"`
+			ActionData  map[string]interface{} `json:"actionData"`
+		}
+		if err := json.Unmarshal([]byte(args), &params); err != nil {
+			return `{"error": "invalid arguments"}`
+		}
+		result, err := h.aiSvc.ExecutePrescriptiveAction(ctx, params.ConnectorId, params.ActionData)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%s"}`, err.Error())
+		}
+		resJSON, _ := json.Marshal(result)
+		return fmt.Sprintf(`{"status": "action_executed", "result": %s}`, string(resJSON))
+
+	case "validate_data_integrity":
+		var params struct {
+			DatasetId string `json:"datasetId"`
+		}
+		if err := json.Unmarshal([]byte(args), &params); err != nil {
+			return `{"error": "invalid arguments"}`
+		}
+		result, _, err := h.datasetSvc.CheckSchemaDrift(ctx, params.DatasetId, userID)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%s"}`, err.Error())
+		}
+		return fmt.Sprintf(`{"status": "validation_complete", "result": %s}`, jsonEscape(result))
+
+	default:
+		return `{"error": "unknown tool"}`
+	}
+}
+
+func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, userID string, onEvent func(eventType string, data string)) error {
 	var sysMsg, usrMsg string
 	if idx := strings.Index(prompt, "\n---\n"); idx != -1 {
 		sysMsg = strings.TrimSpace(prompt[:idx])
@@ -973,10 +1113,10 @@ func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, onEvent func
 		{"role": "user", "content": usrMsg},
 	}
 
-	return h.streamOpenAIChatMessages(cfg, messages, onEvent)
+	return h.streamOpenAIChatMessages(cfg, messages, userID, onEvent)
 }
 
-func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[string]interface{}, onEvent func(eventType string, data string)) error {
+func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[string]interface{}, userID string, onEvent func(eventType string, data string)) error {
 	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
@@ -995,7 +1135,7 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 		}
 
 		if useTools {
-			reqBody["tools"] = []map[string]interface{}{sequentialThinkingToolDef()}
+			reqBody["tools"] = allAITools()
 			reqBody["tool_choice"] = "auto"
 		}
 
@@ -1013,7 +1153,7 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 		httpReq.Header.Set("Accept", "text/event-stream")
-		httpReq.Header.Set("ngrok-skip-browser-warning", "true") // Bypass Ngrok warning page
+		httpReq.Header.Set("ngrok-skip-browser-warning", "true")
 
 		resp, err := client.Do(httpReq)
 		if err != nil {
@@ -1024,11 +1164,9 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			bodyStr := string(body)
-
-			// Detect if failure is due to unsupported tools
 			if useTools && (strings.Contains(strings.ToLower(bodyStr), "tool") || strings.Contains(strings.ToLower(bodyStr), "endpoint")) {
 				useTools = false
-				continue // Retry WITHOUT tools
+				continue
 			}
 			return fmt.Errorf("AI API error %d: %s", resp.StatusCode, bodyStr)
 		}
@@ -1106,20 +1244,18 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 			return nil
 		}
 
-		astMsg := map[string]interface{}{
-			"role": "assistant",
-		}
+		astMsg := map[string]interface{}{"role": "assistant"}
 		if currentContent.Len() > 0 {
 			astMsg["content"] = currentContent.String()
 		}
 
-		var tcs []map[string]interface{}
 		var indices []int
 		for k := range currentToolCalls {
 			indices = append(indices, k)
 		}
 		sort.Ints(indices)
 
+		var tcs []map[string]interface{}
 		for _, idx := range indices {
 			tc := currentToolCalls[idx]
 			tcs = append(tcs, map[string]interface{}{
@@ -1136,16 +1272,19 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 
 		for _, idx := range indices {
 			tc := currentToolCalls[idx]
-			toolResult := "{}"
 			if tc.Name == "sequentialthinking" {
 				var args map[string]interface{}
 				if err := json.Unmarshal([]byte(tc.Args.String()), &args); err == nil {
 					thoughtJSON, _ := json.Marshal(args)
 					onEvent("thought", string(thoughtJSON))
 				}
-				toolResult = `{"status": "thought_recorded"}`
-			} else {
-				toolResult = `{"error": "unknown tool"}`
+			}
+
+			toolResult := h.executeTool(tc.Name, tc.Args.String(), userID)
+
+			// Optional: send custom event for pillar-specific tools
+			if tc.Name != "sequentialthinking" {
+				onEvent("action", fmt.Sprintf(`{"tool": "%s", "result": %s}`, tc.Name, toolResult))
 			}
 
 			messages = append(messages, map[string]interface{}{
@@ -1158,9 +1297,6 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 	}
 }
 
-// providerBaseURL maps known provider names to their OpenAI-compatible API base URL.
-// Providers not listed here must set baseUrl explicitly in user config.
-// Ensures no trailing slash for consistent concatenation with path.
 func providerBaseURL(provider string) string {
 	var url string
 	switch provider {
@@ -1192,114 +1328,81 @@ func providerBaseURL(provider string) string {
 	return strings.TrimSuffix(url, "/")
 }
 
-// sendSSEEvent writes one SSE event: "event: <type>\ndata: <payload>\n\n"
 func sendSSEEvent(w *bufio.Writer, event, data string) {
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
 }
 
-// jsonEscape wraps a string in JSON quotes, safe for SSE data fields.
+// selfHealSQL calls AI to fix a failed SQL query.
+func (h *AIHandler) selfHealSQL(cfg resolvedConfig, tableName, schema, question, failedSQL, dbErr, globalCtx, userID string) (string, error) {
+	prompt := BuildSQLSelfHealPrompt(tableName, schema, question, failedSQL, dbErr, globalCtx)
+	return h.callOpenAI(cfg, prompt, userID)
+}
+
 func jsonEscape(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
 
-// ListAskDataHistory returns the query history for the current user.
 func (h *AIHandler) ListAskDataHistory(c *fiber.Ctx) error {
 	userID := c.Locals("userId").(string)
 	datasetID := c.Query("datasetId")
-
 	var history []models.AskDataHistory
 	query := h.db.Where("user_id = ?", userID)
 	if datasetID != "" {
 		query = query.Where("dataset_id = ?", datasetID)
 	}
-
 	if err := query.Order("created_at DESC").Limit(50).Find(&history).Error; err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch history"})
 	}
-
 	return c.JSON(history)
 }
 
-// SaveAskDataHistory persists a query result for future reference.
 func (h *AIHandler) SaveAskDataHistory(c *fiber.Ctx) error {
 	userID := c.Locals("userId").(string)
 	var history models.AskDataHistory
 	if err := c.BodyParser(&history); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
-
 	history.ID = uuid.New().String()
 	history.UserID = userID
 	history.CreatedAt = time.Now()
-
 	if err := h.db.Create(&history).Error; err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to save history"})
 	}
-
 	return c.JSON(history)
 }
 
-// DeleteAskDataHistory removes a specific record from the user's history.
 func (h *AIHandler) DeleteAskDataHistory(c *fiber.Ctx) error {
 	userID := c.Locals("userId").(string)
 	id := c.Params("id")
-
 	if err := h.db.Where("id = ? AND user_id = ?", id, userID).Delete(&models.AskDataHistory{}).Error; err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to delete history item"})
 	}
-
 	return c.SendStatus(204)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// S++ SQL Security & Normalization Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-// cleanAISQL extracts the raw SQL from markdown and trims noise.
 func cleanAISQL(raw string) string {
 	res := strings.TrimSpace(raw)
-	
-	// 1. Try Markdown Extraction
-	// Regex: Match content between triple backticks (optional lang identifier)
-	// (?is) makes it case-insensitive and allows '.' to match newlines
 	reMarkdown := regexp.MustCompile(`(?is)[\s\r\n]*` + "```" + `(?:sql|postgresql|)?\s*(.*?)\s*` + "```")
 	matches := reMarkdown.FindStringSubmatch(res)
 	if len(matches) > 1 {
 		return strings.TrimSpace(matches[1])
 	}
-	
-	// 2. Heuristic Extraction (Fallback)
-	// If no markdown, find the FIRST instance of SELECT or WITH and extract until the end.
-	// This helps if AI says "Sure, here is the query: SELECT * FROM ..."
-	// We look for SELECT and WITH as separate captures to be safe.
 	reHeuristic := regexp.MustCompile(`(?is)\b(SELECT|WITH)\b.*`)
 	heuristicMatch := reHeuristic.FindString(res)
 	if heuristicMatch != "" {
 		return strings.TrimSpace(heuristicMatch)
 	}
-
 	return res
 }
 
-// isSafeSelect validates that the query is a read-only SELECT or WITH statement.
-// It strips all comments (inline and block) before validation for maximum reliability.
 func isSafeSelect(query string) bool {
 	clean := query
-	
-	// 1. Strip Block Comments /* ... */
 	reBlock := regexp.MustCompile(`(?is)/\*.*?\*/`)
 	clean = reBlock.ReplaceAllString(clean, "")
-	
-	// 2. Strip Inline Comments -- ...
 	reInline := regexp.MustCompile(`(?m)--.*$`)
 	clean = reInline.ReplaceAllString(clean, "")
-	
-	// 3. Final Trim and Check
 	clean = strings.TrimSpace(clean)
-	
-	// We allow SELECT and WITH (for CTEs)
-	// We use case-insensitive check at the start of the "stripped" query
 	upperClean := strings.ToUpper(clean)
 	return strings.HasPrefix(upperClean, "SELECT") || strings.HasPrefix(upperClean, "WITH")
 }
