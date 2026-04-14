@@ -525,7 +525,7 @@ export default function SettingsPage() {
                          <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
                              <span className="flex items-center gap-1">
                                 Telegram Bot Token
-                                <HelpTooltip content="Dapatkan Token Bot dari @BotFather di Telegram untuk mengaktifkan pengiriman pesan otomatis melalui bot Anda sendiri." />
+                                <HelpTooltip text="Dapatkan Token Bot dari @BotFather di Telegram untuk mengaktifkan pengiriman pesan otomatis melalui bot Anda sendiri." />
                              </span>
                             {backendConfig?.hasTelegramToken && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
                          </Label>
@@ -537,7 +537,7 @@ export default function SettingsPage() {
                          <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
                              <span className="flex items-center gap-1">
                                 WhatsApp Instance ID
-                                <HelpTooltip content="Gunakan 'Instance ID' dari panel Green-API (green-api.com) untuk menghubungkan instance pengirim." />
+                                <HelpTooltip text="Gunakan 'Instance ID' dari panel Green-API (green-api.com) untuk menghubungkan instance pengirim." />
                              </span>
                             {backendConfig?.hasWhatsAppInstance && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
                          </Label>
@@ -549,7 +549,7 @@ export default function SettingsPage() {
                          <Label className="text-xs font-bold opacity-70 flex items-center justify-between">
                              <span className="flex items-center gap-1">
                                 WhatsApp API Token
-                                <HelpTooltip content="Salin 'API Token' dari konsol Green-API Anda untuk otentikasi pengiriman pesan WhatsApp." />
+                                <HelpTooltip text="Salin 'API Token' dari konsol Green-API Anda untuk otentikasi pengiriman pesan WhatsApp." />
                              </span>
                             {backendConfig?.hasWhatsAppToken && <span className="text-success text-[10px] uppercase font-black tracking-widest">Saved 🔒</span>}
                          </Label>
