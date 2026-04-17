@@ -101,32 +101,27 @@ func main() {
 	log.Info().Msg("Phase 1/5: ETL Storage Service initialised")
 
 	// --- Phase 2/5: Strategic Explicit Migration Management ---
-	// For BI tools with 1M+ rows, AutoMigrate is a bottleneck.
-	// We only run this if ENABLE_DB_MIGRATION is explicitly set to "true".
-	// Otherwise, we skip to ensure instant PORT binding and zero DB overhead.
-	enableMigration := os.Getenv("ENABLE_DB_MIGRATION") == "true"
-	if enableMigration {
-		go func() {
-			log.Info().Msg("Background Phase: ENABLE_DB_MIGRATION=true. Starting Database Auto-migration...")
-			if err := autoMigrate(db); err != nil {
-				log.Error().Err(err).Msg("Critical: Background migration failed")
-				return
-			}
-			log.Info().Msg("Background Phase: Database migrated successfully")
+	// Sync Phase: Database Migration
+	// Hard-fix migrations for PostgreSQL type conversions (UUID to VARCHAR)
+	log.Info().Msg("Phase 1: Running hard-fix migrations...")
+	if err := runHardFixMigrations(db); err != nil {
+		log.Warn().Err(err).Msg("Hard-fix migrations had warnings (continuing anyway)")
+	}
 
-			log.Info().Msg("Background Phase: Ensuring performance indexes...")
-			if err := migrations.AddPerformanceIndexes(db); err != nil {
-				log.Warn().Err(err).Msg("Background Phase: Index warnings (non-fatal)")
-			} else {
-				log.Info().Msg("Background Phase: Performance indexes ensured")
-			}
-		}()
+	log.Info().Msg("Phase 2: Starting Database Auto-migration...")
+	if err := autoMigrate(db); err != nil {
+		log.Fatal().Err(err).Msg("CRITICAL: Database auto-migration failed. Shutting down.")
+	}
+	log.Info().Msg("Database migrated successfully.")
+	log.Info().Msg("Phase 3: Ensuring performance indexes...")
+	if err := migrations.AddPerformanceIndexes(db); err != nil {
+		log.Warn().Err(err).Msg("Phase 3: Index warnings (non-fatal)")
 	} else {
-		log.Info().Msg("Phase 2/5: Skipping Database Auto-migration (ENABLE_DB_MIGRATION=false)")
+		log.Info().Msg("Phase 3: Performance indexes ensured")
 	}
 
 	// BUGFIX: Check for orphaned 'running' pipelines and runs. 
-	log.Debug().Msg("Phase 3/5: Preparing Redis & S3...")
+	log.Debug().Msg("Phase 4/5: Preparing Redis & S3...")
 
 	// --- Redis ---
 	rdb := initRedis(cfg)
@@ -839,29 +834,23 @@ func initRedis(cfg *config.Config) *redis.Client {
 	return redis.NewClient(opt)
 }
 
-// autoMigrate runs GORM auto-migration for all models.
-func autoMigrate(db *gorm.DB) error {
-	log.Info().Msg("Executing Hard-Fix SQL Migrations (UUID to VARCHAR)...")
-	
-	// Force column type changes that GORM AutoMigrate often skips
-	hardFixSQL := []string{
+// runHardFixMigrations runs explicit SQL fixes for UUID casting.
+func runHardFixMigrations(db *gorm.DB) error {
+	log.Info().Msg("Running explicit SQL fixes for UUID casting...")
+	// We use VARCHAR(255) for IDs to avoid GORM/Postgres UUID mapping issues on some providers
+	queries := []string{
 		"ALTER TABLE datasets ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
 		"ALTER TABLE datasets ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
 		"ALTER TABLE saved_charts ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
 		"ALTER TABLE saved_charts ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
-		"ALTER TABLE saved_charts ALTER COLUMN dataset_id TYPE VARCHAR(255) USING dataset_id::varchar",
 		"ALTER TABLE dashboards ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
 		"ALTER TABLE dashboards ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
-		"ALTER TABLE saved_charts ADD COLUMN IF NOT EXISTS config jsonb",
-		"ALTER TABLE saved_charts ADD COLUMN IF NOT EXISTS annotations jsonb DEFAULT '[]'",
+		"ALTER TABLE user_ai_configs ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
+		"ALTER TABLE user_ai_configs ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_telegram_bot_token text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_instance_id text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_token text",
-		"ALTER TABLE user_ai_configs ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
-		"ALTER TABLE user_ai_configs ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
-	}
-
-	for _, sql := range hardFixSQL {
+	for _, sql := range queries {
 		if err := db.Exec(sql).Error; err != nil {
 			log.Warn().Err(err).Str("sql", sql).Msg("Hard-fix migration warning (possible if column is already varchar)")
 		}

@@ -89,13 +89,25 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
+	// DEBUG LOG (Masked)
+	log.Info().
+		Str("user_id", userID).
+		Str("provider", req.Provider).
+		Str("model", req.Model).
+		Msg("SaveAIConfig Request Received")
+
 	var existing models.UserAIConfig
 	found := true
 	if err := h.db.Where("user_id = ?", userID).First(&existing).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			found = false
+			log.Info().Str("user_id", userID).Msg("No existing AI config found, will create new")
 		} else {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "DB error"})
+			log.Error().Err(err).Str("user_id", userID).Msg("Database error fetching existing AI config")
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Database error",
+				"details": err.Error(),
+			})
 		}
 	}
 
@@ -118,16 +130,16 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 
 	var err error
 	if encryptedKey, err = encryptIfNew(req.APIKey, encryptedKey); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt API key"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt API key", "details": err.Error()})
 	}
 	if encryptedTG, err = encryptIfNew(req.TelegramBotToken, encryptedTG); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt Telegram token"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt Telegram token", "details": err.Error()})
 	}
 	if encryptedWAInstance, err = encryptIfNew(req.WhatsAppInstanceID, encryptedWAInstance); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt WA instance ID"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt WA instance ID", "details": err.Error()})
 	}
 	if encryptedWAToken, err = encryptIfNew(req.WhatsAppToken, encryptedWAToken); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt WA token"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to encrypt WA token", "details": err.Error()})
 	}
 
 	cfg := models.UserAIConfig{
@@ -147,16 +159,25 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 	}
 
 	if found {
+		log.Info().Str("user_id", userID).Msg("Updating existing AI config")
 		if err := h.db.Model(&existing).Where("user_id = ?", userID).Updates(cfg).Error; err != nil {
-			log.Error().Err(err).Str("userID", userID).Msg("Failed to update AI config")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update config", "details": err.Error()})
+			log.Error().Err(err).Str("user_id", userID).Msg("Failed to update AI config")
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to update config",
+				"details": err.Error(),
+			})
 		}
 	} else {
+		log.Info().Str("user_id", userID).Msg("Creating new AI config")
 		cfg.ID = uuid.New().String()
+		cfg.UserID = userID
 		cfg.CreatedAt = time.Now()
 		if err := h.db.Create(&cfg).Error; err != nil {
-			log.Error().Err(err).Str("userID", userID).Msg("Failed to create AI config")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save config", "details": err.Error()})
+			log.Error().Err(err).Str("user_id", userID).Msg("Failed to create AI config")
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "Failed to create config",
+				"details": err.Error(),
+			})
 		}
 	}
 
