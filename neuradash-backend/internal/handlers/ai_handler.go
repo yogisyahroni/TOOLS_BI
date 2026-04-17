@@ -73,11 +73,17 @@ func (h *AIHandler) resolveUserConfig(userID string) (resolvedConfig, error) {
 		if decryptErr != nil {
 			return resolvedConfig{}, fmt.Errorf("failed to decrypt API key: %w", decryptErr)
 		}
+		// Fallback for MaxTokens: User setting > Server global setting
+		maxTokens := userCfg.MaxTokens
+		if maxTokens <= 0 {
+			maxTokens = h.aiConf.MaxTokens
+		}
+
 		return resolvedConfig{
 			Provider:    userCfg.Provider,
 			APIKey:      rawKey,
 			Model:       userCfg.Model,
-			MaxTokens:   userCfg.MaxTokens,
+			MaxTokens:   maxTokens,
 			Temperature: userCfg.Temperature,
 			BaseURL:     userCfg.BaseURL,
 		}, nil
@@ -1091,14 +1097,9 @@ func (h *AIHandler) prepareAIRequest(cfg resolvedConfig, messages []map[string]i
 		"ngrok-skip-browser-warning": "true",
 	}
 
-	maxTokens := cfg.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = 4096 // Anthropic & modern models require this. 4k is a safe default for report/sql generation.
-	}
-
 	reqBody := map[string]interface{}{
 		"model":       cfg.Model,
-		"max_tokens":  maxTokens,
+		"max_tokens":  cfg.MaxTokens,
 		"temperature": cfg.Temperature,
 	}
 
