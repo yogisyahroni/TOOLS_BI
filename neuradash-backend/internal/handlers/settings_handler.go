@@ -160,7 +160,8 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 
 	if found {
 		log.Info().Str("user_id", userID).Msg("Updating existing AI config")
-		if err := h.db.Model(&existing).Where("user_id = ?", userID).Updates(cfg).Error; err != nil {
+		// Use Select("*") to force GORM to update zero-value fields (empty strings, etc.)
+		if err := h.db.Model(&existing).Select("Provider", "Model", "EncryptedAPIKey", "BaseURL", "MaxTokens", "Temperature", "NotificationTargets", "IntegrationConnectors", "EncryptedTelegramBotToken", "EncryptedWhatsAppInstanceID", "EncryptedWhatsAppToken", "UpdatedAt").Updates(cfg).Error; err != nil {
 			log.Error().Err(err).Str("user_id", userID).Msg("Failed to update AI config")
 			return c.Status(500).JSON(fiber.Map{
 				"error":   "Failed to update config",
