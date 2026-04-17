@@ -108,11 +108,7 @@ func main() {
 		log.Warn().Err(err).Msg("Hard-fix migrations had warnings (continuing anyway)")
 	}
 
-	log.Info().Msg("Phase 2: Starting Database Auto-migration...")
-	if err := autoMigrate(db); err != nil {
-		log.Fatal().Err(err).Msg("CRITICAL: Database auto-migration failed. Shutting down.")
-	}
-	log.Info().Msg("Database migrated successfully.")
+	log.Info().Msg("Phase 2: Database migration and schema update skip (handled in Phase 1)")
 	log.Info().Msg("Phase 3: Ensuring performance indexes...")
 	if err := migrations.AddPerformanceIndexes(db); err != nil {
 		log.Warn().Err(err).Msg("Phase 3: Index warnings (non-fatal)")
@@ -850,6 +846,7 @@ func runHardFixMigrations(db *gorm.DB) error {
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_telegram_bot_token text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_instance_id text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_token text",
+	}
 	for _, sql := range queries {
 		if err := db.Exec(sql).Error; err != nil {
 			log.Warn().Err(err).Str("sql", sql).Msg("Hard-fix migration warning (possible if column is already varchar)")
