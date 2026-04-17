@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -109,7 +108,7 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
 	var req struct {
-		Messages []map[string]string `json:"messages"`
+		Messages []map[string]interface{} `json:"messages"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid body"})
@@ -120,88 +119,18 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	baseURLStr := strings.TrimSuffix(cfg.BaseURL, "/")
-	if baseURLStr == "" {
-		baseURLStr = providerBaseURL(cfg.Provider)
+	url, headers, data, err := h.prepareAIRequest(cfg, req.Messages, false)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to prepare request"})
 	}
 
-	u, err := url.Parse(baseURLStr)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid AI base URL"})
-	}
-
-	allowedAIHosts := map[string]string{
-		"api.openai.com":                    "api.openai.com",
-		"openrouter.ai":                     "openrouter.ai",
-		"api.groq.com":                      "api.groq.com",
-		"api.deepseek.com":                  "api.deepseek.com",
-		"api.together.xyz":                  "api.together.xyz",
-		"api.mistral.ai":                    "api.mistral.ai",
-		"integrate.api.nvidia.com":          "integrate.api.nvidia.com",
-		"api.moonshot.cn":                   "api.moonshot.cn",
-		"generativelanguage.googleapis.com": "generativelanguage.googleapis.com",
-		"api.anthropic.com":                 "api.anthropic.com",
-		"api.cohere.com":                    "api.cohere.com",
-		"localhost":                         "localhost",
-		"127.0.0.1":                         "127.0.0.1",
-	}
-
-	matchedHost := ""
-	if clean, ok := allowedAIHosts[u.Host]; ok {
-		matchedHost = clean
-	}
-
-	if matchedHost == "" {
-		hostRegex := `^[a-zA-Z0-9.-]+(?::[0-9]+)?$`
-		if match := regexp.MustCompile(hostRegex).FindString(u.Host); match != "" {
-			matchedHost = match
-		}
-	}
-
-	if matchedHost == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid AI host"})
-	}
-
-	// Reconstruct the URL using only allowed primitives
-	cleanURL := &url.URL{
-		Scheme: u.Scheme,
-		Host:   matchedHost,
-		Path:   strings.TrimSuffix(u.Path, "/"),
-	}
-
-	// Dynamic Tool Recovery Logic
-	useTools := true
-	var reqBody map[string]interface{}
-
-retryChat:
-	reqBody = map[string]interface{}{
-		"model":       cfg.Model,
-		"messages":    req.Messages,
-		"max_tokens":  cfg.MaxTokens,
-		"temperature": cfg.Temperature,
-		"top_p":       1,
-	}
-
-	if useTools {
-		reqBody["tools"] = allAITools()
-		reqBody["tool_choice"] = "auto"
-	}
-
-	data, _ := json.Marshal(reqBody)
-	path := "chat/completions"
-	if cfg.Provider == "anthropic" {
-		path = "messages"
-	} else if cfg.Provider == "cohere" {
-		path = "chat"
-	}
-	finalURL := cleanURL.JoinPath(path).String()
-
-	httpReq, err := http.NewRequest("POST", finalURL, bytes.NewReader(data))
+	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to create request"})
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	for k, v := range headers {
+		httpReq.Header.Set(k, v)
+	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(httpReq)
@@ -213,11 +142,6 @@ retryChat:
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		// Detect if failure is due to unsupported tools
-		if useTools && (strings.Contains(strings.ToLower(bodyStr), "tool") || strings.Contains(strings.ToLower(bodyStr), "endpoint")) {
-			useTools = false
-			goto retryChat
-		}
 		// Friendly Error Interceptor for Credits
 		if resp.StatusCode == 402 || strings.Contains(strings.ToLower(bodyStr), "insufficient credits") {
 			return c.Status(402).JSON(fiber.Map{"error": "Saldo AI (OpenRouter) Anda habis. Silakan isi ulang saldo di https://openrouter.ai/settings/credits untuk melanjutkan."})
@@ -225,22 +149,12 @@ retryChat:
 		return c.Status(resp.StatusCode).JSON(fiber.Map{"error": bodyStr})
 	}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Failed to decode AI response"})
+	msg, err := h.parseAIResponse(cfg.Provider, resp.Body)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to parse AI response: " + err.Error()})
 	}
 
-	// extract content just to be sure we return standard structure
-	content := ""
-	if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
-		if choice, ok := choices[0].(map[string]interface{}); ok {
-			if msg, ok := choice["message"].(map[string]interface{}); ok {
-				content, _ = msg["content"].(string)
-			}
-		}
-	}
-
-	return c.JSON(fiber.Map{"content": content})
+	return c.JSON(fiber.Map{"role": msg.Role, "content": msg.Content})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -932,102 +846,136 @@ func validateDataIntegrityToolDef() map[string]interface{} {
 // OpenAI Call Handlers (Extended for multi-tool support)
 // ─────────────────────────────────────────────────────────────────────────────
 
-func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string, userID string) (string, error) {
-	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
-	if baseURL == "" {
-		baseURL = providerBaseURL(cfg.Provider)
+type aiMessage struct {
+	Role      string
+	Content   string
+	ToolCalls []toolCall
+}
+
+type toolCall struct {
+	Id       string
+	Type     string
+	Function struct {
+		Name      string
+		Arguments string
+	}
+}
+
+func (h *AIHandler) parseAIResponse(provider string, body io.Reader) (*aiMessage, error) {
+	provider = strings.ToLower(provider)
+	if provider == "anthropic" {
+		var res struct {
+			Role    string `json:"role"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+			StopReason string `json:"stop_reason"`
+		}
+		if err := json.NewDecoder(body).Decode(&res); err != nil {
+			return nil, err
+		}
+		msg := &aiMessage{Role: res.Role}
+		if len(res.Content) > 0 {
+			msg.Content = res.Content[0].Text
+		}
+		return msg, nil
 	}
 
-	var systemMsg, userMsg string
-	for _, sep := range []string{"\r\n---\r\n", "\n---\n"} {
-		if idx := strings.Index(prompt, sep); idx != -1 {
-			systemMsg = strings.TrimSpace(prompt[:idx])
-			userMsg = strings.TrimSpace(prompt[idx+len(sep):])
-			break
-		}
+	// Default OpenAI format
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Role      string      `json:"role"`
+				Content   interface{} `json:"content"`
+				ToolCalls []struct {
+					Id       string `json:"id"`
+					Type     string `json:"type"`
+					Function struct {
+						Name      string `json:"name"`
+						Arguments string `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
+			} `json:"message"`
+		} `json:"choices"`
 	}
-	if systemMsg == "" {
-		systemMsg = SystemPromptDataAnalyst
-		userMsg = prompt
+	if err := json.NewDecoder(body).Decode(&result); err != nil {
+		return nil, err
 	}
+	if len(result.Choices) == 0 {
+		return nil, fmt.Errorf("AI returned no choices")
+	}
+
+	choice := result.Choices[0].Message
+	msg := &aiMessage{Role: choice.Role}
+	if contentStr, ok := choice.Content.(string); ok {
+		msg.Content = contentStr
+	}
+
+	for _, tc := range choice.ToolCalls {
+		msg.ToolCalls = append(msg.ToolCalls, toolCall{
+			Id:   tc.Id,
+			Type: tc.Type,
+			Function: struct {
+				Name      string
+				Arguments string
+			}{Name: tc.Function.Name, Arguments: tc.Function.Arguments},
+		})
+	}
+
+	return msg, nil
+}
+
+func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string, userID string) (string, error) {
+	sysMsg, usrMsg := h.splitPrompt(prompt)
 
 	messages := []map[string]interface{}{
-		{"role": "system", "content": systemMsg},
-		{"role": "user", "content": userMsg},
+		{"role": "system", "content": sysMsg},
+		{"role": "user", "content": usrMsg},
 	}
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 90 * time.Second}
 
-	for {
-		reqBody := map[string]interface{}{
-			"model":       cfg.Model,
-			"messages":    messages,
-			"max_tokens":  cfg.MaxTokens,
-			"temperature": cfg.Temperature,
-			"tools":       allAITools(),
-			"tool_choice": "auto",
-		}
-		data, _ := json.Marshal(reqBody)
-		httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+	for i := 0; i < 5; i++ { // Limit tool call loops
+		url, headers, data, err := h.prepareAIRequest(cfg, messages, false)
 		if err != nil {
 			return "", err
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-		httpReq.Header.Set("ngrok-skip-browser-warning", "true")
+
+		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(data))
+		if err != nil {
+			return "", err
+		}
+		for k, v := range headers {
+			httpReq.Header.Set(k, v)
+		}
 
 		resp, err := client.Do(httpReq)
 		if err != nil {
 			return "", fmt.Errorf("AI request timeout: %w", err)
 		}
+		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
 			return "", fmt.Errorf("AI API error %d: %s", resp.StatusCode, string(body))
 		}
 
-		var result struct {
-			Choices []struct {
-				Message struct {
-					Role      string      `json:"role"`
-					Content   interface{} `json:"content"`
-					ToolCalls []struct {
-						Id       string `json:"id"`
-						Type     string `json:"type"`
-						Function struct {
-							Name      string `json:"name"`
-							Arguments string `json:"arguments"`
-						} `json:"function"`
-					} `json:"tool_calls"`
-				} `json:"message"`
-			} `json:"choices"`
-		}
-
-		err = json.NewDecoder(resp.Body).Decode(&result)
-		resp.Body.Close()
+		msg, err := h.parseAIResponse(cfg.Provider, resp.Body)
 		if err != nil {
-			return "", fmt.Errorf("failed to decode AI response: %w", err)
+			return "", err
 		}
-
-		if len(result.Choices) == 0 {
-			return "", fmt.Errorf("AI returned no choices")
-		}
-
-		msg := result.Choices[0].Message
 
 		if len(msg.ToolCalls) == 0 {
-			if contentStr, ok := msg.Content.(string); ok {
-				return contentStr, nil
-			}
-			return "", fmt.Errorf("AI returned no content")
+			return msg.Content, nil
 		}
 
+		// Tool calling logic
 		astMsg := map[string]interface{}{
 			"role":       "assistant",
 			"tool_calls": msg.ToolCalls,
 		}
-		if msg.Content != nil {
+		if msg.Content != "" {
 			astMsg["content"] = msg.Content
 		}
 		messages = append(messages, astMsg)
@@ -1042,6 +990,7 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string, userID string)
 			})
 		}
 	}
+	return "", fmt.Errorf("excessive AI tool call recursion")
 }
 
 // execution logic for AI tools (Stub/Proxy)
@@ -1099,14 +1048,7 @@ func (h *AIHandler) executeTool(name, args string, userID string) string {
 }
 
 func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, userID string, onEvent func(eventType string, data string)) error {
-	var sysMsg, usrMsg string
-	if idx := strings.Index(prompt, "\n---\n"); idx != -1 {
-		sysMsg = strings.TrimSpace(prompt[:idx])
-		usrMsg = strings.TrimSpace(prompt[idx+5:])
-	} else {
-		sysMsg = SystemPromptDataAnalyst
-		usrMsg = prompt
-	}
+	sysMsg, usrMsg := h.splitPrompt(prompt)
 
 	messages := []map[string]interface{}{
 		{"role": "system", "content": sysMsg},
@@ -1116,44 +1058,103 @@ func (h *AIHandler) streamOpenAI(cfg resolvedConfig, prompt string, userID strin
 	return h.streamOpenAIChatMessages(cfg, messages, userID, onEvent)
 }
 
-func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[string]interface{}, userID string, onEvent func(eventType string, data string)) error {
+func (h *AIHandler) splitPrompt(prompt string) (string, string) {
+	for _, sep := range []string{"\r\n---\r\n", "\n---\n"} {
+		if idx := strings.Index(prompt, sep); idx != -1 {
+			return strings.TrimSpace(prompt[:idx]), strings.TrimSpace(prompt[idx+len(sep):])
+		}
+	}
+	return SystemPromptDataAnalyst, prompt
+}
+
+// prepareAIRequest handles provider-specific URL, headers, and body transformations.
+func (h *AIHandler) prepareAIRequest(cfg resolvedConfig, messages []map[string]interface{}, isStream bool) (string, map[string]string, []byte, error) {
 	baseURL := strings.TrimSuffix(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = providerBaseURL(cfg.Provider)
 	}
 
+	headers := map[string]string{
+		"Content-Type":               "application/json",
+		"ngrok-skip-browser-warning": "true",
+	}
+
+	reqBody := map[string]interface{}{
+		"model":       cfg.Model,
+		"max_tokens":  cfg.MaxTokens,
+		"temperature": cfg.Temperature,
+	}
+
+	path := "chat/completions"
+	provider := strings.ToLower(cfg.Provider)
+
+	switch provider {
+	case "anthropic":
+		path = "messages"
+		headers["x-api-key"] = cfg.APIKey
+		headers["anthropic-version"] = "2023-06-01"
+
+		// Anthropic requires system prompt as a top-level field, not in messages
+		system, filteredMsgs := h.transformAnthropicMessages(messages)
+		if system != "" {
+			reqBody["system"] = system
+		}
+		reqBody["messages"] = filteredMsgs
+	case "cohere":
+		path = "chat"
+		headers["Authorization"] = "Bearer " + cfg.APIKey
+		reqBody["messages"] = messages
+	default:
+		// OpenAI compatible (Groq, OpenRouter, Mistral, etc)
+		headers["Authorization"] = "Bearer " + cfg.APIKey
+		reqBody["messages"] = messages
+		// Add tools only for OpenAI-compatible if needed, or handle per provider
+		reqBody["tools"] = allAITools()
+		reqBody["tool_choice"] = "auto"
+	}
+
+	if isStream {
+		reqBody["stream"] = true
+		headers["Accept"] = "text/event-stream"
+	}
+
+	finalURL := baseURL + "/" + path
+	data, err := json.Marshal(reqBody)
+	return finalURL, headers, data, err
+}
+
+func (h *AIHandler) transformAnthropicMessages(messages []map[string]interface{}) (string, []map[string]interface{}) {
+	var system string
+	var filtered []map[string]interface{}
+	for _, m := range messages {
+		if m["role"] == "system" {
+			if content, ok := m["content"].(string); ok {
+				system = content
+			}
+		} else {
+			filtered = append(filtered, m)
+		}
+	}
+	return system, filtered
+}
+
+func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[string]interface{}, userID string, onEvent func(eventType string, data string)) error {
 	client := &http.Client{Timeout: 120 * time.Second}
-	useTools := true
+	provider := strings.ToLower(cfg.Provider)
 
 	for {
-		reqBody := map[string]interface{}{
-			"model":       cfg.Model,
-			"messages":    messages,
-			"max_tokens":  cfg.MaxTokens,
-			"temperature": cfg.Temperature,
-			"stream":      true,
-		}
-
-		if useTools {
-			reqBody["tools"] = allAITools()
-			reqBody["tool_choice"] = "auto"
-		}
-
-		data, _ := json.Marshal(reqBody)
-		path := "chat/completions"
-		if cfg.Provider == "anthropic" {
-			path = "messages"
-		} else if cfg.Provider == "cohere" {
-			path = "chat"
-		}
-		httpReq, err := http.NewRequest("POST", baseURL+"/"+path, bytes.NewReader(data))
+		url, headers, data, err := h.prepareAIRequest(cfg, messages, true)
 		if err != nil {
 			return err
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-		httpReq.Header.Set("Accept", "text/event-stream")
-		httpReq.Header.Set("ngrok-skip-browser-warning", "true")
+
+		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(data))
+		if err != nil {
+			return err
+		}
+		for k, v := range headers {
+			httpReq.Header.Set(k, v)
+		}
 
 		resp, err := client.Do(httpReq)
 		if err != nil {
@@ -1164,10 +1165,6 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			bodyStr := string(body)
-			if useTools && (strings.Contains(strings.ToLower(bodyStr), "tool") || strings.Contains(strings.ToLower(bodyStr), "endpoint")) {
-				useTools = false
-				continue
-			}
 			return fmt.Errorf("AI API error %d: %s", resp.StatusCode, bodyStr)
 		}
 
@@ -1183,6 +1180,31 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 
 		for scanner.Scan() {
 			line := scanner.Text()
+
+			// --- Anthropic Stream Parsing ---
+			if provider == "anthropic" {
+				if strings.HasPrefix(line, "data: ") {
+					payload := strings.TrimPrefix(line, "data: ")
+					var anthroDelta struct {
+						Type  string `json:"type"`
+						Index int    `json:"index"`
+						Delta struct {
+							Type string `json:"type"`
+							Text string `json:"text"`
+						} `json:"delta"`
+					}
+					if err := json.Unmarshal([]byte(payload), &anthroDelta); err == nil {
+						if anthroDelta.Type == "content_block_delta" && anthroDelta.Delta.Text != "" {
+							txt := anthroDelta.Delta.Text
+							currentContent.WriteString(txt)
+							onEvent("message", txt)
+						}
+					}
+				}
+				continue
+			}
+
+			// --- OpenAI Stream Parsing (Default) ---
 			if !strings.HasPrefix(line, "data: ") {
 				continue
 			}
