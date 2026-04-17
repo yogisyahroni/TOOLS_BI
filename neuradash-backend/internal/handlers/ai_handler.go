@@ -73,6 +73,7 @@ func (h *AIHandler) resolveUserConfig(userID string) (resolvedConfig, error) {
 		if decryptErr != nil {
 			return resolvedConfig{}, fmt.Errorf("failed to decrypt API key: %w", decryptErr)
 		}
+		rawKey = strings.TrimSpace(rawKey)
 		// Fallback for MaxTokens: User setting > Server global setting
 		maxTokens := userCfg.MaxTokens
 		if maxTokens <= 0 {
@@ -1125,6 +1126,12 @@ func (h *AIHandler) prepareAIRequest(cfg resolvedConfig, messages []map[string]i
 	default:
 		// OpenAI compatible (Groq, OpenRouter, Mistral, etc)
 		headers["Authorization"] = "Bearer " + cfg.APIKey
+		
+		if strings.Contains(strings.ToLower(cfg.Provider), "openrouter") {
+			headers["HTTP-Referer"] = "https://neuradashai.vercel.app"
+			headers["X-Title"] = "NeuraDash"
+		}
+
 		reqBody["messages"] = messages
 		// Add tools only for OpenAI-compatible if needed, or handle per provider
 		reqBody["tools"] = allAITools()
