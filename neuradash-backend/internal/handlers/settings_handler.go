@@ -12,6 +12,7 @@ import (
 	"neuradash/internal/services"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -151,6 +152,7 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update config", "details": err.Error()})
 		}
 	} else {
+		cfg.ID = uuid.New().String()
 		cfg.CreatedAt = time.Now()
 		if err := h.db.Create(&cfg).Error; err != nil {
 			log.Error().Err(err).Str("userID", userID).Msg("Failed to create AI config")

@@ -845,20 +845,20 @@ func autoMigrate(db *gorm.DB) error {
 	
 	// Force column type changes that GORM AutoMigrate often skips
 	hardFixSQL := []string{
-		"ALTER TABLE datasets ALTER COLUMN id TYPE VARCHAR(255)",
-		"ALTER TABLE datasets ALTER COLUMN user_id TYPE VARCHAR(255)",
-		"ALTER TABLE saved_charts ALTER COLUMN id TYPE VARCHAR(255)",
-		"ALTER TABLE saved_charts ALTER COLUMN user_id TYPE VARCHAR(255)",
-		"ALTER TABLE saved_charts ALTER COLUMN dataset_id TYPE VARCHAR(255)",
-		"ALTER TABLE dashboards ALTER COLUMN id TYPE VARCHAR(255)",
-		"ALTER TABLE dashboards ALTER COLUMN user_id TYPE VARCHAR(255)",
+		"ALTER TABLE datasets ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
+		"ALTER TABLE datasets ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
+		"ALTER TABLE saved_charts ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
+		"ALTER TABLE saved_charts ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
+		"ALTER TABLE saved_charts ALTER COLUMN dataset_id TYPE VARCHAR(255) USING dataset_id::varchar",
+		"ALTER TABLE dashboards ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
+		"ALTER TABLE dashboards ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
 		"ALTER TABLE saved_charts ADD COLUMN IF NOT EXISTS config jsonb",
 		"ALTER TABLE saved_charts ADD COLUMN IF NOT EXISTS annotations jsonb DEFAULT '[]'",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_telegram_bot_token text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_instance_id text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_token text",
-		"ALTER TABLE user_ai_configs ALTER COLUMN id TYPE VARCHAR(255)",
-		"ALTER TABLE user_ai_configs ALTER COLUMN user_id TYPE VARCHAR(255)",
+		"ALTER TABLE user_ai_configs ALTER COLUMN id TYPE VARCHAR(255) USING id::varchar",
+		"ALTER TABLE user_ai_configs ALTER COLUMN user_id TYPE VARCHAR(255) USING user_id::varchar",
 	}
 
 	for _, sql := range hardFixSQL {
