@@ -181,7 +181,21 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{"success": true})
+	return c.JSON(fiber.Map{
+		"success":               true,
+		"configured":            true,
+		"provider":              cfg.Provider,
+		"model":                 cfg.Model,
+		"baseUrl":               cfg.BaseURL,
+		"maxTokens":             cfg.MaxTokens,
+		"temperature":           cfg.Temperature,
+		"hasApiKey":             cfg.EncryptedAPIKey != "",
+		"notificationTargets":   cfg.NotificationTargets,
+		"integrationConnectors": cfg.IntegrationConnectors,
+		"hasTelegramToken":      cfg.EncryptedTelegramBotToken != "",
+		"hasWhatsAppInstance":   cfg.EncryptedWhatsAppInstanceID != "",
+		"hasWhatsAppToken":      cfg.EncryptedWhatsAppToken != "",
+	})
 }
 
 func (h *SettingsHandler) DeleteAIConfig(c *fiber.Ctx) error {
