@@ -132,6 +132,11 @@ func (h *AIHandler) Chat(c *fiber.Ctx) error {
 		httpReq.Header.Set(k, v)
 	}
 
+	// S++ Resiliency: Disable Keep-Alive for custom endpoints (proxies/ngrok) to avoid "unexpected EOF"
+	if cfg.BaseURL != "" {
+		httpReq.Close = true
+	}
+
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
@@ -950,6 +955,11 @@ func (h *AIHandler) callOpenAI(cfg resolvedConfig, prompt string, userID string)
 			httpReq.Header.Set(k, v)
 		}
 
+		// S++ Resiliency: Disable Keep-Alive for custom endpoints (proxies/ngrok) to prevent stall EOF
+		if cfg.BaseURL != "" {
+			httpReq.Close = true
+		}
+
 		resp, err := client.Do(httpReq)
 		if err != nil {
 			return "", fmt.Errorf("AI request timeout: %w", err)
@@ -1076,12 +1086,19 @@ func (h *AIHandler) prepareAIRequest(cfg resolvedConfig, messages []map[string]i
 
 	headers := map[string]string{
 		"Content-Type":               "application/json",
+		"Accept":                     "application/json",
+		"User-Agent":                 "NeuraDash/1.0 (Business Intelligence AI Agent)",
 		"ngrok-skip-browser-warning": "true",
+	}
+
+	maxTokens := cfg.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 4096 // Anthropic & modern models require this. 4k is a safe default for report/sql generation.
 	}
 
 	reqBody := map[string]interface{}{
 		"model":       cfg.Model,
-		"max_tokens":  cfg.MaxTokens,
+		"max_tokens":  maxTokens,
 		"temperature": cfg.Temperature,
 	}
 
@@ -1156,8 +1173,14 @@ func (h *AIHandler) streamOpenAIChatMessages(cfg resolvedConfig, messages []map[
 			httpReq.Header.Set(k, v)
 		}
 
+		// S++ Resiliency: Proxies like ngrok can drop connections; req.Close ensures a fresh socket.
+		if cfg.BaseURL != "" {
+			httpReq.Close = true
+		}
+
 		resp, err := client.Do(httpReq)
 		if err != nil {
+			log.Error().Err(err).Str("url", url).Msg("AI client.Do failed")
 			return err
 		}
 
