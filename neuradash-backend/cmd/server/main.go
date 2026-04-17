@@ -857,6 +857,8 @@ func autoMigrate(db *gorm.DB) error {
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_telegram_bot_token text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_instance_id text",
 		"ALTER TABLE user_ai_configs ADD COLUMN IF NOT EXISTS encrypted_whatsapp_token text",
+		"ALTER TABLE user_ai_configs ALTER COLUMN id TYPE VARCHAR(255)",
+		"ALTER TABLE user_ai_configs ALTER COLUMN user_id TYPE VARCHAR(255)",
 	}
 
 	for _, sql := range hardFixSQL {

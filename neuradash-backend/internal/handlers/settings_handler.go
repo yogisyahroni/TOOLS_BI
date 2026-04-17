@@ -12,6 +12,7 @@ import (
 	"neuradash/internal/services"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -146,12 +147,14 @@ func (h *SettingsHandler) SaveAIConfig(c *fiber.Ctx) error {
 
 	if found {
 		if err := h.db.Model(&existing).Where("user_id = ?", userID).Updates(cfg).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update config"})
+			log.Error().Err(err).Str("userID", userID).Msg("Failed to update AI config")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update config", "details": err.Error()})
 		}
 	} else {
 		cfg.CreatedAt = time.Now()
 		if err := h.db.Create(&cfg).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save config"})
+			log.Error().Err(err).Str("userID", userID).Msg("Failed to create AI config")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save config", "details": err.Error()})
 		}
 	}
 

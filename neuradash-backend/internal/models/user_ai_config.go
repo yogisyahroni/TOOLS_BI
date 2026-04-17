@@ -14,8 +14,8 @@ import (
 //   - AI calls go through the backend proxy, so the key is never sent to the browser
 //   - In DevTools, users only see requests to your own domain, not to OpenAI directly
 type UserAIConfig struct {
-	ID                    string          `json:"-"           gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID                string          `json:"-"           gorm:"type:uuid;uniqueIndex;not null"` // one config per user
+	ID                    string          `json:"-"           gorm:"size:255;primaryKey"`
+	UserID                string          `json:"-"           gorm:"size:255;uniqueIndex;not null"` // one config per user
 	Provider              string          `json:"provider"    gorm:"size:50;default:openrouter"`
 	Model                 string          `json:"model"       gorm:"size:200"`
 	EncryptedAPIKey       string          `json:"-"           gorm:"type:text;not null"` // AES-256-GCM, never serialised to JSON
