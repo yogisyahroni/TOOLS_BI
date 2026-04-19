@@ -27,11 +27,16 @@ Designed for high-reliability environments, Neuradash features unique **resource
 
 ## 🔥 Key Innovations & Features
 
-### 🤖 Next-Gen Autonomous Intelligence (S++ Grade)
+### 🤖 Next-Gen Autonomous Intelligence
 *   **Autonomous Causal Investigation**: Beyond reporting "what" happened, Neuradash triggers deep-dive forensic agents on every KPI breach to identify the "why" through automated cross-dataset reasoning.
 *   **Semantic Join Intuition**: Advanced AI logic that autonomously discovers relationships between datasets by prioritizing **Unique Identifiers** (SKU, Resi, Order ID) to ensure 100% data integrity during multi-source synthesis.
 *   **Agentic AI Dashboard Builder (✨ Vercel v0 Style)**: Construct entire BI dashboards from raw natural language. The AI autonomously plans the architecture, executes optimized SQL, and generates a responsive **12-column grid layout** live via **SSE Streaming**.
 *   **5 Expert AI Personas**: Dynamically switch between specialized agents: *Data Visualization Architect*, *Predictive Analyst*, *Financial Risk Expert*, *Anomaly Detection Specialist*, and *NLP Sentiment Analyst*.
+*   **4 Autonomous Strategic Pillars**:
+    *   **Forensic Anomaly Investigator**: Automated root cause investigation for KPI breaches.
+    *   **Schema Sentinel**: Maintains schema integrity and autonomous semantic join discovery.
+    *   **Self-Healing SQL Engine**: Autonomous query correction and multi-layer security hardening.
+    *   **Prescriptive Workflow Engine**: Automation of data-driven preventive and corrective actions.
 
 ### 📡 Active Alerting & Foresight
 *   **Multi-Channel Dispatcher**: Autonomous reports are delivered directly to **Telegram**, **WhatsApp**, and **Enterprise Email** (Rich HTML templates).
@@ -55,7 +60,7 @@ Designed for high-reliability environments, Neuradash features unique **resource
 
 ---
 
-## 💻 Tech Stack (Grade S++)
+## 💻 Tech Stack
 
 | Layer | Technologies |
 | :--- | :--- |

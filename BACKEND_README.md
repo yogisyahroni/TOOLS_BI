@@ -11,10 +11,11 @@
 7. [WebSocket Realtime](#websocket-realtime)
 8. [Data Refresh & Cron Jobs](#data-refresh--cron-jobs)
 9. [Processing Engine](#processing-engine)
-10. [Authentication & RLS](#authentication--rls)
-11. [Deployment & Scaling](#deployment--scaling)
-12. [Environment Variables](#environment-variables)
-13. [Frontend Integration](#frontend-integration)
+10. [Autonomous Intelligence Agents](#autonomous-intelligence-agents)
+11. [Authentication & RLS](#authentication--rls)
+12. [Deployment & Scaling](#deployment--scaling)
+13. [Environment Variables](#environment-variables)
+14. [Frontend Integration](#frontend-integration)
 
 ---
 
@@ -983,6 +984,53 @@ func (e *FormulaEngine) Evaluate(formula string, rowData map[string]interface{})
 
 ---
 
+## Autonomous Intelligence Agents
+
+Neuradash implements an autonomous intelligence system operating entirely in the background to maintain the health of the data ecosystem without human intervention. This system is designed to transition from reactive BI to **Proactive Strategic Intelligence**.
+
+### Core Philosophy: The Autonomous Agentic Loop
+Unlike traditional BI systems, Neuradash runs a continuous observe-orient-decide-act cycle:
+1.  **Monitor**: Cron Job Sentinels monitor schema integrity and KPI thresholds in real-time.
+2.  **Analyze**: When an anomaly is detected, an AI Agent "wakes up" to perform forensic investigation.
+3.  **Execute**: The system formulates and executes validated preventive or corrective actions.
+
+---
+
+### Four Pillars of Autonomous Architecture
+
+#### 1. Forensic Anomaly Investigator (Causal Intelligence)
+This pillar is responsible for answering the question "*Why did this happen?*" automatically when a data breach or anomaly occurs.
+- **Background Trigger**: Integrated with `CronHandler` which checks KPI thresholds at specific intervals. If a breach is detected, the `AnalyzeAnomaly` function is triggered.
+- **Forensic Reasoning**: The AI performs *cross-dataset reasoning* to find the root cause. The agent generates SQL hypotheses to verify the anomaly (e.g., correlating logistics delays with a drop in customer satisfaction scores).
+- **Social Broadcast**: Findings are pushed directly to WebSockets for live dashboard updates and sent via Telegram/WhatsApp using `NotificationService`.
+
+#### 2. Schema Sentinel (Infrastructure Integrity)
+Maintains coherence between different data sources and prevents report failures due to schema changes.
+- **Join Intuition**: Uses `BuildGlobalSchemaContext` logic to automatically identify key columns (*Unique Identifiers*) such as SKU, Receipt, or Order ID, allowing the AI to join tables without manual configuration.
+- **Drift Sentinel**: Monitors external data source schemas and triggers `SendDriftAlert` if column changes are detected that could break dashboards, providing a proactive layer of defense against *pipeline breakage*.
+
+#### 3. Self-Healing SQL Engine (Resilient NL2SQL)
+The engine ensures every natural language interaction produces safe, efficient, and adaptive queries.
+- **Multi-Layer Defensive Layer**: Each query is processed through `analyzeSecurity` which validates commands (preventing SQL injection and destructive commands).
+- **Adaptive Execution**: If a query fails due to minor DB changes, the engine has the ability to "reflect" and self-correct query syntax before retrying.
+- **Performance Aware**: Automatically injects `LIMIT` clauses and index optimizations to prevent queries from overwhelming the infrastructure.
+
+#### 4. Prescriptive Workflow Engine (Automated Actions)
+Translates insights into real-world actions through automated triggers.
+- **Validated Payloads**: Uses `ExecutePrescriptiveAction` which passes through the `validateActionData` filter. The AI is prohibited from sending payloads containing malicious scripts or unauthorized access.
+- **Connector Orchestration**: Integrates `IntegrationService` to trigger external workflows (such as payment triggers, stock re-ordering, or blocking users indicated for fraud) based on data thresholds.
+
+---
+
+### Defense-in-Depth AI Security
+
+Security is the primary foundation of all autonomous operations:
+- **AES-256-GCM Encryption**: All AI credentials (bot tokens, instance IDs) are stored in the database encrypted using the AES-256-GCM algorithm and decrypted only just before use in memory.
+- **Action Safeguards**: AI is never granted direct write access to the user's primary database. All "write" actions must pass through the `IntegrationService` validation layer.
+- **Resource Guard**: Sliding window rate-limiting prevents "runaway AI costs" caused by uncontrolled autonomous feedback loops.
+
+---
+
 ## Authentication & RLS
 
 ### JWT Middleware
@@ -1591,7 +1639,7 @@ Route: `POST /api/v1/ai/proxy` — requires auth middleware.
 
 ### Overview
 
-Fitur DB Diagram memvisualisasikan skema database secara interaktif — seperti dbdiagram.io. Mendukung **dataset yang di-upload** (skema dari kolom CSV/Excel) dan **koneksi database external** (PostgreSQL, MySQL, SQL Server).
+The DB Diagram feature interactively visualizes database schemas—similar to dbdiagram.io. It supports **uploaded datasets** (column schemas from CSV/Excel) and **external database connections** (PostgreSQL, MySQL, SQL Server).
 
 ### Database Schema
 
@@ -1803,7 +1851,7 @@ type SchemaTable struct {
 
 ### Overview
 
-Visual ETL memungkinkan user membuat pipeline data processing melalui drag-and-drop canvas. Setiap node merepresentasikan operasi data (source, filter, transform, join, aggregate, dll) yang dihubungkan dengan edge. Backend menjalankan pipeline sebagai DAG (Directed Acyclic Graph).
+Visual ETL allows users to create data processing pipelines through a drag-and-drop canvas. Each node represents a data operation (source, filter, transform, join, aggregate, etc.) connected by edges. The backend executes the pipeline as a DAG (Directed Acyclic Graph).
 
 ### Database Schema
 
