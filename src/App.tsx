@@ -8,15 +8,11 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { RealtimeNotificationHandler } from "@/components/realtime/RealtimeNotificationHandler";
-import { privacyScreen, isMobileNative } from "@/lib/mobile";
-import { StatusBar, Style } from '@capacitor/status-bar';
-import { useTheme } from "@/components/ThemeProvider";
-import { isDesktop, checkForUpdates, setTrayStatus } from "@/lib/desktop";
+import { AppInitializer } from "@/components/AppInitializer";
 
 // ─── Page Skeleton Loader ─────────────────────────────────────────────────────
 function PageFallback() {
@@ -152,56 +148,13 @@ function ProtectedLayout() {
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 const App = () => {
-  const { theme, systemTheme } = useTheme();
-
-  useEffect(() => {
-    if (isDesktop()) {
-      checkForUpdates();
-      setTrayStatus('Optimal');
-    }
-    
-    if (isMobileNative) {
-      // Privacy Screen
-      privacyScreen.enable().catch(console.error);
-      
-      // Status Bar Initialization
-      const initStatusBar = async () => {
-        try {
-          await StatusBar.setOverlaysWebView({ overlay: true });
-        } catch (e) {
-          console.warn('StatusBar overlay failed', e);
-        }
-      };
-      initStatusBar();
-    }
-  }, []);
-
-  // Sync StatusBar with Theme
-  useEffect(() => {
-    if (isMobileNative) {
-      const activeTheme = theme === 'system' ? systemTheme : theme;
-      const updateStatusBar = async () => {
-        try {
-          await StatusBar.setStyle({
-            style: activeTheme === 'dark' ? Style.Dark : Style.Light
-          });
-        } catch (e) {
-          console.warn('StatusBar style update failed', e);
-        }
-      };
-      updateStatusBar();
-    }
-  }, [theme, systemTheme]);
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" enableSystem attribute="class">
         <AuthProvider>
           <TooltipProvider>
-            <RealtimeNotificationHandler />
-            <Toaster />
-            <Sonner />
             <BrowserRouter>
+              <AppInitializer />
               <Suspense fallback={<PageFallback />}>
                 <Routes>
                   {/* Public routes */}
@@ -226,3 +179,4 @@ const App = () => {
 };
 
 export default App;
+
