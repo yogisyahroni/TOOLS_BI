@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Database, BarChart3, FileText, Shield, Sparkles, Clock, Loader2 } from 'lucide-react';
+import { Database, BarChart3, FileText, Shield, Sparkles, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { DataChart } from '@/components/dashboard/DataChart';
@@ -11,15 +11,29 @@ import { useDatasets } from '@/hooks/useApi';
 import { useReports } from '@/hooks/useApi';
 import { usePipelines } from '@/hooks/useApi';
 import { Link } from 'react-router-dom';
+import { haptics } from '@/lib/mobile';
+import { ImpactStyle } from '@capacitor/haptics';
+import { useQueryClient } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { openDetachedWindow, isDesktop } from '@/lib/desktop';
+import { Maximize2 } from 'lucide-react';
 
 export default function Dashboard() {
+  const queryClient = useQueryClient();
   const { data: datasets = [], isLoading: dsLoading } = useDatasets();
   const { data: reports = [], isLoading: rptLoading } = useReports();
   const { data: pipelines = [], isLoading: plLoading } = usePipelines();
 
+  const handleRefresh = async () => {
+    await haptics.impact(ImpactStyle.Medium);
+    queryClient.invalidateQueries();
+  };
+
   const isLoading = dsLoading || rptLoading || plLoading;
 
   const totalRecords = datasets.reduce((sum, ds) => sum + (ds.rowCount ?? 0), 0);
+// ... existing stats definition ...
+// (I will use multi_replace for better accuracy if I need to change many things, but here it's just header and imports)
 
   const stats = [
     {
@@ -79,15 +93,39 @@ export default function Dashboard() {
       <DriftSentinelBanner />
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-2">
-          <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
-            <Sparkles className="w-6 h-6 text-primary-foreground" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow shrink-0">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
+                Dashboard <HelpTooltip text="Ringkasan KPI real-time dari backend API: jumlah dataset, record, report, dan pipeline aktif." />
+              </h1>
+              <p className="text-muted-foreground text-sm lg:text-base">Welcome back! Here's your live analytics overview.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-2">
-              Dashboard <HelpTooltip text="Ringkasan KPI real-time dari backend API: jumlah dataset, record, report, dan pipeline aktif." />
-            </h1>
-            <p className="text-muted-foreground text-sm lg:text-base">Welcome back! Here's your live analytics overview.</p>
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            {isDesktop() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openDetachedWindow('dashboard-detach', 'Sentinel Dashboard (Detached)', '/')}
+                className="flex items-center gap-2 h-10 px-4 rounded-xl border-border bg-card hover:bg-muted/50 transition-all shadow-sm"
+              >
+                <Maximize2 className="w-4 h-4" />
+                Detach
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefresh}
+              className="flex items-center gap-2 h-10 px-4 rounded-xl border-border bg-card hover:bg-muted/50 transition-all shadow-sm"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh Data
+            </Button>
           </div>
         </div>
       </motion.div>

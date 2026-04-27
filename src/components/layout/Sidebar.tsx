@@ -14,6 +14,7 @@ import { useSidebar } from '@/hooks/use-sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { isTauri } from '@tauri-apps/api/core';
 
 // ─── Menu structure with groups ───────────────────────────────────────────────
 interface MenuItem { icon: React.ElementType; label: string; path: string; badge?: string }
@@ -148,7 +149,9 @@ export function Sidebar() {
         }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
         className={cn(
-          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col transition-all duration-300",
+          "fixed left-0 bg-sidebar border-r border-sidebar-border z-50 flex flex-col transition-all duration-300",
+          isTauri() ? "top-8 h-[calc(100vh-2rem)]" : "top-0 h-screen",
+          isMobile && "pt-[var(--safe-area-top)] h-screen pb-[var(--safe-area-bottom)]",
           !isMobile && "translate-x-0"
         )}
       >

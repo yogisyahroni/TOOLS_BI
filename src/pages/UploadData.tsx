@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, FileSpreadsheet, FileJson, File, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, FileJson, File as FileIcon, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -8,9 +8,12 @@ import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { useUploadDataset } from '@/hooks/useApi';
+import { isTauri } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
 
 interface UploadedFile {
-  file: File;
+  file: { name: string; size: number; contents?: Uint8Array; path?: string };
   status: 'pending' | 'processing' | 'success' | 'error';
   errorMsg?: string;
 }
@@ -21,9 +24,19 @@ export default function UploadData() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const uploadToAPI = useCallback(async (file: File): Promise<boolean> => {
+  const uploadToAPI = useCallback(async (fileData: UploadedFile['file']): Promise<boolean> => {
     const formData = new FormData();
-    formData.append('file', file);
+    
+    let fileBlob: File;
+    if (fileData.contents) {
+      fileBlob = new File([new Uint8Array(fileData.contents)], fileData.name);
+    } else if ('size' in fileData && (fileData as any).rawFile) {
+       fileBlob = (fileData as any).rawFile;
+    } else {
+      return false;
+    }
+
+    formData.append('file', fileBlob);
     try {
       await uploadMutation.mutateAsync(formData);
       return true;
@@ -35,7 +48,10 @@ export default function UploadData() {
   }, [uploadMutation]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const newFiles: UploadedFile[] = acceptedFiles.map((file) => ({ file, status: 'pending' }));
+    const newFiles: UploadedFile[] = acceptedFiles.map((file) => ({ 
+      file: { name: file.name, size: file.size, rawFile: file } as any, 
+      status: 'pending' 
+    }));
     const startIdx = uploadedFiles.length;
     setUploadedFiles((prev) => [...prev, ...newFiles]);
 
@@ -76,8 +92,61 @@ export default function UploadData() {
     }
   }, [uploadedFiles.length, uploadToAPI, toast, navigate]);
 
+  const handleNativeUpload = async () => {
+    if (!isTauri()) return;
+
+    try {
+      const selected = await open({
+        multiple: true,
+        filters: [
+          { name: 'Data Files', extensions: ['csv', 'xlsx', 'xls', 'json'] }
+        ]
+      });
+
+      if (!selected) return;
+
+      const paths = Array.isArray(selected) ? selected : [selected];
+      const startIdx = uploadedFiles.length;
+      
+      const newFiles: UploadedFile[] = await Promise.all(paths.map(async (path) => {
+        const name = path.split(/[\\/]/).pop() || 'unknown';
+        const contents = await readFile(path);
+        return {
+          file: { name, size: contents.length, contents, path },
+          status: 'pending' as const
+        };
+      }));
+
+      setUploadedFiles((prev) => [...prev, ...newFiles]);
+
+      for (let i = 0; i < newFiles.length; i++) {
+        setUploadedFiles((prev) =>
+          prev.map((f, j) => (j === startIdx + i ? { ...f, status: 'processing' } : f))
+        );
+
+        const ok = await uploadToAPI(newFiles[i].file);
+
+        setUploadedFiles((prev) =>
+          prev.map((f, j) =>
+            j === startIdx + i
+              ? { ...f, status: ok ? 'success' : 'error', errorMsg: ok ? undefined : 'Server error' }
+              : f
+          )
+        );
+
+        if (ok) {
+          toast({ title: 'File uploaded', description: `${newFiles[i].file.name} processed.` });
+        }
+      }
+    } catch (err) {
+      console.error('Native upload error:', err);
+      toast({ title: 'Upload error', description: 'Failed to open native dialog', variant: 'destructive' });
+    }
+  };
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    noClick: isTauri(), // Disable click for dropzone if in Tauri to use our native handler
     accept: {
       'text/csv': ['.csv'],
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
@@ -93,7 +162,7 @@ export default function UploadData() {
     const ext = name.split('.').pop()?.toLowerCase();
     if (ext === 'csv' || ext === 'xlsx' || ext === 'xls') return FileSpreadsheet;
     if (ext === 'json') return FileJson;
-    return File;
+    return FileIcon;
   };
 
   return (
@@ -118,6 +187,7 @@ export default function UploadData() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
         <div
           {...getRootProps()}
+          onClick={isTauri() ? handleNativeUpload : (getRootProps() as any).onClick}
           className={cn(
             'border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all duration-300',
             isDragActive
@@ -125,7 +195,7 @@ export default function UploadData() {
               : 'border-border hover:border-primary/50 hover:bg-muted/50'
           )}
         >
-          <input {...getInputProps()} />
+          {!isTauri() && <input {...getInputProps()} />}
           <div className="flex flex-col items-center">
             <div className={cn(
               'w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-all duration-300',
@@ -134,9 +204,11 @@ export default function UploadData() {
               <Upload className={cn('w-8 h-8 transition-colors', isDragActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
             </div>
             <h3 className="text-xl font-semibold text-foreground mb-2">
-              {isDragActive ? 'Drop your files here' : 'Drag & drop your files'}
+              {isDragActive ? 'Drop your files here' : isTauri() ? 'Click to open file picker' : 'Drag & drop your files'}
             </h3>
-            <p className="text-muted-foreground mb-4">or click to browse from your computer</p>
+            <p className="text-muted-foreground mb-4">
+              {isTauri() ? 'Using native Windows explorer' : 'or click to browse from your computer'}
+            </p>
             <div className="flex gap-2 flex-wrap justify-center">
               {['CSV', 'Excel (.xlsx)', 'XLS'].map((format) => (
                 <span key={format} className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-sm">{format}</span>

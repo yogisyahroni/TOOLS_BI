@@ -68,6 +68,11 @@
     --sidebar-accent-foreground: 222 47% 6%;
     --sidebar-border: 214.3 31.8% 91.4%;
     --sidebar-ring: 174 72% 46%;
+
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
   }
 
   .dark {

@@ -8,11 +8,15 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { RealtimeNotificationHandler } from "@/components/realtime/RealtimeNotificationHandler";
+import { privacyScreen, isMobileNative } from "@/lib/mobile";
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { useTheme } from "@/components/ThemeProvider";
+import { isDesktop, checkForUpdates, setTrayStatus } from "@/lib/desktop";
 
 // ─── Page Skeleton Loader ─────────────────────────────────────────────────────
 function PageFallback() {
@@ -147,35 +151,78 @@ function ProtectedLayout() {
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="system" enableSystem attribute="class">
-      <AuthProvider>
-        <TooltipProvider>
-          <RealtimeNotificationHandler />
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Suspense fallback={<PageFallback />}>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/login"               element={<Login />} />
-                <Route path="/register"            element={<Register />} />
-                <Route path="/stories/view/:storyId" element={<StoryPresentation />} />
-                <Route path="/embed/view/:token"   element={<EmbedViewer />} />
-                {/* Standalone 404 */}
-                <Route path="/not-found"           element={<NotFound />} />
-                {/* Protected — nested inside auth guard */}
-                <Route path="/*"                   element={<ProtectedLayout />} />
-                {/* Top-level catch-all */}
-                <Route path="*"                    element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const { theme, systemTheme } = useTheme();
+
+  useEffect(() => {
+    if (isDesktop()) {
+      checkForUpdates();
+      setTrayStatus('Optimal');
+    }
+    
+    if (isMobileNative) {
+      // Privacy Screen
+      privacyScreen.enable().catch(console.error);
+      
+      // Status Bar Initialization
+      const initStatusBar = async () => {
+        try {
+          await StatusBar.setOverlaysWebView({ overlay: true });
+        } catch (e) {
+          console.warn('StatusBar overlay failed', e);
+        }
+      };
+      initStatusBar();
+    }
+  }, []);
+
+  // Sync StatusBar with Theme
+  useEffect(() => {
+    if (isMobileNative) {
+      const activeTheme = theme === 'system' ? systemTheme : theme;
+      const updateStatusBar = async () => {
+        try {
+          await StatusBar.setStyle({
+            style: activeTheme === 'dark' ? Style.Dark : Style.Light
+          });
+        } catch (e) {
+          console.warn('StatusBar style update failed', e);
+        }
+      };
+      updateStatusBar();
+    }
+  }, [theme, systemTheme]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="system" enableSystem attribute="class">
+        <AuthProvider>
+          <TooltipProvider>
+            <RealtimeNotificationHandler />
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Suspense fallback={<PageFallback />}>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/login"               element={<Login />} />
+                  <Route path="/register"            element={<Register />} />
+                  <Route path="/stories/view/:storyId" element={<StoryPresentation />} />
+                  <Route path="/embed/view/:token"   element={<EmbedViewer />} />
+                  {/* Standalone 404 */}
+                  <Route path="/not-found"           element={<NotFound />} />
+                  {/* Protected — nested inside auth guard */}
+                  <Route path="/*"                   element={<ProtectedLayout />} />
+                  {/* Top-level catch-all */}
+                  <Route path="*"                    element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </TooltipProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

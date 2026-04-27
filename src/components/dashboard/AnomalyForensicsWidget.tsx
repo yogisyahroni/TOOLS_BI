@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, AlertCircle, ChevronRight, Activity, Clock } from 'lucide-react';
+import { Sparkles, AlertCircle, ChevronRight, Activity, Clock, Share2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useWSEvent } from '@/lib/websocket';
 import { formatDistanceToNow } from 'date-fns';
+import { haptics, nativeShare } from '@/lib/mobile';
+import { ImpactStyle } from '@capacitor/haptics';
+import { setTrayStatus, isDesktop } from '@/lib/desktop';
 
 interface Investigation {
     datasetId: string;
@@ -22,8 +25,29 @@ export function AnomalyForensicsWidget() {
     // Phase 4: Real-time listener for AI investigation completion
     useWSEvent('investigation_completed', (payload: any) => {
         const newInvestigation = payload as Investigation;
-        setInvestigations(prev => [newInvestigation, ...prev].slice(0, 10)); // Keep last 10
+        setInvestigations(prev => {
+            const updated = [newInvestigation, ...prev].slice(0, 10);
+            if (isDesktop() && updated.length > 0) {
+                setTrayStatus('Warning');
+            }
+            return updated;
+        });
     });
+
+    useEffect(() => {
+        if (isDesktop() && investigations.length === 0) {
+            setTrayStatus('Optimal');
+        }
+    }, [investigations.length]);
+
+    const handleShare = async (item: Investigation) => {
+        await haptics.impact(ImpactStyle.Light);
+        await nativeShare(
+            `Anomaly Detected: ${item.datasetName}`,
+            `AI Forensic Insight: ${item.anomalyDescription}`,
+            window.location.origin
+        );
+    };
 
     return (
         <Card className="h-full bg-card border-border shadow-card overflow-hidden">
@@ -81,6 +105,17 @@ export function AnomalyForensicsWidget() {
                                             <Button variant="ghost" size="sm" className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10 p-0">
                                                 View Forensic Discovery
                                                 <ChevronRight className="w-3 h-3 ml-1" />
+                                            </Button>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-8 w-8 p-0 text-muted-foreground hover:text-primary transition-colors"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleShare(item);
+                                                }}
+                                            >
+                                                <Share2 className="w-4 h-4" />
                                             </Button>
                                         </div>
                                     </motion.div>

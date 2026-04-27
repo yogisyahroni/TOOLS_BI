@@ -7,6 +7,8 @@ import { useSidebar } from '@/hooks/use-sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Titlebar } from './Titlebar';
+import { isTauri } from '@tauri-apps/api/core';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -23,9 +25,15 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <ShortcutProvider>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background flex flex-col">
+        <Titlebar />
+        
         {/* Mobile Header */}
-        <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-sidebar/80 backdrop-blur-md border-b border-sidebar-border z-[60] flex items-center justify-between px-4">
+        <header className={cn(
+          "lg:hidden fixed left-0 right-0 h-16 bg-sidebar/80 backdrop-blur-md border-b border-sidebar-border z-[60] flex items-center justify-between px-4",
+          "pt-[var(--safe-area-top)] h-[calc(16px+4rem+var(--safe-area-top))]",
+          isTauri() ? "top-8" : "top-0"
+        )}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shadow-glow">
               <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-white">
@@ -48,8 +56,12 @@ export function AppLayout({ children }: AppLayoutProps) {
         <Sidebar />
         
         <main className={cn(
-          "min-h-screen transition-all duration-300 pt-16 lg:pt-0",
-          !isMobile && (isCollapsed ? "lg:ml-[80px]" : "lg:ml-[280px]")
+          "min-h-screen transition-all duration-300",
+          isMobile 
+            ? (isTauri() ? "pt-[6rem]" : "pt-[calc(4rem+var(--safe-area-top))]") 
+            : (isTauri() ? "pt-8" : "pt-0"),
+          !isMobile && (isCollapsed ? "lg:ml-[80px]" : "lg:ml-[280px]"),
+          "pb-[var(--safe-area-bottom)]"
         )}>
           <div className="p-4 lg:p-8">
             {children}

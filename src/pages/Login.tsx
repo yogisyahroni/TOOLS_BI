@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, LogIn, Database } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Database, Fingerprint, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { haptics } from '@/lib/mobile';
 
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const { login, isAuthenticated } = useAuth();
+    const { login, loginWithBiometrics, isAuthenticated, isBiometricSupported, isBiometricEnrolled } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
 
@@ -38,6 +39,26 @@ export default function Login() {
         } catch (err: unknown) {
             const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Login failed. Check your credentials.';
             toast({ title: 'Sign in failed', description: msg, variant: 'destructive' });
+            haptics.notification('error');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleBiometricLogin = async () => {
+        setIsSubmitting(true);
+        try {
+            await haptics.impact();
+            await loginWithBiometrics();
+            toast({ title: 'Welcome back!', description: 'Authenticated with biometrics.' });
+            navigate('/');
+        } catch (err: any) {
+            toast({ 
+                title: 'Biometric failed', 
+                description: err.message || 'Could not authenticate with biometrics.',
+                variant: 'destructive' 
+            });
+            haptics.notification('error');
         } finally {
             setIsSubmitting(false);
         }
@@ -110,19 +131,34 @@ export default function Login() {
                             </Link>
                         </div>
 
-                        <Button type="submit" className="w-full" disabled={isSubmitting}>
-                            {isSubmitting ? (
-                                <span className="flex items-center gap-2">
-                                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                                    Signing in…
-                                </span>
-                            ) : (
-                                <span className="flex items-center gap-2">
-                                    <LogIn className="w-4 h-4" />
-                                    Sign in
-                                </span>
+                        <div className="flex flex-col gap-3">
+                            <Button type="submit" className="w-full" disabled={isSubmitting}>
+                                {isSubmitting ? (
+                                    <span className="flex items-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                                        Signing in…
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-2">
+                                        <LogIn className="w-4 h-4" />
+                                        Sign in
+                                    </span>
+                                )}
+                            </Button>
+
+                            {isBiometricSupported && isBiometricEnrolled && (
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    className="w-full flex items-center gap-2"
+                                    onClick={handleBiometricLogin}
+                                    disabled={isSubmitting}
+                                >
+                                    <Fingerprint className="w-4 h-4" />
+                                    Sign in with Biometrics
+                                </Button>
                             )}
-                        </Button>
+                        </div>
                     </form>
 
                     <p className="mt-6 text-center text-sm text-muted-foreground">
@@ -132,7 +168,21 @@ export default function Login() {
                         </Link>
                     </p>
                 </div>
+                
+                {isBiometricSupported && !isBiometricEnrolled && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="mt-6 p-4 rounded-xl bg-primary/5 border border-primary/10 flex items-start gap-3"
+                    >
+                        <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                            Biometric authentication is available. Sign in once with your password to enable it for faster access next time.
+                        </p>
+                    </motion.div>
+                )}
             </motion.div>
         </div>
     );
 }
+

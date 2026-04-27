@@ -11,6 +11,8 @@
  */
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { vaultSet, vaultGet, vaultDelete } from './desktop';
+import { secureStorage, isMobileNative, isDesktop } from './mobile';
 import type { Report } from '@/types/data';
 export type { Report };
 
@@ -49,13 +51,24 @@ export function getRefreshToken() {
 
 export function setRefreshToken(token: string | null) {
     refreshToken = token;
-    // BUG-07: Refresh token is stored in httpOnly cookie.
-    // For local dev/debugging we keep it in memory if needed, but NOT in localStorage.
+    if (token) {
+        if (isMobileNative) {
+            secureStorage.set('neuradash_refresh_token', token).catch(console.error);
+        } else if (isDesktop) {
+            vaultSet('neuradash_refresh_token', token).catch(console.error);
+        }
+    }
 }
 
 export function clearTokens() {
     accessToken = null;
     refreshToken = null;
+    // Clear secure storage/vault
+    if (isMobileNative) {
+        secureStorage.remove('neuradash_refresh_token').catch(console.error);
+    } else if (isDesktop) {
+        vaultDelete('neuradash_refresh_token').catch(console.error);
+    }
     // Also clear old zustand state to prevent conflicts for existing users
     localStorage.removeItem('neuradash-auth');
 }
@@ -114,7 +127,17 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, {
+            // Attempt to get refresh token from vault/secure storage if on desktop/mobile
+            let storedRefresh = null;
+            if (isMobileNative) {
+                storedRefresh = await secureStorage.get('neuradash_refresh_token');
+            } else if (isDesktop) {
+                storedRefresh = await vaultGet('neuradash_refresh_token');
+            }
+
+            const payload = storedRefresh ? { refreshToken: storedRefresh } : {};
+
+            const { data } = await axios.post(`${API_BASE}/auth/refresh`, payload, {
                 withCredentials: true,
             });
             console.info('[API] Refresh successful. Retrying failed requests.');

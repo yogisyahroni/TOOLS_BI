@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { isTauri } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 
 export default function ExportPDF() {
   const { data: dataSets = [] } = useDatasets();
@@ -35,7 +38,7 @@ export default function ExportPDF() {
       ? reports.map(r => ({ id: r.id, name: r.title }))
       : dashboards.map(d => ({ id: d.id, name: d.name }));
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!selectedId) { toast({ title: 'Select an item to export', variant: 'destructive' }); return; }
 
     let content = '';
@@ -67,12 +70,28 @@ export default function ExportPDF() {
       content = `# ${exportTitle}\n\nGenerated: ${new Date().toLocaleString()}\n\n## Dashboard: ${dash.name}\n\n### Widgets (${dash.widgets.length})\n${dash.widgets.map((w: any) => `- **${w.title}** — ${w.type} chart (${w.width})`).join('\n')}`;
     }
 
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${exportTitle.replace(/\s+/g, '_')}.md`;
-    a.click(); URL.revokeObjectURL(url);
-    toast({ title: 'Export downloaded', description: `${exportTitle}.md` });
+    if (isTauri()) {
+      try {
+        const filePath = await save({
+          defaultPath: `${exportTitle.replace(/\s+/g, '_')}.md`,
+          filters: [{ name: 'Markdown', extensions: ['md'] }]
+        });
+        if (filePath) {
+          await writeTextFile(filePath, content);
+          toast({ title: 'File saved', description: `Successfully exported to ${filePath}` });
+        }
+      } catch (err) {
+        console.error('Save error:', err);
+        toast({ title: 'Save failed', description: 'Could not save file to disk', variant: 'destructive' });
+      }
+    } else {
+      const blob = new Blob([content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${exportTitle.replace(/\s+/g, '_')}.md`;
+      a.click(); URL.revokeObjectURL(url);
+      toast({ title: 'Export downloaded', description: `${exportTitle}.md` });
+    }
   };
 
   return (

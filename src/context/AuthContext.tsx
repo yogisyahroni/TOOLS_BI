@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authApi, setAccessToken, setRefreshToken, clearTokens, type UserProfile, getAccessToken } from '@/lib/api';
 import { realtimeClient } from '@/lib/websocket';
+import { biometrics, secureStorage, isMobileNative } from '@/lib/mobile';
 
 interface AuthContextType {
     user: UserProfile | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    isBiometricSupported: boolean;
+    isBiometricEnrolled: boolean;
     login: (email: string, password: string) => Promise<void>;
+    loginWithBiometrics: () => Promise<void>;
     register: (email: string, password: string, displayName: string) => Promise<void>;
     logout: () => Promise<void>;
     loadMe: () => Promise<void>;
@@ -18,16 +22,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<UserProfile | null>(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+    const [isBiometricEnrolled, setIsBiometricEnrolled] = useState(false);
 
     const loadMe = async () => {
         setIsLoading(true);
         try {
-            // Restore token logic removed: we only rely on the httpOnly cookie now.
-            // If the cookie is present, authApi.me() will succeed (directly or via refresh).
-            // If not, it fails and clearTokens() is called.
-
-            // If there's no access token, me() will trigger the 401 interceptor 
-            // which uses the refresh token cookie!
+            // Restore token logic: we only rely on the httpOnly cookie or vault token.
+            // If the cookie is present, authApi.me() will succeed.
+            // If on mobile/desktop, the api.ts interceptor will try vault refresh if me() 401s.
             const { data } = await authApi.me();
             setUser(data);
             setIsAuthenticated(true);
@@ -43,7 +46,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
-        loadMe();
+        const initAuth = async () => {
+            // Check biometric availability
+            const supported = await biometrics.isAvailable();
+            setIsBiometricSupported(supported);
+            
+            const enrolled = await secureStorage.get('biometric_enrolled');
+            setIsBiometricEnrolled(enrolled === 'true');
+
+            await loadMe();
+        };
+        initAuth();
     }, []);
 
     const login = async (email: string, password: string) => {
@@ -54,9 +67,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setRefreshToken(data.refreshToken);
             setUser(data.user);
             setIsAuthenticated(true);
+            
+            // Auto-enroll biometrics if supported but not yet enrolled
+            if (isBiometricSupported && !isBiometricEnrolled) {
+                await secureStorage.set('biometric_enrolled', 'true');
+                setIsBiometricEnrolled(true);
+            }
+
             realtimeClient.connect(data.accessToken);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const loginWithBiometrics = async () => {
+        if (!isBiometricSupported || !isBiometricEnrolled) {
+            throw new Error('Biometrics not available or not enrolled');
+        }
+
+        const success = await biometrics.authenticate('Access NeuraDash');
+        if (success) {
+            // Trigger loadMe which will attempt to use the refresh token from vault/cookie
+            await loadMe();
+            if (!isAuthenticated) {
+                throw new Error('Biometric authentication failed to restore session');
+            }
+        } else {
+            throw new Error('Biometric authentication failed');
         }
     };
 
@@ -86,11 +123,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             realtimeClient.disconnect();
             setUser(null);
             setIsAuthenticated(false);
+            // We keep biometric_enrolled flag so user can re-login with biometrics later
+            // unless we want to force full password login after manual logout
         }
     };
 
     return (
-        <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, register, logout, loadMe }}>
+        <AuthContext.Provider value={{ 
+            user, 
+            isAuthenticated, 
+            isLoading, 
+            isBiometricSupported,
+            isBiometricEnrolled,
+            login, 
+            loginWithBiometrics,
+            register, 
+            logout, 
+            loadMe 
+        }}>
             {children}
         </AuthContext.Provider>
     );
@@ -101,3 +151,4 @@ export const useAuth = () => {
     if (!context) throw new Error("useAuth must be used within AuthProvider");
     return context;
 };
+
