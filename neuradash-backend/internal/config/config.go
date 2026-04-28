@@ -158,8 +158,13 @@ func Load() (*Config, error) {
 			}
 		}
 	}
-	if len(corsOrigins) == 0 {
-		corsOrigins = []string{"http://localhost:5173", "http://localhost:3000"}
+
+	// Force include desktop origins to ensure cross-platform compatibility
+	// This bypasses issues where some hosting providers (like Render) might limit environment variable length or format.
+	corsOrigins = append(corsOrigins, "tauri://localhost", "http://localhost:1420")
+
+	if corsRaw == "" {
+		corsOrigins = append(corsOrigins, "http://localhost:5173", "http://localhost:3000")
 	}
 
 	cfg := &Config{
