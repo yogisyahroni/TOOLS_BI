@@ -27,20 +27,23 @@ Designed for high-reliability environments, Neuradash features unique **resource
 
 ## 🚀 Premium Desktop Experience (Tauri v2)
 
-NeuraDash now comes with a dedicated desktop application for Windows, macOS, and Linux, providing a more integrated and powerful analytics experience.
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/yogisyahroni/TOOLS_BI?style=for-the-badge&color=3ECF8E)](https://github.com/yogisyahroni/TOOLS_BI/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&logo=windows)](https://github.com/yogisyahroni/TOOLS_BI/releases/latest)
 
-### Key Desktop Features:
-- **Native Performance:** Built with Rust for maximum speed and minimal resource usage.
-- **System Tray Integration:** Monitor system health and alerts directly from your taskbar.
-- **Secure Vault (Stronghold):** Enterprise-grade encryption for your credentials and session tokens.
-- **Native Notifications:** Get real-time alerts even when the app is minimized.
-- **Offline Resilience:** Faster startup times by serving assets locally.
+Neuradash Sentinel is now available as a high-performance desktop application, providing a more integrated and powerful analytics experience beyond the browser.
 
-### Desktop Build Instructions:
-1. Navigate to the root directory.
-2. Install dependencies: `npm install`
-3. Build the application: `npm run tauri build`
-4. Find your installer in `src-tauri/target/release/bundle/`
+### 📥 Download Latest Version
+Get the production-ready installer for your system:
+- **[Download for Windows (.msi)](https://github.com/yogisyahroni/TOOLS_BI/releases/latest/download/Neuradash_0.1.9_x64_en-US.msi)** — *Recommended*
+- **[Download Portable (.exe)](https://github.com/yogisyahroni/TOOLS_BI/releases/latest/download/Neuradash_0.1.9_x64-setup.exe)**
+- **[All Releases](https://github.com/yogisyahroni/TOOLS_BI/releases)**
+
+### ✨ Key Desktop Advantages:
+- **Native Performance:** Built with Rust for maximum speed and sub-100MB RAM footprint.
+- **Auto-Update Engine:** Seamless background updates—always stay on the latest version without manual re-installation.
+- **Enterprise Security:** Signed binaries with minisign-based signature verification for update integrity.
+- **System Tray & Notifications:** Real-time alert monitoring even when the application is closed.
+- **Hardware Acceleration:** Optimal rendering for complex 3D geospatial visualizations.
 
 ---
 
