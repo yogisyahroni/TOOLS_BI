@@ -48,7 +48,7 @@ export function Titlebar() {
         <img src="/favicon.svg" alt="Logo" className="w-4 h-4" />
         <div className="flex flex-col leading-none">
           <span className="text-xs font-bold text-foreground/90 tracking-tight">Neuradash</span>
-          <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-widest">Sentinel v0.1.2</span>
+          <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-widest">Sentinel v0.1.3</span>
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AppInitializer } from "@/components/AppInitializer";
+import { Updater } from "@/components/Updater";
 
 // ─── Page Skeleton Loader ─────────────────────────────────────────────────────
 function PageFallback() {
@@ -154,6 +155,7 @@ const App = () => {
         <AuthProvider>
           <TooltipProvider>
             <BrowserRouter>
+              <Updater />
               <AppInitializer />
               <Suspense fallback={<PageFallback />}>
                 <Routes>
