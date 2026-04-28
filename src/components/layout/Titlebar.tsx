@@ -40,13 +40,10 @@ export function Titlebar() {
         "flex items-center justify-between select-none fixed top-0 left-0 right-0 z-[100]"
       )}
     >
-      <div className="flex items-center pl-3 gap-2 pointer-events-none" data-tauri-drag-region>
-        <div className="w-4 h-4 rounded-full gradient-primary flex items-center justify-center">
-          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5 text-white">
-            <circle cx="20" cy="20" r="10" fill="currentColor" fillOpacity="0.8" />
-          </svg>
-        </div>
+      <div className="flex items-center px-4 gap-2">
+        <img src="/favicon.svg" alt="Logo" className="w-4 h-4" />
         <span className="text-xs font-semibold text-foreground/80 tracking-tight">Neuradash</span>
+        <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">v0.1.1</span>
       </div>
 
       <div className="flex h-full" data-tauri-no-drag>
