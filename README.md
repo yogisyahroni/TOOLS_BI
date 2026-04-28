@@ -90,7 +90,8 @@ Neuradash is built with a **Zero-Trust** philosophy. Our AI engine is hardened a
 - **Prompt Hardening**: Advanced system prompts and output sanitization to prevent LLM manipulation.
 - **Secrets Integrity**: 100% environment-based configuration management (No hardcoded credentials).
 - **Verified Audit**: Security architecture aligned with **OWASP ASVS Level 2** (Verified 2026-04-28).
-- [View Detailed Security Audit](docs/security/AUDIT_2026-04-28.md)
+- [Read Security Policy & Architecture (SECURITY.md)](SECURITY.md)
+- [View Detailed Technical Audit Record](docs/security/AUDIT_2026-04-28.md)
 
 ### 🤖 Human-in-the-Loop (Sentinel Gate)
 To ensure absolute reliability, Neuradash implements a **HITL (Human-in-the-Loop)** strategy for all autonomous actions:
@@ -100,7 +101,7 @@ To ensure absolute reliability, Neuradash implements a **HITL (Human-in-the-Loop
 ### 🧪 Reliability & Testing (Sentinel Suite)
 We ensure NL2SQL accuracy and security through a rigorous automated testing pipeline:
 
-- **Security Regression Suite**: 100% pass rate on malicious SQL injection patterns (Semicolon tricks, Mixed-case bypasses, Whitespace manipulation).
+- **Security Regression Suite**: 100% pass rate on **documented test vectors** (Semicolon tricks, Mixed-case bypasses, Whitespace manipulation).
 - **Accuracy Benchmarking**: Integrated Mock LLM testing to verify SQL generation against expected schemas without API overhead.
 - **Unit Coverage**: Handlers and Security Validators are fully covered by `go test` suites.
 - **Status**: `PASS` (Last run: 2026-04-28, 0.143s execution time).
