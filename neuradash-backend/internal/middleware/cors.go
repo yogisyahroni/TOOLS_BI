@@ -15,7 +15,7 @@ func CORS(origins []string) fiber.Handler {
 
 		// Check if origin is allowed
 		isAllowed := false
-		if origin == "tauri://localhost" || origin == "http://localhost:1420" || origin == "http://localhost:5173" {
+		if origin == "tauri://localhost" || origin == "http://tauri.localhost" || origin == "http://localhost:1420" || origin == "http://localhost:5173" {
 			isAllowed = true
 		} else {
 			for _, o := range origins {
