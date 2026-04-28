@@ -4,20 +4,43 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 )
 
-// CORS returns a CORS middleware configured for the given origins.
+// CORS returns a custom CORS middleware that supports non-standard schemes like tauri://.
+// This bypasses Fiber's built-in CORS validation which rejects tauri://localhost.
 func CORS(origins []string) fiber.Handler {
-	allowOrigins := strings.Join(origins, ",")
-	if allowOrigins == "" {
-		allowOrigins = "*"
+	return func(c *fiber.Ctx) error {
+		origin := c.Get("Origin")
+		if origin == "" {
+			return c.Next()
+		}
+
+		// Check if origin is allowed
+		isAllowed := false
+		if origin == "tauri://localhost" || origin == "http://localhost:1420" {
+			isAllowed = true
+		} else {
+			for _, o := range origins {
+				if o == origin {
+					isAllowed = true
+					break
+				}
+			}
+		}
+
+		if isAllowed {
+			c.Set("Access-Control-Allow-Origin", origin)
+			c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+			c.Set("Access-Control-Allow-Headers", "Authorization,Content-Type,Accept,X-Request-ID")
+			c.Set("Access-Control-Allow-Credentials", "true")
+			c.Set("Access-Control-Max-Age", "86400")
+		}
+
+		// Handle preflight requests
+		if c.Method() == "OPTIONS" {
+			return c.SendStatus(fiber.StatusNoContent)
+		}
+
+		return c.Next()
 	}
-	return cors.New(cors.Config{
-		AllowOrigins:     allowOrigins,
-		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders:     "Authorization,Content-Type,Accept,X-Request-ID",
-		AllowCredentials: true,
-		MaxAge:           86400, // 24h preflight cache
-	})
 }
