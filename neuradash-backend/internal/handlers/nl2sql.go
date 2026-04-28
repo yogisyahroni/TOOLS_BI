@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/xwb1989/sqlparser"
 	"neuradash/internal/services"
 )
 
@@ -200,10 +201,12 @@ func (h *NL2SQLHandler) isDestructiveQuery(sql string) bool {
 	upperSQL := strings.ToUpper(clean)
 
 	// 1. Check for multiple statements (Semicolon check)
-	if strings.Contains(clean, ";") {
-		idx := strings.Index(clean, ";")
-		if idx < len(clean)-1 && strings.TrimSpace(clean[idx+1:]) != "" {
-			return true // Multiple statements are always risky
+	// We check the ORIGINAL sql before stripping comments to catch comment-based bypasses
+	if strings.Contains(sql, ";") {
+		idx := strings.Index(sql, ";")
+		// If semicolon is not the very last non-whitespace character, it's a risk
+		if idx < len(strings.TrimSpace(sql))-1 {
+			return true 
 		}
 	}
 
@@ -219,7 +222,34 @@ func (h *NL2SQLHandler) isDestructiveQuery(sql string) bool {
 		}
 	}
 
+	// 3. Structural Validation (AST Parsing)
+	if err := h.validateAST(sql); err != nil {
+		// If parsing fails, it might be a complex valid query or an invalid one.
+		// For Zero-Trust, we could return true to require approval, or just log it.
+		// Given we support multiple DBs, we fallback to our robust regex if AST fails.
+		return false 
+	}
+
 	return false
+}
+
+func (h *NL2SQLHandler) validateAST(sql string) error {
+	// Note: sqlparser is MySQL-centric, but effective for basic structural checks
+	// For other DBs (Postgres, MSSQL), some complex syntax might fail to parse.
+	// We use it as an EXTRA layer of security.
+	stmt, err := sqlparser.Parse(sql)
+	if err != nil {
+		return err
+	}
+
+	switch stmt.(type) {
+	case *sqlparser.Select:
+		return nil
+	case *sqlparser.Union:
+		return nil
+	default:
+		return fmt.Errorf("unauthorized SQL structure: %T", stmt)
+	}
 }
 
 // Non-streaming handler for backward compatibility

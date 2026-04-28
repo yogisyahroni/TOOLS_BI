@@ -31,6 +31,7 @@ type ServerConfig struct {
 
 type DatabaseConfig struct {
 	URL            string
+	AIQueryURL      string // Read-only user for AI-generated queries
 	SupabaseURL    string
 	MaxConnections int
 	MaxIdle        int
@@ -104,6 +105,7 @@ func Load() (*Config, error) {
 	v.SetDefault("PORT", "8080")
 	v.SetDefault("ENV", "development")
 	v.SetDefault("DATABASE_URL", "")
+	v.SetDefault("AI_DATABASE_URL", "") // Default to main DB if not set
 	v.SetDefault("SUPABASE_DB_URL", "")
 	// BUGFIX: Supabase free tier has max 60 connections (including system).
 	// Setting 50 exhausts the pool causing AI Dashboard SQL goroutines to hang.
@@ -181,6 +183,7 @@ func Load() (*Config, error) {
 		},
 		DB: DatabaseConfig{
 			URL:            v.GetString("DATABASE_URL"),
+			AIQueryURL:      v.GetString("AI_DATABASE_URL"),
 			SupabaseURL:    v.GetString("SUPABASE_DB_URL"),
 			MaxConnections: v.GetInt("DB_MAX_CONNECTIONS"),
 			MaxIdle:        v.GetInt("DB_MAX_IDLE"),

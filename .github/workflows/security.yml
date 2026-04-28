@@ -1,0 +1,54 @@
+name: 🛡️ Security & Sentinel Audit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Backend - Install Dependencies
+        run: |
+          cd neuradash-backend
+          go mod download
+
+      - name: Backend - Security Scan (Snyk)
+        uses: snyk/actions/golang@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+        continue-on-error: true
+
+      - name: Backend - Run Tests & Coverage
+        run: |
+          cd neuradash-backend
+          go test -v -coverprofile=coverage.out ./internal/handlers/...
+          go tool cover -func=coverage.out
+
+      - name: Backend - SBOM Generation
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+          cd neuradash-backend
+          cyclonedx-gomod mod -json -output sbom.json .
+
+      - name: Frontend - Audit Dependencies
+        run: npm audit --audit-level=high
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            neuradash-backend/coverage.out
+            neuradash-backend/sbom.json
