@@ -56,7 +56,7 @@ Get the production-ready installer for your system:
 *   **Agentic AI Dashboard Builder (✨ Vercel v0 Style)**: Construct entire BI dashboards from raw natural language. The AI autonomously plans the architecture, executes optimized SQL, and generates a responsive **12-column grid layout** live via **SSE Streaming**.
 *   **5 Expert AI Personas**: Dynamically switch between specialized agents: *Data Visualization Architect*, *Predictive Analyst*, *Financial Risk Expert*, *Anomaly Detection Specialist*, and *NLP Sentiment Analyst*.
 *   **4 Autonomous Strategic Pillars**:
-    *   **Forensic Anomaly Investigator**: Automated root cause investigation for KPI breaches.
+    *   **Forensic Anomaly Investigator (Pillar 1)**: Autonomous correlation-based detection of data irregularities. *Note: Generates statistical hypotheses; does not imply true causal inference.*
     *   **Schema Sentinel**: Maintains schema integrity and autonomous semantic join discovery.
     *   **AI Security Sentinel**: A multi-layer SQL guardrail system with **Deep Scan Validation** that blocks destructive commands (`DROP`, `DELETE`, `UPDATE`) and prevents multiple-statement injections.
     *   **Self-Healing SQL Engine**: Autonomous query correction and real-time syntax recovery.
@@ -89,8 +89,13 @@ Neuradash is built with a **Zero-Trust** philosophy. Our AI engine is hardened a
 - **AI Security Sentinel**: Multi-layer SQL injection guardrails integrated directly into the NL2SQL pipeline.
 - **Prompt Hardening**: Advanced system prompts and output sanitization to prevent LLM manipulation.
 - **Secrets Integrity**: 100% environment-based configuration management (No hardcoded credentials).
-- **Verified Audit**: Last security audit completed on **2026-04-28** (Status: **GRADE S++**).
+- **Verified Audit**: Security architecture aligned with **OWASP ASVS Level 2** (Verified 2026-04-28).
 - [View Detailed Security Audit](docs/security/AUDIT_2026-04-28.md)
+
+### 🤖 Human-in-the-Loop (Sentinel Gate)
+To ensure absolute reliability, Neuradash implements a **HITL (Human-in-the-Loop)** strategy for all autonomous actions:
+- **Approval Gate**: Forensic anomalies and prescriptive workflows require manual confirmation before dispatch.
+- **Action Sandbox**: Every AI-suggested SQL query can be reviewed and edited in a secure sandbox before execution.
 
 ### 🧪 Reliability & Testing (Sentinel Suite)
 We ensure NL2SQL accuracy and security through a rigorous automated testing pipeline:
