@@ -34,28 +34,34 @@ export function Titlebar() {
 
   return (
     <div
-      data-tauri-drag-region
       className={cn(
-        "h-8 bg-sidebar/90 backdrop-blur-md border-b border-sidebar-border",
-        "flex items-center justify-between select-none fixed top-0 left-0 right-0 z-[100]"
+        "h-10 w-full flex items-center justify-between select-none fixed top-0 left-0 right-0 z-[100] border-b border-white/5 bg-background/80 backdrop-blur-md"
       )}
     >
-      <div className="flex items-center px-4 gap-2 flex-1 h-full" data-tauri-drag-region>
-        <img src="/favicon.svg" alt="Logo" className="w-4 h-4 pointer-events-none" />
-        <span className="text-xs font-semibold text-foreground/80 tracking-tight pointer-events-none">Neuradash</span>
-        <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full pointer-events-none">v0.1.1</span>
+      {/* AREA GESER ABSOLUT (SULTAN DRAG) */}
+      <div 
+        className="absolute inset-0 z-0" 
+        data-tauri-drag-region 
+      />
+
+      <div className="relative z-10 flex items-center px-4 gap-2 pointer-events-none">
+        <img src="/favicon.svg" alt="Logo" className="w-4 h-4" />
+        <div className="flex flex-col leading-none">
+          <span className="text-xs font-bold text-foreground/90 tracking-tight">Neuradash</span>
+          <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-widest">Sentinel v0.1.2</span>
+        </div>
       </div>
 
-      <div className="flex h-full" data-tauri-no-drag>
+      <div className="relative z-20 flex h-full items-center" data-tauri-no-drag>
         <button
-          className="h-full px-3 inline-flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+          className="h-full px-4 flex items-center justify-center text-muted-foreground hover:bg-white/5 hover:text-foreground transition-all duration-200"
           onClick={() => appWindow.minimize()}
           title="Minimize"
         >
-          <Minus className="w-4 h-4" />
+          <Minus size={14} />
         </button>
         <button
-          className="h-full px-3 inline-flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+          className="h-full px-4 flex items-center justify-center text-muted-foreground hover:bg-white/5 hover:text-foreground transition-all duration-200"
           onClick={() => appWindow.toggleMaximize()}
           title={isWindowMaximized ? "Restore" : "Maximize"}
         >
