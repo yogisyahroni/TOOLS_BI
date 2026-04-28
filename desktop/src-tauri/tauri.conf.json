@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Neuradash",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "identifier": "com.neuradash.sentinel",
   "build": {
     "frontendDist": "../../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "cd ../.. && npm run build"
   },
   "app": {
     "windows": [
