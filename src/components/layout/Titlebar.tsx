@@ -40,10 +40,10 @@ export function Titlebar() {
         "flex items-center justify-between select-none fixed top-0 left-0 right-0 z-[100]"
       )}
     >
-      <div className="flex items-center px-4 gap-2">
-        <img src="/favicon.svg" alt="Logo" className="w-4 h-4" />
-        <span className="text-xs font-semibold text-foreground/80 tracking-tight">Neuradash</span>
-        <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">v0.1.1</span>
+      <div className="flex items-center px-4 gap-2 flex-1 h-full" data-tauri-drag-region>
+        <img src="/favicon.svg" alt="Logo" className="w-4 h-4 pointer-events-none" />
+        <span className="text-xs font-semibold text-foreground/80 tracking-tight pointer-events-none">Neuradash</span>
+        <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full pointer-events-none">v0.1.1</span>
       </div>
 
       <div className="flex h-full" data-tauri-no-drag>
