@@ -167,6 +167,7 @@ func Load() (*Config, error) {
 	// Always force include desktop origins for cross-platform support
 	originMap["tauri://localhost"] = true
 	originMap["http://localhost:1420"] = true
+	originMap["http://localhost:5173"] = true
 
 	var corsOrigins []string
 	for o := range originMap {

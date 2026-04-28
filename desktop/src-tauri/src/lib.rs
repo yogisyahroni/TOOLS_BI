@@ -2,6 +2,10 @@ use keyring::Entry;
 use rand::{distributions::Alphanumeric, Rng};
 use tauri::{AppHandle, Manager};
 
+struct SentinelState {
+    health_item: std::sync::Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>>,
+}
+
 #[tauri::command]
 async fn get_master_key() -> Result<String, String> {
     let service = "neuradash-sentinel";
@@ -25,21 +29,15 @@ async fn get_master_key() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn set_sentinel_status(app: AppHandle, status: String) -> Result<(), String> {
-    if let Some(tray) = app.tray_by_id("main") {
-        if let Some(menu) = tray.menu() {
-            if let Some(item) = menu.get("health_status") {
-                if let Some(menu_item) = item.as_menu_item() {
-                    let indicator = match status.as_str() {
-                        "Optimal" => "🟢",
-                        "Warning" => "🟡",
-                        "Critical" => "🔴",
-                        _ => "⚪",
-                    };
-                    let _ = menu_item.set_text(format!("{} Health: {}", indicator, status));
-                }
-            }
-        }
+fn set_sentinel_status(status: String, state: tauri::State<'_, SentinelState>) -> Result<(), String> {
+    if let Some(item) = state.health_item.lock().unwrap().as_ref() {
+        let indicator = match status.as_str() {
+            "Optimal" => "🟢",
+            "Warning" => "🟡",
+            "Critical" => "🔴",
+            _ => "⚪",
+        };
+        let _ = item.set_text(format!("{} Health: {}", indicator, status));
     }
     Ok(())
 }
@@ -63,9 +61,8 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_shell::init())
-    .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_window_state::Builder::default().build())
+    .manage(SentinelState { health_item: std::sync::Mutex::new(None) })
     .invoke_handler(tauri::generate_handler![
         get_master_key, 
         set_sentinel_status, 
@@ -74,6 +71,10 @@ pub fn run() {
     .setup(|app| {
       // Initialize System Tray Menu
       let health_i = tauri::menu::MenuItem::with_id(app, "health_status", "⚪ Health: Checking...", false, None::<&str>)?;
+      
+      // Store health item in state for future updates
+      app.state::<SentinelState>().health_item.lock().unwrap().replace(health_i.clone());
+
       let show_i = tauri::menu::MenuItem::with_id(app, "show", "Show Dashboard", true, None::<&str>)?;
       let hide_i = tauri::menu::MenuItem::with_id(app, "hide", "Hide to Tray", true, None::<&str>)?;
       let quit_i = tauri::menu::MenuItem::with_id(app, "quit", "Quit Sentinel", true, None::<&str>)?;

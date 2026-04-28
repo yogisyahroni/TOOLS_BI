@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Neuradash",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.neuradash.sentinel",
   "build": {
     "frontendDist": "../../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev --prefix ../../",
-    "beforeBuildCommand": "npm run build --prefix ../../"
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
   },
   "app": {
     "windows": [
@@ -36,11 +36,6 @@
     ]
   },
   "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://api.neuradash.com/update/{{target}}/{{current_version}}"
-      ]
-    },
     "window-state": {}
   }
 }
