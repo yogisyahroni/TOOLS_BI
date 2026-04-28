@@ -62,6 +62,7 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_process::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .manage(SentinelState { health_item: std::sync::Mutex::new(None) })
     .invoke_handler(tauri::generate_handler![
         get_master_key, 
