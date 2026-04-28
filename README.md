@@ -156,3 +156,18 @@ Neuradash serves as a showcase of **High-End Full-stack Technical Architecture**
 - **Aesthetics**: Premium UI/UX that meets 2024 enterprise standards.
 
 **Built for the next generation of data-driven enterprises.**
+
+---
+
+## 📜 License & Proprietary Notice
+
+> [!IMPORTANT]
+> **This is a Proprietary Project.**  
+> Although this repository is currently **Public** for demonstration and showcase purposes, it is **NOT an Open-Source project**.
+>
+> All rights are reserved by the author. You are strictly prohibited from:
+> - Redistributing the source code or binaries for commercial purposes.
+> - Using the brand "Neuradash" or its assets for other products.
+> - Modifying and re-releasing the software under your own name.
+>
+> For inquiries regarding enterprise licensing or professional collaboration, please contact the repository owner.
