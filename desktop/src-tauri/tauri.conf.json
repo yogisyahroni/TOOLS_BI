@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Neuradash",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "identifier": "com.neuradash.sentinel",
   "build": {
     "frontendDist": "../../dist",
@@ -44,7 +44,7 @@
     "dialog": {},
     "process": {},
     "updater": {
-      "pubkey": "untrusted comment: minisign public key: BBB3CC46A61A0DD9\nRWTZDRqmRsyzu2L64bTXphTymcrgRoPFp+w/ecglND/yvKhyoo3/Ydaa",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJCQjNDQzQ2QTYxQTBERDkKUldUWkRScW1Sc3l6dTJMNjRiVFhwaFR5bWNyZ1JvUEZwK3cvZWNnbE5EL3l2S2h5b28zL1lkYWEK",
       "endpoints": [
         "https://github.com/yogisyahroni/TOOLS_BI/releases/latest/download/latest.json"
       ]
