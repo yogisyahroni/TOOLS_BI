@@ -36,6 +36,13 @@
     ]
   },
   "plugins": {
-    "window-state": {}
+    "window-state": {},
+    "updater": {
+      "active": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1MkQ3MUU2NDQwQ0ZBMDUKUldRRitneEU1bkV0TmFSS1hqVEhBR044RnloWUVBZENGTktwUDAyOU8zNnN5VkRBeUVXclIyWFMK",
+      "endpoints": [
+        "https://github.com/yogisyahroni/TOOLS_BI/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -68,7 +68,9 @@ test.csv
 .parcel-cache/
 .eslintcache
 
-# Misc
+# Tauri Keys (Sensitive)
+*.key
+*.key.pub
 *.pid
 *.seed
 *.pid.lock

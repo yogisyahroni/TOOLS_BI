@@ -25,6 +25,25 @@ Designed for high-reliability environments, Neuradash features unique **resource
 
 ---
 
+## 🚀 Premium Desktop Experience (Tauri v2)
+
+NeuraDash now comes with a dedicated desktop application for Windows, macOS, and Linux, providing a more integrated and powerful analytics experience.
+
+### Key Desktop Features:
+- **Native Performance:** Built with Rust for maximum speed and minimal resource usage.
+- **System Tray Integration:** Monitor system health and alerts directly from your taskbar.
+- **Secure Vault (Stronghold):** Enterprise-grade encryption for your credentials and session tokens.
+- **Native Notifications:** Get real-time alerts even when the app is minimized.
+- **Offline Resilience:** Faster startup times by serving assets locally.
+
+### Desktop Build Instructions:
+1. Navigate to the root directory.
+2. Install dependencies: `npm install`
+3. Build the application: `npm run tauri build`
+4. Find your installer in `src-tauri/target/release/bundle/`
+
+---
+
 ## 🔥 Key Innovations & Features
 
 ### 🤖 Next-Gen Autonomous Intelligence
