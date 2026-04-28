@@ -49,7 +49,7 @@ export function Titlebar() {
         <span className="text-xs font-semibold text-foreground/80 tracking-tight">Neuradash</span>
       </div>
 
-      <div className="flex h-full">
+      <div className="flex h-full" data-tauri-no-drag>
         <button
           className="h-full px-3 inline-flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
           onClick={() => appWindow.minimize()}

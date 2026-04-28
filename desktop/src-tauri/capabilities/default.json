@@ -11,6 +11,12 @@
     "notification:default",
     "dialog:default",
     "fs:default",
-    "shell:default"
+    "shell:default",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-set-resizable"
   ]
 }
