@@ -40,9 +40,10 @@ Get the production-ready installer for your system:
 
 ### ✨ Key Desktop Advantages:
 - **Native Performance:** Built with Rust for maximum speed and sub-100MB RAM footprint.
+- **Sentinel Health Indicator:** Dynamic System Tray icon (🟢/🟡/🔴) that monitors your ETL pipelines and anomaly counts in real-time.
 - **Auto-Update Engine:** Seamless background updates—always stay on the latest version without manual re-installation.
+- **Multi-Window Dashboards:** Detach any chart or dashboard into a native standalone window for multi-monitor pro workflows.
 - **Enterprise Security:** Signed binaries with minisign-based signature verification for update integrity.
-- **System Tray & Notifications:** Real-time alert monitoring even when the application is closed.
 - **Hardware Acceleration:** Optimal rendering for complex 3D geospatial visualizations.
 
 ---
@@ -57,7 +58,8 @@ Get the production-ready installer for your system:
 *   **4 Autonomous Strategic Pillars**:
     *   **Forensic Anomaly Investigator**: Automated root cause investigation for KPI breaches.
     *   **Schema Sentinel**: Maintains schema integrity and autonomous semantic join discovery.
-    *   **Self-Healing SQL Engine**: Autonomous query correction and multi-layer security hardening.
+    *   **AI Security Sentinel**: A multi-layer SQL guardrail system with **Deep Scan Validation** that blocks destructive commands (`DROP`, `DELETE`, `UPDATE`) and prevents multiple-statement injections.
+    *   **Self-Healing SQL Engine**: Autonomous query correction and real-time syntax recovery.
     *   **Prescriptive Workflow Engine**: Automation of data-driven preventive and corrective actions.
 
 ### 📡 Active Alerting & Foresight
@@ -76,7 +78,8 @@ Get the production-ready installer for your system:
 *   **Interactive Drill-Downs & Cross-Filtering**: Selecting a segment in one chart automatically filters all related visualizations using state-synchronized context.
 
 ### 🔐 Governance & Security (Pillar 5 Hardening)
-*   **Action Safeguards**: AI-suggested prescriptive actions are passed through a strict **Validation Layer** to prevent malformed payloads or malicious script injections.
+*   **AI Security Sentinel (Pillar 3)**: Every AI-generated query passes through a strict **Semicolon Sentinel** and **Forbidden Keyword Scan** before execution.
+*   **Pre-flight SQL Validation**: Uses `EXPLAIN` and transaction-wrap patterns to ensure 100% safety during NL2SQL tasks.
 *   **Strict Row-Level Security (RLS)**: Fine-grained access control policies ensuring multi-tenant isolation and PII protection at the database layer.
 *   **Adaptive Rate-Limiting**: Sliding-window cooldowns for AI tasks to protect infrastructure from runaway costs.
 

@@ -188,26 +188,32 @@ func (h *NL2SQLHandler) generateStream(
 }
 
 func (h *NL2SQLHandler) isDestructiveQuery(sql string) bool {
-	upperSQL := strings.ToUpper(sql)
+	// Clean comments first for accurate analysis
+	clean := sql
+	reBlock := regexp.MustCompile(`(?is)/\*.*?\*/`)
+	clean = reBlock.ReplaceAllString(clean, "")
+	reInline := regexp.MustCompile(`(?m)--.*$`)
+	clean = reInline.ReplaceAllString(clean, "")
+	clean = strings.TrimSpace(clean)
 
-	// Check for destructive operations
+	upperSQL := strings.ToUpper(clean)
+
+	// 1. Check for multiple statements (Semicolon check)
+	if strings.Contains(clean, ";") {
+		idx := strings.Index(clean, ";")
+		if idx < len(clean)-1 && strings.TrimSpace(clean[idx+1:]) != "" {
+			return true // Multiple statements are always risky
+		}
+	}
+
+	// 2. Check for destructive operations
 	destructivePatterns := []string{
-		"DROP ",
-		"TRUNCATE ",
-		"DELETE ",
-		"UPDATE ",
-		"ALTER ",
-		"CREATE ",
-		"INSERT ",
+		"DROP ", "TRUNCATE ", "DELETE ", "UPDATE ", "ALTER ", 
+		"CREATE ", "INSERT ", "GRANT ", "REVOKE ", "EXEC ", "RENAME ",
 	}
 
 	for _, pattern := range destructivePatterns {
 		if strings.Contains(upperSQL, pattern) {
-			// Additional check: DELETE/UPDATE without WHERE
-			if (strings.Contains(upperSQL, "DELETE ") || strings.Contains(upperSQL, "UPDATE ")) &&
-				!strings.Contains(upperSQL, "WHERE ") {
-				return true
-			}
 			return true
 		}
 	}

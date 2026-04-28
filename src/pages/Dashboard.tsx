@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Database, BarChart3, FileText, Shield, Sparkles, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { HelpTooltip } from '@/components/HelpTooltip';
@@ -15,7 +16,7 @@ import { haptics } from '@/lib/mobile';
 import { ImpactStyle } from '@capacitor/haptics';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { openDetachedWindow, isDesktop } from '@/lib/desktop';
+import { openDetachedWindow, isDesktop, setTrayStatus } from '@/lib/desktop';
 import { Maximize2 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -30,6 +31,21 @@ export default function Dashboard() {
   };
 
   const isLoading = dsLoading || rptLoading || plLoading;
+
+  useEffect(() => {
+    if (!isDesktop() || isLoading) return;
+
+    const hasFailure = pipelines.some((p) => p.status === 'failed' || p.status === 'error');
+    const isIdleEmpty = datasets.length === 0 && pipelines.length === 0;
+
+    if (hasFailure) {
+      setTrayStatus('Critical');
+    } else if (isIdleEmpty) {
+      setTrayStatus('Warning');
+    } else {
+      setTrayStatus('Optimal');
+    }
+  }, [pipelines, datasets, isLoading]);
 
   const totalRecords = datasets.reduce((sum, ds) => sum + (ds.rowCount ?? 0), 0);
 // ... existing stats definition ...

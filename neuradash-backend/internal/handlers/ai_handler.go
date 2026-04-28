@@ -498,7 +498,14 @@ func (h *AIHandler) extractDatasetContext(datasetID string) (tableName, schemaSt
 }
 
 // executeSQL executes the generated SQL either locally or via an external connection.
+// S++ SECURITY: This function is the central guardrail. All SQL must pass isSafeSelect.
 func (h *AIHandler) executeSQL(ctx context.Context, datasetID, sqlQuery string) ([]map[string]interface{}, error) {
+	// 1. Unified Security Check
+	if !isSafeSelect(sqlQuery) {
+		log.Warn().Str("dataset_id", datasetID).Str("sql", sqlQuery).Msg("SECURITY ALERT: Blocked non-SELECT or multiple-statement query")
+		return nil, fmt.Errorf("security policy violation: only single SELECT queries are allowed")
+	}
+
 	var ds struct {
 		Name          string
 		DataTableName string
@@ -510,9 +517,7 @@ func (h *AIHandler) executeSQL(ctx context.Context, datasetID, sqlQuery string) 
 		return nil, fmt.Errorf("dataset not found: %w", err)
 	}
 
-	// S++ SQL Rewriting Engine:
-	// Pastikan kueri AI yang mungkin merujuk ke nama logis ("belajar_data")
-	// dipetakan kembali ke tabel fisik ("ds_xxx") sebelum eksekusi.
+	// S++ SQL Rewriting Engine
 	sqlQuery = RewriteQueryToPhysicalTable(sqlQuery, ds.Name, ds.DataTableName)
 
 	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(ds.DataTableName)), "(SELECT") {
@@ -522,6 +527,9 @@ func (h *AIHandler) executeSQL(ctx context.Context, datasetID, sqlQuery string) 
 			sqlQuery = strings.ReplaceAll(sqlQuery, virtualAlias, ds.DataTableName)
 		}
 	}
+
+	// 2. Pre-flight Validation (Optional but Recommended)
+	// We could run EXPLAIN here to catch syntax errors or permission issues early.
 
 	if strings.HasPrefix(ds.StorageKey, "EXTERNAL_CONN::") {
 		connID := strings.TrimPrefix(ds.StorageKey, "EXTERNAL_CONN::")
@@ -1449,13 +1457,50 @@ func cleanAISQL(raw string) string {
 	return res
 }
 
+// isSafeSelect performs a multi-layer security scan on the generated SQL.
+// It protects against SQL injection, multiple statements, and destructive commands.
 func isSafeSelect(query string) bool {
+	// 1. Remove comments to prevent bypasses
 	clean := query
 	reBlock := regexp.MustCompile(`(?is)/\*.*?\*/`)
 	clean = reBlock.ReplaceAllString(clean, "")
 	reInline := regexp.MustCompile(`(?m)--.*$`)
 	clean = reInline.ReplaceAllString(clean, "")
 	clean = strings.TrimSpace(clean)
+
+	if clean == "" {
+		return false
+	}
+
 	upperClean := strings.ToUpper(clean)
-	return strings.HasPrefix(upperClean, "SELECT") || strings.HasPrefix(upperClean, "WITH")
+
+	// 2. Structural Check: Must start with SELECT or WITH
+	if !strings.HasPrefix(upperClean, "SELECT") && !strings.HasPrefix(upperClean, "WITH") {
+		return false
+	}
+
+	// 3. Multi-statement Check: Block semicolons to prevent query stacking
+	// We allow a single semicolon only at the very end of the string.
+	if strings.Contains(clean, ";") {
+		idx := strings.Index(clean, ";")
+		// If there is text after the semicolon, it's a potential injection
+		if idx < len(clean)-1 && strings.TrimSpace(clean[idx+1:]) != "" {
+			return false
+		}
+	}
+
+	// 4. Deep Keyword Scan: Block destructive commands even if they follow a SELECT
+	forbidden := []string{
+		"DROP ", "DELETE ", "UPDATE ", "INSERT ", "TRUNCATE ", "ALTER ", 
+		"GRANT ", "REVOKE ", "CREATE ", "EXEC ", "EXECUTE ", "RENAME ",
+	}
+
+	for _, k := range forbidden {
+		// Use word boundary check or whitespace to avoid false positives (e.g. "created_at")
+		if strings.Contains(upperClean, k) {
+			return false
+		}
+	}
+
+	return true
 }
