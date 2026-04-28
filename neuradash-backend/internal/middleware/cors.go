@@ -1,19 +1,15 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 )
 
 // CORS returns a CORS middleware configured for the given origins.
 func CORS(origins []string) fiber.Handler {
-	allowOrigins := ""
-	for i, o := range origins {
-		if i > 0 {
-			allowOrigins += ","
-		}
-		allowOrigins += o
-	}
+	allowOrigins := strings.Join(origins, ",")
 	if allowOrigins == "" {
 		allowOrigins = "*"
 	}

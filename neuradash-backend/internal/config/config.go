@@ -149,22 +149,28 @@ func Load() (*Config, error) {
 
 	// Parse CORS origins
 	corsRaw := v.GetString("CORS_ORIGINS")
-	var corsOrigins []string
+	originMap := make(map[string]bool)
+
 	if corsRaw != "" {
 		for _, o := range strings.Split(corsRaw, ",") {
 			o = strings.TrimSpace(o)
 			if o != "" {
-				corsOrigins = append(corsOrigins, o)
+				originMap[o] = true
 			}
 		}
+	} else {
+		// Defaults for local development
+		originMap["http://localhost:5173"] = true
+		originMap["http://localhost:3000"] = true
 	}
 
-	// Force include desktop origins to ensure cross-platform compatibility
-	// This bypasses issues where some hosting providers (like Render) might limit environment variable length or format.
-	corsOrigins = append(corsOrigins, "tauri://localhost", "http://localhost:1420")
+	// Always force include desktop origins for cross-platform support
+	originMap["tauri://localhost"] = true
+	originMap["http://localhost:1420"] = true
 
-	if corsRaw == "" {
-		corsOrigins = append(corsOrigins, "http://localhost:5173", "http://localhost:3000")
+	var corsOrigins []string
+	for o := range originMap {
+		corsOrigins = append(corsOrigins, o)
 	}
 
 	cfg := &Config{
