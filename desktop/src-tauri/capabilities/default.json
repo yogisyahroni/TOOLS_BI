@@ -19,6 +19,7 @@
     "core:window:allow-close",
     "core:window:allow-set-resizable",
     "updater:default",
+    "window-state:default",
     "process:allow-relaunch"
   ]
 }
