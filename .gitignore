@@ -20,18 +20,23 @@ neuradash-backend/uploads/
 neuradash-backend/*.exe
 neuradash-backend/tmp_*
 
-# Logs
-logs
+# Logs & Temporary Files
+log/
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-build-log*.txt
-lint*.txt
-tsc_*.txt
-test_*.txt
+*.txt
+*.csv
+webhook_*.json
+
+# Test files
+/test_*.go
+/test_*.cjs
+/test_*.mjs
+/test_*.js
 
 # Environment variables
 .env
@@ -41,14 +46,6 @@ test_*.txt
 .env.development
 neuradash-backend/.env
 neuradash-backend/.env.*
-
-# Test files (move to proper test directory)
-/test_*.go
-/test_*.cjs
-/test_*.mjs
-/test_*.js
-test.csv
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
