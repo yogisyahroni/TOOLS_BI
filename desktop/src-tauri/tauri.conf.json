@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": ["msi", "nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,7 +39,6 @@
   "plugins": {
     "window-state": {},
     "updater": {
-      "active": true,
       "pubkey": "RWTZDRqmRsyzu2L64bTXphTymcrgRoPFp+w/ecglND/yvKhyoo3/Ydaa",
       "endpoints": [
         "https://github.com/yogisyahroni/TOOLS_BI/releases/latest/download/latest.json"
